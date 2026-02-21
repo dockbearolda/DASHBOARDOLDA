@@ -129,28 +129,99 @@ export default async function DashboardPage() {
     };
   }
 
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 5 ? "Bonne nuit" :
+    hour < 12 ? "Bonjour" :
+    hour < 18 ? "Bon après-midi" :
+    "Bonsoir";
+
+  const todayLabel = new Date().toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
   return (
     <div>
       <Header />
       <div className="p-6 space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Vue d&apos;ensemble</h1>
-          <p className="text-sm text-muted-foreground mt-1">Bienvenue sur votre dashboard OLDA Studio</p>
+
+        {/* ── Hero greeting ──────────────────────────────────────────── */}
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+              {todayLabel}
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {greeting} 👋
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Voici l&apos;état de votre boutique OLDA Studio
+            </p>
+          </div>
         </div>
 
+        {/* ── Stats cards ────────────────────────────────────────────── */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <StatsCard title="Commandes totales" value={data.stats.totalOrders.toString()} subtitle="Toutes commandes confondues" icon={ShoppingBag} delay={0} />
-          <StatsCard title="Revenu total" value={formatCurrency(data.stats.totalRevenue)} subtitle="Revenu cumulé" icon={Euro} delay={0.05} />
-          <StatsCard title="Aujourd'hui" value={formatCurrency(data.stats.todayRevenue)} subtitle={`${data.stats.todayOrders} commande${data.stats.todayOrders > 1 ? "s" : ""}`} icon={TrendingUp} trend={data.stats.revenueTrend} delay={0.1} />
-          <StatsCard title="En attente" value={data.stats.pendingOrders.toString()} subtitle="À traiter" icon={Clock} delay={0.15} />
-          <StatsCard title="Expédiées" value={data.stats.shippedOrders.toString()} subtitle="En transit" icon={Truck} delay={0.2} />
-          <StatsCard title="Payées" value={data.stats.paidOrders.toString()} subtitle="Paiement confirmé" icon={CheckCircle} delay={0.25} />
+          <StatsCard
+            title="Commandes totales"
+            value={data.stats.totalOrders.toString()}
+            subtitle="Toutes commandes confondues"
+            icon={ShoppingBag}
+            delay={0}
+          />
+          <StatsCard
+            title="Revenu total"
+            value={formatCurrency(data.stats.totalRevenue)}
+            subtitle="Revenu cumulé"
+            icon={Euro}
+            delay={0.06}
+          />
+          <StatsCard
+            title="Aujourd'hui"
+            value={formatCurrency(data.stats.todayRevenue)}
+            subtitle={`${data.stats.todayOrders} commande${data.stats.todayOrders > 1 ? "s" : ""}`}
+            icon={TrendingUp}
+            trend={data.stats.revenueTrend}
+            delay={0.12}
+          />
+          <StatsCard
+            title="En attente"
+            value={data.stats.pendingOrders.toString()}
+            subtitle="À traiter"
+            icon={Clock}
+            delay={0.18}
+          />
+          <StatsCard
+            title="Expédiées"
+            value={data.stats.shippedOrders.toString()}
+            subtitle="En transit"
+            icon={Truck}
+            delay={0.24}
+          />
+          <StatsCard
+            title="Payées"
+            value={data.stats.paidOrders.toString()}
+            subtitle="Paiement confirmé"
+            icon={CheckCircle}
+            delay={0.30}
+          />
         </div>
 
+        {/* ── Revenue chart ──────────────────────────────────────────── */}
         <RevenueChart data={data.chartData} />
 
+        {/* ── Recent orders ─────────────────────────────────────────── */}
         <div>
-          <h2 className="text-base font-semibold mb-4">Dernières commandes</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold tracking-tight">
+              Dernières commandes
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Mis à jour toutes les 30 s
+            </p>
+          </div>
           <OrderList initialOrders={data.orders as unknown as Order[]} />
         </div>
       </div>

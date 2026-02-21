@@ -1,7 +1,25 @@
 import type { Metadata } from "next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import "./globals.css";
+
+/*
+ * Inter is the closest open-source match to Apple's SF Pro and Vercel's Geist.
+ * We map it to the CSS custom property that globals.css already references so
+ * no other file needs changing.
+ */
+const fontSans = Inter({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+  display: "swap",
+});
+
+const fontMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "OLDA Studio — Dashboard",
@@ -15,7 +33,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body className="antialiased font-sans">
+      <body
+        className={`${fontSans.variable} ${fontMono.variable} antialiased font-sans`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -27,8 +47,9 @@ export default function RootLayout({
             position="bottom-right"
             toastOptions={{
               style: {
-                borderRadius: "12px",
-                backdropFilter: "blur(12px)",
+                borderRadius: "14px",
+                backdropFilter: "blur(16px)",
+                fontSize: "13px",
               },
             }}
           />

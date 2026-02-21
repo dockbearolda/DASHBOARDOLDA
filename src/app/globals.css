@@ -23,68 +23,158 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+
+  /* ── Custom animations ─────────────────────────────────────────── */
+  --animate-fade-up: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-slide-in-left: slide-in-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slide-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(0.85);
+    }
+  }
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   LIGHT MODE  ·  Apple-inspired warm neutrals
+   ════════════════════════════════════════════════════════════════════ */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  /* Surfaces */
+  --background: 240 5% 96%;       /* #f5f5f7  ← Apple's signature warm off-white */
+  --foreground: 240 3% 12%;       /* #1d1d1f  ← Apple near-black (never pure) */
+
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card-foreground: 240 3% 12%;
+
   --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-  --radius: 0.75rem;
+  --popover-foreground: 240 3% 12%;
+
+  /* Brand */
+  --primary: 211 100% 44%;        /* #0071e3  ← Apple Blue */
+  --primary-foreground: 0 0% 100%;
+
+  /* Secondary / muted */
+  --secondary: 240 4% 93%;        /* #ededed */
+  --secondary-foreground: 240 3% 12%;
+
+  --muted: 240 4% 93%;
+  --muted-foreground: 240 2% 44%; /* #6e6e73  ← iOS secondary label */
+
+  --accent: 240 4% 93%;
+  --accent-foreground: 240 3% 12%;
+
+  /* Status */
+  --destructive: 0 80% 58%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Chrome */
+  --border: 240 4% 87%;           /* warm subtle border */
+  --input: 240 4% 87%;
+  --ring: 211 100% 44%;
+
+  --radius: 0.875rem;             /* 14 px — very slightly less than 1 rem */
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   DARK MODE  ·  Apple true-dark (not navy)
+   ════════════════════════════════════════════════════════════════════ */
 .dark {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
+  --background: 0 0% 6%;          /* #0f0f0f */
+  --foreground: 240 5% 96%;       /* #f5f5f7 */
+
+  --card: 0 0% 10%;               /* #1a1a1a */
+  --card-foreground: 240 5% 96%;
+
+  --popover: 0 0% 10%;
+  --popover-foreground: 240 5% 96%;
+
+  --primary: 211 95% 62%;         /* softer Apple Blue on dark */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 0 0% 15%;          /* #262626 */
+  --secondary-foreground: 240 5% 96%;
+
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 55%;   /* #8c8c8c */
+
+  --accent: 0 0% 15%;
+  --accent-foreground: 240 5% 96%;
+
+  --destructive: 0 80% 58%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 0 0% 18%;             /* #2e2e2e */
+  --input: 0 0% 18%;
+  --ring: 211 95% 62%;
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   BASE
+   ════════════════════════════════════════════════════════════════════ */
 @layer base {
   * {
     border-color: hsl(var(--border));
   }
+
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tighten heading tracking slightly — Apple style */
+  h1, h2, h3, h4 {
+    letter-spacing: -0.02em;
   }
 }
 
-/* Smooth scrollbar */
+/* ════════════════════════════════════════════════════════════════════
+   SCROLLBAR
+   ════════════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -94,9 +184,13 @@
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--muted-foreground) / 0.45);
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   SELECTION
+   ════════════════════════════════════════════════════════════════════ */
 ::selection {
-  background: hsl(var(--foreground) / 0.15);
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--foreground));
 }

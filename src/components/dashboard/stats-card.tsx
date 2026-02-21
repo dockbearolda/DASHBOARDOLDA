@@ -1,3 +1,6 @@
+"use client";
+
+import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +21,7 @@ export function StatsCard({
   icon: Icon,
   trend,
   iconColor = "text-foreground",
+  delay = 0,
 }: StatsCardProps) {
   const TrendIcon =
     trend === undefined || trend === 0
@@ -27,12 +31,18 @@ export function StatsCard({
       : TrendingDown;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/60 backdrop-blur-sm p-6 hover:border-border hover:bg-card hover:shadow-sm transition-all duration-300">
-      <div className="absolute inset-0 opacity-[0.03] bg-gradient-to-br from-foreground to-transparent pointer-events-none" />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
+      className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 hover:border-border hover:shadow-md hover:shadow-black/[0.04] dark:hover:shadow-black/20 transition-all duration-300"
+    >
+      {/* Top-edge glint on hover */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             {title}
           </p>
           <p className="text-2xl font-bold tracking-tight">{value}</p>
@@ -40,8 +50,8 @@ export function StatsCard({
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           )}
         </div>
-        <div className={cn("rounded-xl p-2.5 bg-muted/60", iconColor)}>
-          <Icon className="h-5 w-5" />
+        <div className={cn("rounded-xl p-2.5 bg-muted/70 ring-1 ring-border/40", iconColor)}>
+          <Icon className="h-4 w-4" />
         </div>
       </div>
 
@@ -63,6 +73,6 @@ export function StatsCard({
           </span>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

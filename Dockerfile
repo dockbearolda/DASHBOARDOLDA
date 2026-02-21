@@ -39,13 +39,22 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-# Create a proper symlink so __dirname resolves inside the prisma package (required for WASM loading)
+
+# Source prisma packages from the deps stage (clean npm-managed install).
+# valibot is a runtime dependency of @prisma/dev (used by the prisma CLI
+# to parse prisma.config.ts) and must be present alongside the CLI.
+COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
+COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=deps /app/node_modules/valibot ./node_modules/valibot
+
+# Create a proper symlink so __dirname inside the prisma binary resolves to
+# the package directory where prisma_schema_build_bg.wasm actually lives.
+# (Docker COPY dereferences symlinks, breaking the default __dirname lookup.)
 RUN mkdir -p node_modules/.bin && \
     BIN_PATH=$(node -e "console.log(require('./node_modules/prisma/package.json').bin.prisma)") && \
     ln -sf "../prisma/$BIN_PATH" node_modules/.bin/prisma && \
     chmod +x "node_modules/prisma/$BIN_PATH"
+
 COPY --from=builder --chown=nextjs:nodejs /app/src/generated/prisma ./src/generated/prisma
 
 USER nextjs

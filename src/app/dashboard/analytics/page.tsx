@@ -3,23 +3,39 @@ import { Header } from "@/components/layout/header";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { OrderList } from "@/components/orders/order-list";
 import { formatCurrency } from "@/lib/utils";
 import { subDays, startOfDay, format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { TrendingUp, ShoppingBag, Euro, Users, Package } from "lucide-react";
+import { TrendingUp, ShoppingBag, Euro, Users, Package, ClipboardList } from "lucide-react";
+import { Order } from "@/types/order";
 
 type PrismaOrderRow = {
-  total: number;
-  paymentStatus: string;
+  id: string;
+  orderNumber: string;
+  customerName: string;
   customerEmail: string;
-  items: { name: string; quantity: number; price: number }[];
+  customerPhone: string | null;
+  status: string;
+  paymentStatus: string;
+  total: number;
+  subtotal: number;
+  shipping: number;
+  tax: number;
+  currency: string;
+  notes: string | null;
+  shippingAddress: unknown;
+  billingAddress: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+  items: { id: string; orderId: string; name: string; sku: string | null; quantity: number; price: number; imageUrl: string | null }[];
 };
 
 async function getAnalytics() {
   const now = new Date();
 
   const [rawOrders, chartData] = await Promise.all([
-    prisma.order.findMany({ include: { items: true } }),
+    prisma.order.findMany({ include: { items: true }, orderBy: { createdAt: "desc" } }),
     Promise.all(
       Array.from({ length: 30 }, (_, i) => {
         const date = subDays(now, 29 - i);
@@ -66,7 +82,17 @@ async function getAnalytics() {
     .sort((a: { revenue: number }, b: { revenue: number }) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  return { allOrders, chartData, totalRevenue, avgOrderValue, uniqueCustomers, topProducts };
+  const orders: Order[] = allOrders.map((o) => ({
+    ...o,
+    status: o.status as Order["status"],
+    paymentStatus: o.paymentStatus as Order["paymentStatus"],
+    shippingAddress: o.shippingAddress as Record<string, string> | null,
+    billingAddress: o.billingAddress as Record<string, string> | null,
+    createdAt: o.createdAt.toISOString(),
+    updatedAt: o.updatedAt.toISOString(),
+  }));
+
+  return { orders, chartData, totalRevenue, avgOrderValue, uniqueCustomers, topProducts };
 }
 
 export default async function AnalyticsPage() {
@@ -74,7 +100,7 @@ export default async function AnalyticsPage() {
   try {
     data = await getAnalytics();
   } catch {
-    data = { allOrders: [], chartData: [], totalRevenue: 0, avgOrderValue: 0, uniqueCustomers: 0, topProducts: [] };
+    data = { orders: [], chartData: [], totalRevenue: 0, avgOrderValue: 0, uniqueCustomers: 0, topProducts: [] };
   }
 
   return (
@@ -88,12 +114,24 @@ export default async function AnalyticsPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatsCard title="Revenu total" value={formatCurrency(data.totalRevenue)} icon={Euro} delay={0} />
-          <StatsCard title="Commandes" value={data.allOrders.length.toString()} icon={ShoppingBag} delay={0.05} />
+          <StatsCard title="Commandes" value={data.orders.length.toString()} icon={ShoppingBag} delay={0.05} />
           <StatsCard title="Panier moyen" value={formatCurrency(data.avgOrderValue)} icon={TrendingUp} delay={0.1} />
           <StatsCard title="Clients uniques" value={data.uniqueCustomers.toString()} icon={Users} delay={0.15} />
         </div>
 
         <RevenueChart data={data.chartData} />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Commandes reçues
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrderList initialOrders={data.orders} />
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

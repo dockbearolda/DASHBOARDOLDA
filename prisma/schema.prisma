@@ -13,7 +13,7 @@ model Order {
   customerName    String
   customerEmail   String
   customerPhone   String?
-  status          OrderStatus   @default(PENDING)
+  status          OrderStatus   @default(COMMANDE_EN_ATTENTE)
   paymentStatus   PaymentStatus @default(PENDING)
   total           Float
   subtotal        Float
@@ -44,12 +44,16 @@ model OrderItem {
 }
 
 enum OrderStatus {
-  PENDING
-  PROCESSING
-  SHIPPED
-  DELIVERED
-  CANCELLED
-  REFUNDED
+  COMMANDE_EN_ATTENTE
+  COMMANDE_A_PREPARER
+  MAQUETTE_A_FAIRE
+  PRT_A_FAIRE
+  EN_ATTENTE_VALIDATION
+  EN_COURS_IMPRESSION
+  PRESSAGE_A_FAIRE
+  CLIENT_A_CONTACTER
+  CLIENT_PREVENU
+  ARCHIVES
 }
 
 enum PaymentStatus {

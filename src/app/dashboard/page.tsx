@@ -7,7 +7,7 @@ import {
   ShoppingBag,
   Euro,
   Clock,
-  Truck,
+  CheckCircle2,
   CheckCircle,
   TrendingUp,
 } from "lucide-react";
@@ -107,8 +107,8 @@ async function getDashboardData() {
       totalRevenue,
       todayRevenue,
       todayOrders: todayRaw.length,
-      pendingOrders: orders.filter((o: PrismaOrder) => o.status === "PENDING").length,
-      shippedOrders: orders.filter((o: PrismaOrder) => o.status === "SHIPPED").length,
+      pendingOrders: orders.filter((o: PrismaOrder) => o.status === "COMMANDE_EN_ATTENTE").length,
+      shippedOrders: orders.filter((o: PrismaOrder) => o.status === "CLIENT_PREVENU").length,
       paidOrders: orders.filter((o: PrismaOrder) => o.paymentStatus === "PAID").length,
       revenueTrend,
     },
@@ -193,10 +193,10 @@ export default async function DashboardPage() {
             delay={0.18}
           />
           <StatsCard
-            title="Expédiées"
+            title="Client prévenu"
             value={data.stats.shippedOrders.toString()}
-            subtitle="En transit"
-            icon={Truck}
+            subtitle="Commandes finalisées"
+            icon={CheckCircle2}
             delay={0.24}
           />
           <StatsCard

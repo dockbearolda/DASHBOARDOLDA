@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OLDA — Dashboard temps réel</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #1c1c1e;
+      color: #f2f2f7;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    header h1 { font-size: 24px; font-weight: 700; }
+
+    #statut-connexion {
+      font-size: 13px;
+      font-weight: 500;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: #2c2c2e;
+      color: #8e8e93;
+    }
+
+    #statut-connexion.connecte {
+      background: #1a3a1e;
+      color: #30d158;
+    }
+
+    /* ── Liste des commandes ── */
+    #commandes {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── Carte commande ── */
+    .carte {
+      background: #2c2c2e;
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      animation: slideIn 0.3s ease;
+      border-left: 4px solid #007aff;
+    }
+
+    .carte.nouvelle {
+      border-left-color: #30d158;  /* vert au premier instant */
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .carte-table {
+      background: #007aff;
+      border-radius: 12px;
+      min-width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .carte-infos { flex: 1; }
+
+    .carte-plats {
+      font-size: 16px;
+      font-weight: 600;
+      color: #f2f2f7;
+      margin-bottom: 4px;
+    }
+
+    .carte-heure {
+      font-size: 13px;
+      color: #8e8e93;
+    }
+
+    /* ── Vide ── */
+    #vide {
+      text-align: center;
+      color: #48484a;
+      margin-top: 80px;
+      font-size: 17px;
+    }
+
+    #vide .big { font-size: 48px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Commandes</h1>
+    <span id="statut-connexion">⏳ Connexion…</span>
+  </header>
+
+  <div id="commandes">
+    <div id="vide">
+      <div class="big">🍽️</div>
+      En attente de commandes…
+    </div>
+  </div>
+
+
+  <!-- ── Bibliothèque Supabase ─────────────────────────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    //  ✏️  COLLE TON URL ET TA CLÉ SUPABASE ICI (identiques à ipad.html)
+    // ══════════════════════════════════════════════════════════════════════
+    const SUPABASE_URL = 'https://XXXX.supabase.co'  // Settings → API → Project URL
+    const SUPABASE_KEY = 'eyJ...'                     // Settings → API → anon / public
+    // ══════════════════════════════════════════════════════════════════════
+
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // ── Affiche une commande dans la liste ───────────────────────────────
+    function afficherCommande(row, isNouvelle = false) {
+      // Enlève le placeholder "En attente…" dès la première commande
+      const vide = document.getElementById('vide')
+      if (vide) vide.remove()
+
+      const { table, plats } = row.contenu  // ex: { table: 5, plats: ["Pizza","Salade"] }
+      const liste = document.getElementById('commandes')
+
+      const heure = new Date(row.createdAt || Date.now()).toLocaleTimeString('fr-FR', {
+        hour: '2-digit', minute: '2-digit'
+      })
+
+      const carte = document.createElement('div')
+      carte.className = 'carte' + (isNouvelle ? ' nouvelle' : '')
+      carte.innerHTML = `
+        <div class="carte-table">${table}</div>
+        <div class="carte-infos">
+          <div class="carte-plats">${Array.isArray(plats) ? plats.join(' · ') : plats}</div>
+          <div class="carte-heure">${heure}</div>
+        </div>
+      `
+
+      // Nouvelle commande = en haut, historique = en bas
+      if (isNouvelle) {
+        liste.prepend(carte)
+        // Retire la surbrillance verte après 3 s
+        setTimeout(() => carte.classList.remove('nouvelle'), 3000)
+      } else {
+        liste.appendChild(carte)
+      }
+    }
+
+    // ── Charge l'historique des commandes du jour au démarrage ──────────
+    async function chargerHistorique() {
+      const debutJour = new Date()
+      debutJour.setHours(0, 0, 0, 0)
+
+      const { data, error } = await db
+        .from('commandes')
+        .select('*')
+        .gte('createdAt', debutJour.toISOString())
+        .order('createdAt', { ascending: true })
+
+      if (error) { console.error('Historique :', error.message); return }
+      data.forEach(row => afficherCommande(row, false))
+    }
+
+    // ── Écoute les nouveaux INSERT en temps réel (WebSocket) ─────────────
+    function ecouterCommandes() {
+      const statut = document.getElementById('statut-connexion')
+
+      db.channel('commandes-live')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'commandes' },
+          (payload) => afficherCommande(payload.new, true)
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            statut.textContent = '● En direct'
+            statut.classList.add('connecte')
+          } else {
+            statut.textContent = '⏳ Connexion…'
+            statut.classList.remove('connecte')
+          }
+        })
+    }
+
+    // ── Démarrage ────────────────────────────────────────────────────────
+    chargerHistorique()
+    ecouterCommandes()
+  </script>
+
+</body>
+</html>

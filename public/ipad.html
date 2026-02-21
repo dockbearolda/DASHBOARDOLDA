@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OLDA — Prise de commande</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f2f2f7;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #1c1c1e;
+      margin-bottom: 20px;
+    }
+
+    /* ── Sélection de table ── */
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6e6e73;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+
+    .tables-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .table-btn {
+      aspect-ratio: 1;
+      border: 2px solid #d1d1d6;
+      border-radius: 14px;
+      background: #fff;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1c1c1e;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .table-btn.selected {
+      border-color: #007aff;
+      background: #007aff;
+      color: #fff;
+    }
+
+    /* ── Grille de plats ── */
+    .plats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .plat-btn {
+      padding: 18px 10px;
+      border: 2px solid #d1d1d6;
+      border-radius: 16px;
+      background: #fff;
+      font-size: 15px;
+      font-weight: 500;
+      color: #1c1c1e;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .plat-btn .emoji { font-size: 28px; }
+
+    .plat-btn.selected {
+      border-color: #34c759;
+      background: #f0fff4;
+    }
+
+    /* ── Bouton envoyer ── */
+    #btn-envoyer {
+      width: 100%;
+      padding: 18px;
+      border: none;
+      border-radius: 16px;
+      background: #007aff;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    #btn-envoyer:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Statut ── */
+    #statut {
+      margin-top: 14px;
+      font-size: 15px;
+      font-weight: 500;
+      text-align: center;
+      min-height: 22px;
+      color: #1c1c1e;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Nouvelle commande</h1>
+
+  <!-- Sélection de table -->
+  <p class="section-label">Table</p>
+  <div class="tables-grid" id="tables"></div>
+
+  <!-- Sélection de plats -->
+  <p class="section-label">Plats</p>
+  <div class="plats-grid" id="plats"></div>
+
+  <!-- Bouton d'envoi -->
+  <button id="btn-envoyer" disabled onclick="envoyerCommande()">
+    Envoyer la commande
+  </button>
+  <p id="statut"></p>
+
+
+  <!-- ── Bibliothèque Supabase ─────────────────────────────────────────── -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════
+    //  ✏️  COLLE TON URL ET TA CLÉ SUPABASE ICI
+    // ══════════════════════════════════════════════════════════════════════
+    const SUPABASE_URL = 'https://XXXX.supabase.co'  // Settings → API → Project URL
+    const SUPABASE_KEY = 'eyJ...'                     // Settings → API → anon / public
+    // ══════════════════════════════════════════════════════════════════════
+
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+    // ── Données ──────────────────────────────────────────────────────────
+    const PLATS = [
+      { nom: 'Pizza',    emoji: '🍕' },
+      { nom: 'Burger',   emoji: '🍔' },
+      { nom: 'Salade',   emoji: '🥗' },
+      { nom: 'Pasta',    emoji: '🍝' },
+      { nom: 'Sushi',    emoji: '🍣' },
+      { nom: 'Dessert',  emoji: '🍰' },
+    ]
+    const NB_TABLES = 10
+
+    let tableChoisie  = null
+    let platsChoisis  = []   // peut contenir plusieurs plats
+
+    // ── Rendu des tables ─────────────────────────────────────────────────
+    const tablesEl = document.getElementById('tables')
+    for (let i = 1; i <= NB_TABLES; i++) {
+      const btn = document.createElement('button')
+      btn.className = 'table-btn'
+      btn.textContent = i
+      btn.onclick = () => {
+        tableChoisie = i
+        document.querySelectorAll('.table-btn').forEach(b => b.classList.remove('selected'))
+        btn.classList.add('selected')
+        majBoutonEnvoi()
+      }
+      tablesEl.appendChild(btn)
+    }
+
+    // ── Rendu des plats ──────────────────────────────────────────────────
+    const platsEl = document.getElementById('plats')
+    PLATS.forEach(({ nom, emoji }) => {
+      const btn = document.createElement('button')
+      btn.className = 'plat-btn'
+      btn.innerHTML = `<span class="emoji">${emoji}</span>${nom}`
+      btn.onclick = () => {
+        if (platsChoisis.includes(nom)) {
+          platsChoisis = platsChoisis.filter(p => p !== nom)
+          btn.classList.remove('selected')
+        } else {
+          platsChoisis.push(nom)
+          btn.classList.add('selected')
+        }
+        majBoutonEnvoi()
+      }
+      platsEl.appendChild(btn)
+    })
+
+    // ── Active le bouton seulement si table + plat sélectionnés ─────────
+    function majBoutonEnvoi() {
+      document.getElementById('btn-envoyer').disabled =
+        tableChoisie === null || platsChoisis.length === 0
+    }
+
+    // ── Envoi vers Supabase ──────────────────────────────────────────────
+    async function envoyerCommande() {
+      const contenu = { table: tableChoisie, plats: platsChoisis }
+      const statut  = document.getElementById('statut')
+
+      document.getElementById('btn-envoyer').disabled = true
+      statut.textContent = '⏳ Envoi en cours…'
+
+      const { error } = await db
+        .from('commandes')         // nom de la table Supabase
+        .insert({ contenu })       // pousse l'objet JSON
+
+      if (error) {
+        statut.textContent = '❌ Erreur : ' + error.message
+        document.getElementById('btn-envoyer').disabled = false
+      } else {
+        statut.textContent = '✅ Commande envoyée !'
+        // Réinitialise les sélections
+        tableChoisie = null
+        platsChoisis = []
+        document.querySelectorAll('.table-btn, .plat-btn').forEach(b => b.classList.remove('selected'))
+        setTimeout(() => { statut.textContent = '' }, 3000)
+      }
+    }
+  </script>
+
+</body>
+</html>

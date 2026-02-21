@@ -5,6 +5,31 @@ import { prisma } from "@/lib/prisma";
 export async function POST() {
   const orderNumber = `TEST-${Date.now()}`;
 
+  // Diagnostic: try a raw SQL insert first to verify DB schema
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO orders (id, "orderNumber", "customerName", "customerEmail", total, subtotal, "updatedAt")
+      VALUES (
+        gen_random_uuid()::text,
+        ${orderNumber + "-RAW"},
+        'Test Raw',
+        'test@test.com',
+        1.0,
+        1.0,
+        NOW()
+      )
+    `;
+    // Raw insert worked — clean it up
+    await prisma.$executeRaw`DELETE FROM orders WHERE "orderNumber" = ${orderNumber + "-RAW"}`;
+  } catch (rawError) {
+    const rawMsg = rawError instanceof Error ? rawError.message : String(rawError);
+    return NextResponse.json(
+      { error: "DB raw insert failed — schema mismatch", detail: rawMsg },
+      { status: 500 }
+    );
+  }
+
+  // Now try Prisma ORM create
   try {
     const raw = await prisma.order.create({
       data: {
@@ -46,6 +71,10 @@ export async function POST() {
     );
   } catch (error) {
     console.error("POST /api/orders/test error:", error);
-    return NextResponse.json({ error: "Failed to create test order" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      { error: "Prisma ORM create failed (raw SQL worked)", detail: message },
+      { status: 500 }
+    );
   }
 }

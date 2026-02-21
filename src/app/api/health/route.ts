@@ -23,11 +23,27 @@ export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`;
     const orderCount = await prisma.order.count();
+
+    // Introspect actual enum values in DB to detect schema drift
+    const enumRows = await prisma.$queryRaw<{ typname: string; enumlabel: string }[]>`
+      SELECT t.typname, e.enumlabel
+      FROM pg_enum e
+      JOIN pg_type t ON e.enumtypid = t.oid
+      WHERE t.typname IN ('OrderStatus', 'PaymentStatus')
+      ORDER BY t.typname, e.enumsortorder
+    `;
+    const dbEnums: Record<string, string[]> = {};
+    for (const row of enumRows) {
+      if (!dbEnums[row.typname]) dbEnums[row.typname] = [];
+      dbEnums[row.typname].push(row.enumlabel);
+    }
+
     return NextResponse.json({
       status: "ok",
       database: "connected",
       databaseUrl: masked,
       orders: orderCount,
+      dbEnums,
       webhookSecret: process.env.WEBHOOK_SECRET ? "set" : "not set (all requests allowed)",
     });
   } catch (error: unknown) {

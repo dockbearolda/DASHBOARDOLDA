@@ -54,7 +54,6 @@ async function getDashboardData() {
     prisma.order.findMany({
       include: { items: true },
       orderBy: { createdAt: "desc" },
-      take: 10,
     }),
     prisma.order.findMany({
       where: { createdAt: { gte: todayStart } },
@@ -214,15 +213,12 @@ export default async function DashboardPage() {
 
         {/* ── Recent orders ─────────────────────────────────────────── */}
         <div>
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold tracking-tight">
-              Dernières commandes
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Mis à jour toutes les 30 s
-            </p>
-          </div>
-          <OrderList initialOrders={data.orders as unknown as Order[]} />
+          <h2 className="text-base font-semibold mb-4">Commandes reçues</h2>
+          <OrderList
+            initialOrders={data.orders as unknown as Order[]}
+            disableNavigation={true}
+            refreshInterval={5000}
+          />
         </div>
       </div>
     </div>

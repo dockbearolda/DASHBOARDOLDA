@@ -1,12 +1,20 @@
 FROM node:20-alpine AS base
 
-# Install dependencies only when needed
+# All dependencies (dev + prod) for the build stage
 FROM base AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci
+
+# Production-only dependencies for the runner
+FROM base AS prod-deps
+RUN apk add --no-cache libc6-compat openssl
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -40,16 +48,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 
-# Source prisma packages from the deps stage (clean npm-managed install).
-# valibot is a runtime dependency of @prisma/dev (used by the prisma CLI
-# to parse prisma.config.ts) and must be present alongside the CLI.
-COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
-COPY --from=deps /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=deps /app/node_modules/valibot ./node_modules/valibot
+# Copy ALL production node_modules so the prisma CLI has every transitive dep.
+# Prisma 7.x loads @prisma/dev which pulls in valibot, pathe, jiti, mlly, and
+# more from the unjs ecosystem — cherry-picking individual packages is fragile.
+# prod-deps uses the same lockfile as builder so versions are identical.
+COPY --from=prod-deps /app/node_modules ./node_modules
 
-# Create a proper symlink so __dirname inside the prisma binary resolves to
-# the package directory where prisma_schema_build_bg.wasm actually lives.
-# (Docker COPY dereferences symlinks, breaking the default __dirname lookup.)
+# Ensure the prisma .bin entry is a real symlink regardless of Docker's
+# symlink-handling behaviour, so __dirname resolves inside the package dir
+# where prisma_schema_build_bg.wasm actually lives.
 RUN mkdir -p node_modules/.bin && \
     BIN_PATH=$(node -e "console.log(require('./node_modules/prisma/package.json').bin.prisma)") && \
     ln -sf "../prisma/$BIN_PATH" node_modules/.bin/prisma && \

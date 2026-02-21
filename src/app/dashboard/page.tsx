@@ -108,8 +108,8 @@ async function getDashboardData() {
       totalRevenue,
       todayRevenue,
       todayOrders: todayRaw.length,
-      pendingOrders: orders.filter((o: PrismaOrder) => o.status === "PENDING").length,
-      shippedOrders: orders.filter((o: PrismaOrder) => o.status === "SHIPPED").length,
+      pendingOrders: orders.filter((o: PrismaOrder) => o.status === "COMMANDE_A_TRAITER").length,
+      shippedOrders: orders.filter((o: PrismaOrder) => o.status === "CLIENT_PREVENU").length,
       paidOrders: orders.filter((o: PrismaOrder) => o.paymentStatus === "PAID").length,
       revenueTrend,
     },
@@ -187,16 +187,16 @@ export default async function DashboardPage() {
             delay={0.12}
           />
           <StatsCard
-            title="En attente"
+            title="À traiter"
             value={data.stats.pendingOrders.toString()}
-            subtitle="À traiter"
+            subtitle="Nouvelles commandes"
             icon={Clock}
             delay={0.18}
           />
           <StatsCard
-            title="Expédiées"
+            title="Client prévenu"
             value={data.stats.shippedOrders.toString()}
-            subtitle="En transit"
+            subtitle="Prêtes à récupérer"
             icon={Truck}
             delay={0.24}
           />

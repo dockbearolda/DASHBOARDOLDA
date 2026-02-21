@@ -30,7 +30,7 @@ export async function GET() {
     `;
 
     return NextResponse.json({
-      orders: orders.map((o) => ({
+      orders: orders.map((o: Record<string, unknown>) => ({
         ...o,
         createdAt: o.createdAt instanceof Date ? (o.createdAt as Date).toISOString() : o.createdAt,
         updatedAt: o.updatedAt instanceof Date ? (o.updatedAt as Date).toISOString() : o.updatedAt,

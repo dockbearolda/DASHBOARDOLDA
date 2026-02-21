@@ -72,17 +72,7 @@ export default function WebhookPage() {
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Webhook-Secret": process.env.NEXT_PUBLIC_WEBHOOK_SECRET || "test",
-        },
-        body: JSON.stringify({
-          ...EXAMPLE_PAYLOAD,
-          orderNumber: `ORD-TEST-${Date.now()}`,
-        }),
-      });
+      const res = await fetch("/api/orders/test", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         setTestResult({ ok: true, message: `Commande créée: #${data.order?.orderNumber}` });

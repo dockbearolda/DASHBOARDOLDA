@@ -46,6 +46,7 @@ export async function POST() {
     );
   } catch (error) {
     console.error("POST /api/orders/test error:", error);
-    return NextResponse.json({ error: "Failed to create test order" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "Failed to create test order", detail: message }, { status: 500 });
   }
 }

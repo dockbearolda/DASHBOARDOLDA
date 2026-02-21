@@ -1,6 +1,8 @@
-"use client";
+// No "use client" — stays a Server Component so LucideIcon props can be
+// passed from server pages without hitting the Next.js serialisation limit.
+// The entrance animation is driven by the CSS `animate-fade-up` keyframe
+// defined in globals.css; only `animation-delay` needs an inline style.
 
-import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +13,7 @@ interface StatsCardProps {
   icon: LucideIcon;
   trend?: number;
   iconColor?: string;
+  /** Stagger offset in seconds (default 0) */
   delay?: number;
 }
 
@@ -31,11 +34,9 @@ export function StatsCard({
       : TrendingDown;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
-      className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 hover:border-border hover:shadow-md hover:shadow-black/[0.04] dark:hover:shadow-black/20 transition-all duration-300"
+    <div
+      className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 hover:border-border hover:shadow-md hover:shadow-black/[0.04] dark:hover:shadow-black/20 transition-all duration-300 animate-fade-up"
+      style={{ animationDelay: `${delay}s` }}
     >
       {/* Top-edge glint on hover */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
@@ -73,6 +74,6 @@ export function StatsCard({
           </span>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

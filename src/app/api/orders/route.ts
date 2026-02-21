@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const raw = await prisma.order.upsert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = await (prisma.order.upsert as any)({
       where: { orderNumber: body.orderNumber },
       create: {
         orderNumber: body.orderNumber,

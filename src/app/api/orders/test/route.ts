@@ -5,38 +5,16 @@ import { prisma } from "@/lib/prisma";
 export async function POST() {
   const orderNumber = `TEST-${Date.now()}`;
 
-  // Diagnostic: try a raw SQL insert first to verify DB schema
   try {
-    await prisma.$executeRaw`
-      INSERT INTO orders (id, "orderNumber", "customerName", "customerEmail", total, subtotal, "updatedAt")
-      VALUES (
-        gen_random_uuid()::text,
-        ${orderNumber + "-RAW"},
-        'Test Raw',
-        'test@test.com',
-        1.0,
-        1.0,
-        NOW()
-      )
-    `;
-    // Raw insert worked — clean it up
-    await prisma.$executeRaw`DELETE FROM orders WHERE "orderNumber" = ${orderNumber + "-RAW"}`;
-  } catch (rawError) {
-    const rawMsg = rawError instanceof Error ? rawError.message : String(rawError);
-    return NextResponse.json(
-      { error: "DB raw insert failed — schema mismatch", detail: rawMsg },
-      { status: 500 }
-    );
-  }
-
-  // Now try Prisma ORM create
-  try {
-    const raw = await prisma.order.create({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = await (prisma.order.create as any)({
       data: {
         orderNumber,
         customerName: "Marie Dupont",
         customerEmail: "marie.dupont@example.com",
         customerPhone: "+33 6 12 34 56 78",
+        status: "PENDING",
+        paymentStatus: "PAID",
         total: 149.99,
         subtotal: 129.99,
         shipping: 9.9,
@@ -72,9 +50,6 @@ export async function POST() {
   } catch (error) {
     console.error("POST /api/orders/test error:", error);
     const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json(
-      { error: "Prisma ORM create failed (raw SQL worked)", detail: message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create test order", detail: message }, { status: 500 });
   }
 }

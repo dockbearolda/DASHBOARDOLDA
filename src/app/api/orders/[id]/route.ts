@@ -58,7 +58,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   try {
-    const order = await prisma.order.update({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const order = await (prisma.order.update as any)({
       where: { id },
       data: {
         ...(body.status && { status: body.status }),

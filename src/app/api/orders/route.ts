@@ -5,8 +5,21 @@ import { WebhookOrderPayload } from "@/types/order";
 function verifyWebhookSecret(request: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
   if (!secret) return true; // dev mode: allow all
-  const provided = request.headers.get("x-webhook-secret");
-  return provided === secret;
+
+  // Accept x-webhook-secret header
+  const xSecret = request.headers.get("x-webhook-secret");
+  if (xSecret === secret) return true;
+
+  // Accept Authorization: Bearer <token> header (used by oldastudio)
+  const auth = request.headers.get("authorization");
+  if (auth) {
+    const spaceIdx = auth.indexOf(" ");
+    const scheme = spaceIdx !== -1 ? auth.slice(0, spaceIdx).toLowerCase() : "";
+    const token = spaceIdx !== -1 ? auth.slice(spaceIdx + 1) : "";
+    if (scheme === "bearer" && token === secret) return true;
+  }
+
+  return false;
 }
 
 type PrismaOrderResult = {

@@ -38,8 +38,10 @@ export function OrderList({ initialOrders, disableNavigation = false, refreshInt
     setIsRefreshing(true);
     try {
       const res = await fetch("/api/orders");
+      if (!res.ok) return;
       const data = await res.json();
-      setOrders((prev) => {
+      if (!Array.isArray(data.orders)) return;
+      setOrders(() => {
         const incoming: Order[] = data.orders;
         const diff = incoming.length - prevCountRef.current;
         if (diff > 0) setNewCount((n) => n + diff);

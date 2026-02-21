@@ -141,7 +141,8 @@
       const { table, plats } = row.contenu  // ex: { table: 5, plats: ["Pizza","Salade"] }
       const liste = document.getElementById('commandes')
 
-      const heure = new Date(row.createdAt || Date.now()).toLocaleTimeString('fr-FR', {
+      const ts = row.createdat || row.createdAt || row.created_at || Date.now()
+      const heure = new Date(ts).toLocaleTimeString('fr-FR', {
         hour: '2-digit', minute: '2-digit'
       })
 
@@ -170,14 +171,24 @@
       const debutJour = new Date()
       debutJour.setHours(0, 0, 0, 0)
 
+      // Charge TOUT puis filtre côté client (évite le bug de casse sur la colonne)
       const { data, error } = await db
         .from('commandes')
         .select('*')
-        .gte('createdAt', debutJour.toISOString())
-        .order('createdAt', { ascending: true })
+        .order('id', { ascending: true })
 
-      if (error) { console.error('Historique :', error.message); return }
-      data.forEach(row => afficherCommande(row, false))
+      if (error) {
+        console.error('Historique :', error.message)
+        document.getElementById('statut-connexion').textContent = '⚠️ ' + error.message
+        return
+      }
+      const debut = debutJour.getTime()
+      data
+        .filter(row => {
+          const ts = row.createdat || row.createdAt || row.created_at
+          return !ts || new Date(ts).getTime() >= debut
+        })
+        .forEach(row => afficherCommande(row, false))
     }
 
     // ── Écoute les nouveaux INSERT en temps réel (WebSocket) ─────────────

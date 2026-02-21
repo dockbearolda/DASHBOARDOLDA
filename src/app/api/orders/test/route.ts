@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { OrderStatus, PaymentStatus } from "@/generated/prisma";
+import { OrderStatus, PaymentStatus } from "@/generated/prisma/client";
 
 // POST /api/orders/test — create a test order from the dashboard (no secret needed)
 export async function POST() {

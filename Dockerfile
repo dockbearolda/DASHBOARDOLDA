@@ -63,5 +63,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run migrations then start
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node server.js"]
+# Sync schema (no migration tracking → impossible P3009), then start
+CMD ["sh", "-c", "node_modules/.bin/prisma db push && node server.js"]

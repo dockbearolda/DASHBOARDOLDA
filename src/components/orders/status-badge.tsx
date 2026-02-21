@@ -14,6 +14,7 @@ import {
   Layers,
   PhoneCall,
   Archive,
+  InboxIcon,
 } from "lucide-react";
 
 const orderStatusConfig: Record<
@@ -24,6 +25,7 @@ const orderStatusConfig: Record<
     icon: React.ComponentType<{ className?: string }>;
   }
 > = {
+  COMMANDE_A_TRAITER:    { label: "Commande à traiter",     variant: "destructive", icon: InboxIcon },
   COMMANDE_EN_ATTENTE:   { label: "Commande en Attente",    variant: "warning",     icon: Clock },
   COMMANDE_A_PREPARER:   { label: "Commande à préparer",    variant: "info",        icon: Package },
   MAQUETTE_A_FAIRE:      { label: "Maquette à faire",       variant: "purple",      icon: Pencil },

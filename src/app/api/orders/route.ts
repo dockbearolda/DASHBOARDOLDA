@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
         customerName: body.customerName,
         customerEmail: body.customerEmail,
         customerPhone: body.customerPhone ?? null,
-        status: body.status ?? "COMMANDE_EN_ATTENTE",
+        status: body.status ?? "COMMANDE_A_TRAITER",
         paymentStatus: body.paymentStatus ?? "PENDING",
         total: body.total,
         subtotal: body.subtotal,

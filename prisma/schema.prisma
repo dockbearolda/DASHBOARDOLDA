@@ -13,7 +13,7 @@ model Order {
   customerName    String
   customerEmail   String
   customerPhone   String?
-  status          OrderStatus   @default(COMMANDE_EN_ATTENTE)
+  status          OrderStatus   @default(COMMANDE_A_TRAITER)
   paymentStatus   PaymentStatus @default(PENDING)
   total           Float
   subtotal        Float
@@ -44,6 +44,7 @@ model OrderItem {
 }
 
 enum OrderStatus {
+  COMMANDE_A_TRAITER
   COMMANDE_EN_ATTENTE
   COMMANDE_A_PREPARER
   MAQUETTE_A_FAIRE

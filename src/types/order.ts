@@ -1,4 +1,5 @@
 export type OrderStatus =
+  | "COMMANDE_A_TRAITER"
   | "COMMANDE_EN_ATTENTE"
   | "COMMANDE_A_PREPARER"
   | "MAQUETTE_A_FAIRE"

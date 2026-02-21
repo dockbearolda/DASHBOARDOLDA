@@ -102,6 +102,7 @@ export function OrderList({ initialOrders, disableNavigation = false, refreshInt
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Tous les statuts</SelectItem>
+              <SelectItem value="COMMANDE_A_TRAITER">Commande à traiter</SelectItem>
               <SelectItem value="COMMANDE_EN_ATTENTE">Commande en Attente</SelectItem>
               <SelectItem value="COMMANDE_A_PREPARER">Commande à préparer</SelectItem>
               <SelectItem value="MAQUETTE_A_FAIRE">Maquette à faire</SelectItem>

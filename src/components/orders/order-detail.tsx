@@ -218,6 +218,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="COMMANDE_A_TRAITER">Commande à traiter</SelectItem>
                     <SelectItem value="COMMANDE_EN_ATTENTE">Commande en Attente</SelectItem>
                     <SelectItem value="COMMANDE_A_PREPARER">Commande à préparer</SelectItem>
                     <SelectItem value="MAQUETTE_A_FAIRE">Maquette à faire</SelectItem>

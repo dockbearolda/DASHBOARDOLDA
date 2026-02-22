@@ -3,6 +3,36 @@ import { prisma } from "@/lib/prisma";
 import { WebhookOrderPayload } from "@/types/order";
 import { orderEvents } from "@/lib/events";
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Allows oldastudio to POST webhooks and the dashboard to call GET from any tab.
+
+const ALLOWED_ORIGIN = "https://oldastudio.up.railway.app";
+
+function corsHeaders(request?: NextRequest): Record<string, string> {
+  // Mirror the exact origin sent by the client when it is the allowed domain,
+  // otherwise fall back to the constant (handles direct server-to-server calls
+  // that may not set Origin at all).
+  const origin = request?.headers.get("origin") ?? "";
+  return {
+    "Access-Control-Allow-Origin":
+      origin === ALLOWED_ORIGIN ? origin : ALLOWED_ORIGIN,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Authorization, X-Webhook-Secret",
+    "Access-Control-Max-Age": "86400",
+  };
+}
+
+// OPTIONS /api/orders — CORS preflight (browser sends this before POST)
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(request),
+  });
+}
+
+// ── Webhook secret ────────────────────────────────────────────────────────────
+
 function verifyWebhookSecret(request: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
   if (!secret) return true; // dev mode: allow all
@@ -27,8 +57,9 @@ function newId(): string {
   return `c${Date.now()}${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// GET /api/orders — list all orders (for client-side refresh)
-export async function GET() {
+// ── GET /api/orders — list all orders (for client-side refresh) ───────────────
+
+export async function GET(request: NextRequest) {
   try {
     const orders = await prisma.$queryRaw<Record<string, unknown>[]>`
       SELECT o.*, COALESCE(json_agg(
@@ -43,21 +74,34 @@ export async function GET() {
       ORDER BY o."createdAt" DESC
     `;
 
-    return NextResponse.json({
-      orders: orders.map((o: Record<string, unknown>) => ({
-        ...o,
-        createdAt: o.createdAt instanceof Date ? (o.createdAt as Date).toISOString() : o.createdAt,
-        updatedAt: o.updatedAt instanceof Date ? (o.updatedAt as Date).toISOString() : o.updatedAt,
-      })),
-    });
+    return NextResponse.json(
+      {
+        orders: orders.map((o: Record<string, unknown>) => ({
+          ...o,
+          createdAt:
+            o.createdAt instanceof Date
+              ? (o.createdAt as Date).toISOString()
+              : o.createdAt,
+          updatedAt:
+            o.updatedAt instanceof Date
+              ? (o.updatedAt as Date).toISOString()
+              : o.updatedAt,
+        })),
+      },
+      { headers: corsHeaders(request) }
+    );
   } catch (error) {
     console.error("GET /api/orders error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500, headers: corsHeaders(request) }
+    );
   }
 }
 
-// POST /api/orders — receive webhook from oldastudio
+// ── POST /api/orders — receive webhook from oldastudio ────────────────────────
 // Maps legacy English status values to French (oldastudio may still send PENDING etc.)
+
 const LEGACY_STATUS_MAP: Record<string, string> = {
   PENDING:    "COMMANDE_A_TRAITER",
   PROCESSING: "COMMANDE_A_PREPARER",
@@ -68,25 +112,48 @@ const LEGACY_STATUS_MAP: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest) {
+  // ── Diagnostic log — visible in Railway logs on every incoming call ──────────
+  console.log(
+    `[OLDA] Requête reçue ! origin=${request.headers.get("origin") ?? "(none)"} ` +
+    `content-type=${request.headers.get("content-type") ?? "(none)"} ` +
+    `auth=${request.headers.get("authorization") ? "présent" : "absent"} ` +
+    `x-webhook-secret=${request.headers.get("x-webhook-secret") ? "présent" : "absent"}`
+  );
+
+  const cors = corsHeaders(request);
+
   if (!verifyWebhookSecret(request)) {
-    return NextResponse.json({ error: "Unauthorized: invalid webhook secret" }, { status: 401 });
+    console.warn("[OLDA] Webhook rejeté : secret invalide ou manquant.");
+    return NextResponse.json(
+      { error: "Unauthorized: invalid webhook secret" },
+      { status: 401, headers: cors }
+    );
   }
 
   let body: WebhookOrderPayload;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid JSON payload" },
+      { status: 400, headers: cors }
+    );
   }
 
   const required = ["orderNumber", "customerName", "customerEmail", "total", "subtotal", "items"];
   const missing = required.filter((f) => !(f in body));
   if (missing.length > 0) {
-    return NextResponse.json({ error: `Missing required fields: ${missing.join(", ")}` }, { status: 422 });
+    return NextResponse.json(
+      { error: `Missing required fields: ${missing.join(", ")}` },
+      { status: 422, headers: cors }
+    );
   }
 
   if (!Array.isArray(body.items) || body.items.length === 0) {
-    return NextResponse.json({ error: "items must be a non-empty array" }, { status: 422 });
+    return NextResponse.json(
+      { error: "items must be a non-empty array" },
+      { status: 422, headers: cors }
+    );
   }
 
   const rawStatus = body.status ?? "COMMANDE_A_TRAITER";
@@ -176,22 +243,34 @@ export async function POST(request: NextRequest) {
 
     const formattedOrder = {
       ...order,
-      createdAt: order.createdAt instanceof Date ? (order.createdAt as Date).toISOString() : order.createdAt,
-      updatedAt: order.updatedAt instanceof Date ? (order.updatedAt as Date).toISOString() : order.updatedAt,
+      createdAt:
+        order.createdAt instanceof Date
+          ? (order.createdAt as Date).toISOString()
+          : order.createdAt,
+      updatedAt:
+        order.updatedAt instanceof Date
+          ? (order.updatedAt as Date).toISOString()
+          : order.updatedAt,
     };
 
     // Push real-time notification to SSE clients only for brand-new orders
     if (existing.length === 0) {
       orderEvents.emit("new-order", formattedOrder);
+      console.log(`[OLDA] Nouvelle commande créée : #${body.orderNumber} (id=${orderId}, status=${status})`);
+    } else {
+      console.log(`[OLDA] Commande mise à jour : #${body.orderNumber} (id=${orderId})`);
     }
 
     return NextResponse.json(
       { success: true, order: formattedOrder },
-      { status: 201 }
+      { status: 201, headers: cors }
     );
   } catch (error) {
     console.error("POST /api/orders error:", error);
     const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: "Failed to create order", detail: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to create order", detail: message },
+      { status: 500, headers: cors }
+    );
   }
 }

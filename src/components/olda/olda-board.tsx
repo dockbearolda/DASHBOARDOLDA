@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Order, OrderStatus } from "@/types/order";
-import { Inbox, Pencil, Layers, Phone, FileText, CheckSquare } from "lucide-react";
+import { Inbox, Pencil, Layers, Phone, FileText, CheckSquare, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonNoteModal, type NoteData, type TodoItem } from "./person-note-modal";
+import { TshirtOrderCard } from "./tshirt-order-card";
 
 // ── Product type detection ─────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ function detectProductType(order: Order): ProductType {
 type KanbanCol = {
   status: OrderStatus;
   label: string;
-  dot: string; // accent dot color
+  dot: string;
 };
 
 const TSHIRT_COLUMNS: KanbanCol[] = [
@@ -86,7 +87,7 @@ const PEOPLE = [
   },
 ];
 
-// ── Order card ─────────────────────────────────────────────────────────────────
+// ── Standard compact order card (all non-COMMANDE_A_TRAITER columns) ──────────
 
 function OrderCard({ order }: { order: Order }) {
   const items    = Array.isArray(order.items) ? order.items : [];
@@ -117,9 +118,22 @@ function OrderCard({ order }: { order: Order }) {
 
 // ── Kanban column ──────────────────────────────────────────────────────────────
 
-function KanbanColumn({ col, orders }: { col: KanbanCol; orders: Order[] }) {
+function KanbanColumn({
+  col,
+  orders,
+  richCards,
+  newOrderIds,
+}: {
+  col: KanbanCol;
+  orders: Order[];
+  richCards?: boolean;
+  newOrderIds?: Set<string>;
+}) {
+  // Rich "Commande à traiter" column is wider to fit QR + images
+  const colWidth = richCards ? "w-72" : "w-44";
+
   return (
-    <div className="shrink-0 w-44 flex flex-col gap-2">
+    <div className={cn("shrink-0 flex flex-col gap-2", colWidth)}>
       <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.dot)} />
@@ -131,11 +145,20 @@ function KanbanColumn({ col, orders }: { col: KanbanCol; orders: Order[] }) {
           {orders.length}
         </span>
       </div>
+
       <div className="flex flex-col gap-1.5">
         {orders.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/30 h-12 flex items-center justify-center">
             <span className="text-[10px] text-muted-foreground/40">vide</span>
           </div>
+        ) : richCards ? (
+          orders.map((o) => (
+            <TshirtOrderCard
+              key={o.id}
+              order={o}
+              isNew={newOrderIds?.has(o.id)}
+            />
+          ))
         ) : (
           orders.map((o) => <OrderCard key={o.id} order={o} />)
         )}
@@ -150,10 +173,14 @@ function ProductBoard({
   label,
   columns,
   orders,
+  richFirstColumn,
+  newOrderIds,
 }: {
   label: string;
   columns: KanbanCol[];
   orders: Order[];
+  richFirstColumn?: boolean;
+  newOrderIds?: Set<string>;
 }) {
   const ordersByStatus = useMemo(() => {
     const map: Record<string, Order[]> = {};
@@ -177,11 +204,14 @@ function ProductBoard({
         </span>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-3">
-        {columns.map((col) => (
+        {columns.map((col, idx) => (
           <KanbanColumn
             key={col.status}
             col={col}
             orders={ordersByStatus[col.status] ?? []}
+            // Activate rich cards only on the very first column (Commande à traiter)
+            richCards={richFirstColumn && idx === 0}
+            newOrderIds={newOrderIds}
           />
         ))}
       </div>
@@ -208,7 +238,6 @@ function PersonNoteCard({
   const pending = (note?.todos ?? []).filter((t: TodoItem) => !t.done).length;
   const total   = (note?.todos ?? []).length;
 
-  // Note preview: first non-empty line, max 80 chars
   const preview = note?.content
     ?.split("\n")
     .map((l) => l.trim())
@@ -221,10 +250,8 @@ function PersonNoteCard({
       className="group relative overflow-hidden text-left rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 hover:border-border hover:shadow-md hover:shadow-black/[0.04] dark:hover:shadow-black/20 transition-all duration-300 animate-fade-up cursor-pointer"
       style={{ animationDelay: `${index * 0.06}s` }}
     >
-      {/* Top-edge glint on hover */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-      {/* Header row */}
       <div className="flex items-start justify-between mb-4">
         <div className="space-y-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
@@ -238,7 +265,6 @@ function PersonNoteCard({
         </div>
       </div>
 
-      {/* Note preview area — Apple Notes card feel */}
       <div className="border-t border-border/40 pt-3 space-y-2">
         {preview ? (
           <p className="text-[12px] leading-relaxed text-muted-foreground line-clamp-2 italic">
@@ -250,7 +276,6 @@ function PersonNoteCard({
           </p>
         )}
 
-        {/* Badges row */}
         <div className="flex items-center gap-2 pt-0.5">
           {note?.content && note.content.trim().length > 0 && (
             <span className="flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
@@ -273,13 +298,138 @@ function PersonNoteCard({
   );
 }
 
+// ── Real-time status indicator ─────────────────────────────────────────────────
+
+function LiveIndicator({ connected }: { connected: boolean }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          connected
+            ? "bg-emerald-500 animate-pulse-dot"
+            : "bg-muted-foreground/30"
+        )}
+      />
+      <span className="text-[10px] text-muted-foreground/50">
+        {connected ? "En direct" : "Hors ligne"}
+      </span>
+    </div>
+  );
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
 
-export function OldaBoard({ orders }: { orders: Order[] }) {
+export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
+  const [orders, setOrders]             = useState<Order[]>(initialOrders);
+  const [newOrderIds, setNewOrderIds]   = useState<Set<string>>(new Set());
+  const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [activePerson, setActivePerson] = useState<string | null>(null);
 
-  // Fetch all 4 person notes once on mount
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const markNew = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setNewOrderIds((prev) => new Set([...prev, ...ids]));
+    // Remove the highlight after 6 seconds
+    setTimeout(() => {
+      setNewOrderIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 6_000);
+  }, []);
+
+  const mergeOrders = useCallback(
+    (incoming: Order[]) => {
+      setOrders((prev) => {
+        const existingIds = new Set(prev.map((o) => o.id));
+        const fresh = incoming.filter((o) => !existingIds.has(o.id));
+        if (fresh.length === 0) return prev;
+        markNew(fresh.map((o) => o.id));
+        return [...fresh, ...prev];
+      });
+    },
+    [markNew]
+  );
+
+  // ── Fallback polling (every 15 s) ──────────────────────────────────────────
+
+  const startPolling = useCallback(() => {
+    if (pollTimerRef.current) return; // already running
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const res  = await fetch("/api/orders");
+        const data = await res.json() as { orders: Order[] };
+        mergeOrders(data.orders ?? []);
+      } catch {
+        /* ignore transient network errors */
+      }
+    }, 15_000);
+  }, [mergeOrders]);
+
+  // ── SSE subscription ───────────────────────────────────────────────────────
+
+  useEffect(() => {
+    let es: EventSource | null = null;
+
+    const connect = () => {
+      try {
+        es = new EventSource("/api/orders/stream");
+
+        es.addEventListener("connected", () => {
+          setSseConnected(true);
+          // SSE is live → stop polling if it was running
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+        });
+
+        es.addEventListener("new-order", (event) => {
+          try {
+            const order = JSON.parse((event as MessageEvent).data) as Order;
+            setOrders((prev) => {
+              if (prev.find((o) => o.id === order.id)) return prev;
+              markNew([order.id]);
+              return [order, ...prev];
+            });
+          } catch {
+            /* malformed payload — ignore */
+          }
+        });
+
+        es.onerror = () => {
+          setSseConnected(false);
+          es?.close();
+          // Fall back to polling until SSE recovers
+          startPolling();
+          // Attempt SSE reconnect after 10 s
+          setTimeout(connect, 10_000);
+        };
+      } catch {
+        // EventSource not supported or blocked — use polling
+        startPolling();
+      }
+    };
+
+    connect();
+
+    return () => {
+      es?.close();
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [markNew, startPolling]);
+
+  // ── Fetch person notes once on mount ──────────────────────────────────────
+
   useEffect(() => {
     fetch("/api/notes")
       .then((r) => r.json())
@@ -287,9 +437,9 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
         const map: Record<string, NoteData> = {};
         for (const n of data.notes ?? []) {
           map[n.person] = {
-            person: n.person,
+            person:  n.person,
             content: n.content ?? "",
-            todos: Array.isArray(n.todos) ? (n.todos as TodoItem[]) : [],
+            todos:   Array.isArray(n.todos) ? (n.todos as TodoItem[]) : [],
           };
         }
         setNotes(map);
@@ -301,15 +451,17 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
     setNotes((prev) => ({ ...prev, [note.person]: note }));
   };
 
+  // ── Categorise orders ──────────────────────────────────────────────────────
+
   const { tshirt, mug, other } = useMemo(() => {
     const tshirt: Order[] = [];
-    const mug: Order[]    = [];
-    const other: Order[]  = [];
+    const mug:    Order[] = [];
+    const other:  Order[] = [];
     for (const o of orders) {
       const t = detectProductType(o);
-      if (t === "tshirt") tshirt.push(o);
-      else if (t === "mug") mug.push(o);
-      else other.push(o);
+      if      (t === "tshirt") tshirt.push(o);
+      else if (t === "mug")    mug.push(o);
+      else                     other.push(o);
     }
     return { tshirt, mug, other };
   }, [orders]);
@@ -322,14 +474,20 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
     <div className="p-6 space-y-8">
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
-          Atelier
-        </p>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Vue d&apos;ensemble de la production par type de produit
-        </p>
+      <div className="flex items-end justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+            Atelier
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Vue d&apos;ensemble de la production par type de produit
+          </p>
+        </div>
+        {/* Live indicator */}
+        <div className="shrink-0 pb-1">
+          <LiveIndicator connected={sseConnected} />
+        </div>
       </div>
 
       {/* ── Person note cards ──────────────────────────────────────────────── */}
@@ -352,10 +510,47 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
       </div>
 
       {/* ── Catégories kanban ──────────────────────────────────────────────── */}
-      <ProductBoard label="T-shirt" columns={TSHIRT_COLUMNS} orders={tshirt} />
-      <ProductBoard label="Mug"     columns={MUG_COLUMNS}    orders={mug} />
+
+      {/*
+        T-shirt board — the "Commande à traiter" column (index 0) uses the
+        full Carte Totale design: QR code + Avant/Arrière visuals + todo list.
+        All other columns keep the compact OrderCard.
+      */}
+      <ProductBoard
+        label="T-shirt"
+        columns={TSHIRT_COLUMNS}
+        orders={tshirt}
+        richFirstColumn
+        newOrderIds={newOrderIds}
+      />
+
+      <ProductBoard
+        label="Mug"
+        columns={MUG_COLUMNS}
+        orders={mug}
+        newOrderIds={newOrderIds}
+      />
+
       {other.length > 0 && (
-        <ProductBoard label="Autre" columns={TSHIRT_COLUMNS} orders={other} />
+        <ProductBoard
+          label="Autre"
+          columns={TSHIRT_COLUMNS}
+          orders={other}
+          newOrderIds={newOrderIds}
+        />
+      )}
+
+      {/* ── New-order toast banner ─────────────────────────────────────────── */}
+      {newOrderIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
+          <div className="flex items-center gap-2.5 rounded-2xl border border-blue-300/40 bg-blue-50 dark:bg-blue-950/80 dark:border-blue-700/40 px-4 py-2.5 shadow-lg backdrop-blur-sm">
+            <RefreshCw className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 animate-spin" />
+            <span className="text-[12px] font-semibold text-blue-700 dark:text-blue-300">
+              {newOrderIds.size} nouvelle{newOrderIds.size > 1 ? "s" : ""} commande
+              {newOrderIds.size > 1 ? "s" : ""} reçue{newOrderIds.size > 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
       )}
 
       {/* ── Apple Notes modal ──────────────────────────────────────────────── */}

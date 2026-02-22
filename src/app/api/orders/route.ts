@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { WebhookOrderPayload } from "@/types/order";
+import { orderEvents } from "@/lib/events";
 
 function verifyWebhookSecret(request: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
@@ -170,15 +171,19 @@ export async function POST(request: NextRequest) {
     `;
     const order = rows[0];
 
+    const formattedOrder = {
+      ...order,
+      createdAt: order.createdAt instanceof Date ? (order.createdAt as Date).toISOString() : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date ? (order.updatedAt as Date).toISOString() : order.updatedAt,
+    };
+
+    // Push real-time notification to SSE clients only for brand-new orders
+    if (existing.length === 0) {
+      orderEvents.emit("new-order", formattedOrder);
+    }
+
     return NextResponse.json(
-      {
-        success: true,
-        order: {
-          ...order,
-          createdAt: order.createdAt instanceof Date ? (order.createdAt as Date).toISOString() : order.createdAt,
-          updatedAt: order.updatedAt instanceof Date ? (order.updatedAt as Date).toISOString() : order.updatedAt,
-        },
-      },
+      { success: true, order: formattedOrder },
       { status: 201 }
     );
   } catch (error) {

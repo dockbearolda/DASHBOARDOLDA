@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { Order, OrderStatus } from "@/types/order";
 import { Inbox, Pencil, Layers, Phone } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ── Product type detection ─────────────────────────────────────────────────────
 
@@ -21,28 +22,28 @@ function detectProductType(order: Order): ProductType {
 type KanbanCol = {
   status: OrderStatus;
   label: string;
-  header: string; // full Tailwind classes for the header pill
+  dot: string; // accent dot color
 };
 
 const TSHIRT_COLUMNS: KanbanCol[] = [
-  { status: "COMMANDE_A_TRAITER",    label: "Commande à traiter",  header: "bg-blue-50 border-blue-200 text-blue-700" },
-  { status: "COMMANDE_EN_ATTENTE",   label: "Urgence",             header: "bg-red-50 border-red-200 text-red-700" },
-  { status: "MAQUETTE_A_FAIRE",      label: "Maquette à faire",    header: "bg-violet-50 border-violet-200 text-violet-700" },
-  { status: "EN_ATTENTE_VALIDATION", label: "En attente client",   header: "bg-amber-50 border-amber-200 text-amber-700" },
-  { status: "PRT_A_FAIRE",           label: "À produire",          header: "bg-orange-50 border-orange-200 text-orange-700" },
-  { status: "EN_COURS_IMPRESSION",   label: "Production en cours", header: "bg-indigo-50 border-indigo-200 text-indigo-700" },
-  { status: "CLIENT_A_CONTACTER",    label: "Client à contacter",  header: "bg-pink-50 border-pink-200 text-pink-700" },
-  { status: "ARCHIVES",              label: "Archive / terminé",   header: "bg-slate-50 border-slate-200 text-slate-500" },
+  { status: "COMMANDE_A_TRAITER",    label: "Commande à traiter",  dot: "bg-blue-400" },
+  { status: "COMMANDE_EN_ATTENTE",   label: "Urgence",             dot: "bg-red-400" },
+  { status: "MAQUETTE_A_FAIRE",      label: "Maquette à faire",    dot: "bg-violet-400" },
+  { status: "EN_ATTENTE_VALIDATION", label: "En attente client",   dot: "bg-amber-400" },
+  { status: "PRT_A_FAIRE",           label: "À produire",          dot: "bg-orange-400" },
+  { status: "EN_COURS_IMPRESSION",   label: "Production en cours", dot: "bg-indigo-400" },
+  { status: "CLIENT_A_CONTACTER",    label: "Client à contacter",  dot: "bg-pink-400" },
+  { status: "ARCHIVES",              label: "Archive / terminé",   dot: "bg-slate-300" },
 ];
 
 const MUG_COLUMNS: KanbanCol[] = [
-  { status: "COMMANDE_A_TRAITER",    label: "Commande à traiter",  header: "bg-blue-50 border-blue-200 text-blue-700" },
-  { status: "COMMANDE_EN_ATTENTE",   label: "Urgence",             header: "bg-red-50 border-red-200 text-red-700" },
-  { status: "MAQUETTE_A_FAIRE",      label: "Maquette à faire",    header: "bg-violet-50 border-violet-200 text-violet-700" },
-  { status: "EN_ATTENTE_VALIDATION", label: "En attente client",   header: "bg-amber-50 border-amber-200 text-amber-700" },
-  { status: "COMMANDE_A_PREPARER",   label: "À produire",          header: "bg-orange-50 border-orange-200 text-orange-700" },
-  { status: "CLIENT_A_CONTACTER",    label: "Client à contacter",  header: "bg-pink-50 border-pink-200 text-pink-700" },
-  { status: "ARCHIVES",              label: "Archive / terminé",   header: "bg-slate-50 border-slate-200 text-slate-500" },
+  { status: "COMMANDE_A_TRAITER",    label: "Commande à traiter",  dot: "bg-blue-400" },
+  { status: "COMMANDE_EN_ATTENTE",   label: "Urgence",             dot: "bg-red-400" },
+  { status: "MAQUETTE_A_FAIRE",      label: "Maquette à faire",    dot: "bg-violet-400" },
+  { status: "EN_ATTENTE_VALIDATION", label: "En attente client",   dot: "bg-amber-400" },
+  { status: "COMMANDE_A_PREPARER",   label: "À produire",          dot: "bg-orange-400" },
+  { status: "CLIENT_A_CONTACTER",    label: "Client à contacter",  dot: "bg-pink-400" },
+  { status: "ARCHIVES",              label: "Archive / terminé",   dot: "bg-slate-300" },
 ];
 
 // ── People info boxes ──────────────────────────────────────────────────────────
@@ -52,21 +53,18 @@ const PEOPLE = [
     name: "Loïc",
     role: "Nouvelles commandes",
     icon: Inbox,
-    gradient: "from-blue-500 to-indigo-600",
     statuses: ["COMMANDE_A_TRAITER", "COMMANDE_EN_ATTENTE"] as OrderStatus[],
   },
   {
     name: "Charlie",
     role: "Maquettes & design",
     icon: Pencil,
-    gradient: "from-violet-500 to-purple-600",
     statuses: ["MAQUETTE_A_FAIRE"] as OrderStatus[],
   },
   {
     name: "Mélina",
     role: "Validation & production",
     icon: Layers,
-    gradient: "from-pink-500 to-rose-600",
     statuses: [
       "EN_ATTENTE_VALIDATION",
       "PRT_A_FAIRE",
@@ -79,7 +77,6 @@ const PEOPLE = [
     name: "Amandine",
     role: "Relation client",
     icon: Phone,
-    gradient: "from-amber-500 to-orange-600",
     statuses: ["CLIENT_A_CONTACTER", "CLIENT_PREVENU"] as OrderStatus[],
   },
 ];
@@ -92,17 +89,15 @@ function OrderCard({ order }: { order: Order }) {
   const currency = (order.currency as string) ?? "EUR";
 
   return (
-    <div className="rounded-lg border border-border/60 bg-background p-2.5 shadow-sm hover:border-border hover:shadow transition-all cursor-default">
+    <div className="rounded-xl border border-border/50 bg-card p-3 hover:border-border/80 hover:shadow-sm transition-all cursor-default">
       <p className="text-[11px] font-bold text-foreground truncate">
         #{order.orderNumber}
       </p>
       <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
         {order.customerName}
       </p>
-      <div className="flex items-center justify-between mt-1.5 gap-1">
-        <span className="text-[10px] text-muted-foreground">
-          {totalQty} art.
-        </span>
+      <div className="flex items-center justify-between mt-2 gap-1">
+        <span className="text-[10px] text-muted-foreground">{totalQty} art.</span>
         <span className="text-[11px] font-semibold tabular-nums">
           {Number(order.total).toLocaleString("fr-FR", {
             style: "currency",
@@ -120,17 +115,20 @@ function OrderCard({ order }: { order: Order }) {
 function KanbanColumn({ col, orders }: { col: KanbanCol; orders: Order[] }) {
   return (
     <div className="shrink-0 w-44 flex flex-col gap-2">
-      <div className={`rounded-lg border px-2.5 py-1.5 flex items-center justify-between gap-1 ${col.header}`}>
-        <span className="text-[10px] font-bold leading-tight line-clamp-2">
-          {col.label}
-        </span>
-        <span className="shrink-0 rounded-full bg-white/60 px-1.5 py-0.5 text-[10px] font-bold">
+      <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.dot)} />
+          <span className="text-[11px] font-semibold text-foreground truncate leading-tight">
+            {col.label}
+          </span>
+        </div>
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
           {orders.length}
         </span>
       </div>
       <div className="flex flex-col gap-1.5">
         {orders.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/30 h-12 flex items-center justify-center">
+          <div className="rounded-xl border border-dashed border-border/30 h-12 flex items-center justify-center">
             <span className="text-[10px] text-muted-foreground/40">vide</span>
           </div>
         ) : (
@@ -144,12 +142,10 @@ function KanbanColumn({ col, orders }: { col: KanbanCol; orders: Order[] }) {
 // ── Product board ──────────────────────────────────────────────────────────────
 
 function ProductBoard({
-  emoji,
   label,
   columns,
   orders,
 }: {
-  emoji: string;
   label: string;
   columns: KanbanCol[];
   orders: Order[];
@@ -161,7 +157,6 @@ function ProductBoard({
       if (map[order.status] !== undefined) {
         map[order.status].push(order);
       } else {
-        // Unknown status in this workflow → first column
         map[columns[0].status].push(order);
       }
     }
@@ -171,8 +166,7 @@ function ProductBoard({
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-xl leading-none">{emoji}</span>
-        <h2 className="text-sm font-bold tracking-tight">{label}</h2>
+        <h2 className="text-base font-semibold">{label}</h2>
         <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
           {orders.length} commande{orders.length !== 1 ? "s" : ""}
         </span>
@@ -208,19 +202,21 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
 
   return (
     <div className="p-6 space-y-8">
-      {/* ── Hero ──────────────────────────────────────────────────── */}
+
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          DASHBOARD ATELIER OLDA
-        </h1>
+        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+          Atelier
+        </p>
+        <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Vue d&apos;ensemble de la production par type de produit
         </p>
       </div>
 
-      {/* ── 4 info boxes ──────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {PEOPLE.map((person) => {
+      {/* ── People cards — même structure exacte que StatsCard ────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {PEOPLE.map((person, i) => {
           const personOrders = orders.filter((o) =>
             person.statuses.includes(o.status)
           );
@@ -228,42 +224,37 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
           return (
             <div
               key={person.name}
-              className="rounded-xl border border-border/50 bg-card p-4 space-y-3"
+              className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 hover:border-border hover:shadow-md hover:shadow-black/[0.04] dark:hover:shadow-black/20 transition-all duration-300 animate-fade-up"
+              style={{ animationDelay: `${i * 0.06}s` }}
             >
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br ${person.gradient} shadow-sm shrink-0`}
-                >
-                  <Icon className="h-4 w-4 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground leading-tight">
-                    Information pour
-                  </p>
-                  <p className="text-sm font-bold leading-tight">{person.name}</p>
-                </div>
-              </div>
+              {/* Top-edge glint on hover */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-              <div>
-                <p className="text-2xl font-bold tabular-nums">
-                  {personOrders.length}
-                </p>
-                <p className="text-xs text-muted-foreground">{person.role}</p>
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                    {person.role}
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight">
+                    {personOrders.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{person.name}</p>
+                </div>
+                <div className="rounded-xl p-2.5 bg-muted/70 ring-1 ring-border/40 text-foreground">
+                  <Icon className="h-4 w-4" />
+                </div>
               </div>
 
               {personOrders.length > 0 && (
-                <div className="space-y-0.5">
-                  {personOrders.slice(0, 3).map((o) => (
-                    <p
-                      key={o.id}
-                      className="text-[11px] text-muted-foreground truncate"
-                    >
+                <div className="mt-4 space-y-0.5">
+                  {personOrders.slice(0, 2).map((o) => (
+                    <p key={o.id} className="text-[11px] text-muted-foreground truncate">
                       #{o.orderNumber} — {o.customerName}
                     </p>
                   ))}
-                  {personOrders.length > 3 && (
+                  {personOrders.length > 2 && (
                     <p className="text-[10px] text-muted-foreground/50">
-                      +{personOrders.length - 3} de plus…
+                      +{personOrders.length - 2} de plus
                     </p>
                   )}
                 </div>
@@ -273,30 +264,13 @@ export function OldaBoard({ orders }: { orders: Order[] }) {
         })}
       </div>
 
-      {/* ── T-shirt kanban ────────────────────────────────────────── */}
-      <ProductBoard emoji="🎽" label="T-shirt" columns={TSHIRT_COLUMNS} orders={tshirt} />
-
-      {/* ── Mug kanban ────────────────────────────────────────────── */}
-      <ProductBoard emoji="☕" label="Mug" columns={MUG_COLUMNS} orders={mug} />
-
-      {/* ── Autre (si présent) ────────────────────────────────────── */}
+      {/* ── Catégories ────────────────────────────────────────────────────── */}
+      <ProductBoard label="T-shirt" columns={TSHIRT_COLUMNS} orders={tshirt} />
+      <ProductBoard label="Mug"     columns={MUG_COLUMNS}    orders={mug} />
       {other.length > 0 && (
-        <ProductBoard emoji="📦" label="Autre" columns={TSHIRT_COLUMNS} orders={other} />
+        <ProductBoard label="Autre" columns={TSHIRT_COLUMNS} orders={other} />
       )}
 
-      {/* ── Produits non disponibles ──────────────────────────────── */}
-      <div className="flex gap-3">
-        {["Accessoire", "Goodies"].map((label) => (
-          <div
-            key={label}
-            className="rounded-xl border border-dashed border-border/40 px-4 py-3 flex items-center gap-2 text-sm text-muted-foreground/60"
-          >
-            <span>📎</span>
-            <span>{label}</span>
-            <span className="text-[11px] italic">— non disponible actuellement</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -28,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { OrderStatusBadge, PaymentStatusBadge } from "./status-badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Order, OrderStatus, PaymentStatus } from "@/types/order";
+import { OrderTasks } from "./order-tasks";
 import { toast } from "sonner";
 
 interface OrderDetailProps {
@@ -179,17 +180,8 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
             </CardContent>
           </Card>
 
-          {/* Notes */}
-          {order.notes && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">{order.notes}</p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Tasks / Instructions */}
+          <OrderTasks orderId={order.id} initialNotes={order.notes} />
         </div>
 
         {/* Right column */}

@@ -365,13 +365,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     }
   }, [markNew]);
 
-  // ── Fallback polling every 12 s (used when SSE is unavailable) ────────────
+  // ── Fallback polling every 5 s (used when SSE is unavailable) ────────────
 
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return;
     pollTimerRef.current = setInterval(() => {
       if (mountedRef.current) refreshOrders();
-    }, 12_000);
+    }, 5_000);
   }, [refreshOrders]);
 
   const stopPolling = useCallback(() => {
@@ -414,6 +414,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           if (!mountedRef.current) return;
           setSseConnected(true);
           stopPolling(); // SSE is live — polling not needed
+          // Catch any orders that arrived while SSE was reconnecting
+          refreshOrders();
         });
 
         es.addEventListener("new-order", (event) => {

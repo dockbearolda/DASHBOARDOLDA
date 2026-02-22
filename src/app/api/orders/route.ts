@@ -33,15 +33,11 @@ export async function OPTIONS(request: NextRequest) {
 
 // ── Webhook secret ────────────────────────────────────────────────────────────
 
-function verifyWebhookSecret(request: NextRequest): boolean {
-  const secret = process.env.WEBHOOK_SECRET;
+function verifyToken(request: NextRequest): boolean {
+  const secret = process.env.DASHBOARD_TOKEN;
   if (!secret) return true; // dev mode: allow all
 
-  // Accept x-webhook-secret header
-  const xSecret = request.headers.get("x-webhook-secret");
-  if (xSecret === secret) return true;
-
-  // Accept Authorization: Bearer <token> header (used by oldastudio)
+  // Accept Authorization: Bearer <token> header (principal method used by oldastudio)
   const auth = request.headers.get("authorization");
   if (auth) {
     const spaceIdx = auth.indexOf(" ");
@@ -49,6 +45,10 @@ function verifyWebhookSecret(request: NextRequest): boolean {
     const token = spaceIdx !== -1 ? auth.slice(spaceIdx + 1) : "";
     if (scheme === "bearer" && token === secret) return true;
   }
+
+  // Accept X-Webhook-Secret header as fallback
+  const xSecret = request.headers.get("x-webhook-secret");
+  if (xSecret === secret) return true;
 
   return false;
 }
@@ -112,18 +112,17 @@ const LEGACY_STATUS_MAP: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest) {
-  // ── Diagnostic log — visible in Railway logs on every incoming call ──────────
+  console.log('--- NOUVELLE REQUÊTE REÇUE ---');
   console.log(
-    `[OLDA] Requête reçue ! origin=${request.headers.get("origin") ?? "(none)"} ` +
+    `[OLDA] origin=${request.headers.get("origin") ?? "(none)"} ` +
     `content-type=${request.headers.get("content-type") ?? "(none)"} ` +
-    `auth=${request.headers.get("authorization") ? "présent" : "absent"} ` +
-    `x-webhook-secret=${request.headers.get("x-webhook-secret") ? "présent" : "absent"}`
+    `auth=${request.headers.get("authorization") ? "présent" : "absent"}`
   );
 
   const cors = corsHeaders(request);
 
-  if (!verifyWebhookSecret(request)) {
-    console.warn("[OLDA] Webhook rejeté : secret invalide ou manquant.");
+  if (!verifyToken(request)) {
+    console.warn("[OLDA] Requête rejetée : DASHBOARD_TOKEN invalide ou manquant.");
     return NextResponse.json(
       { error: "Unauthorized: invalid webhook secret" },
       { status: 401, headers: cors }
@@ -156,11 +155,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Guard against NaN/null numeric values that would crash the DB insert
+  const safeNum = (v: unknown, fallback = 0): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
   const rawStatus = body.status ?? "COMMANDE_A_TRAITER";
   const mappedStatus = LEGACY_STATUS_MAP[rawStatus] ?? rawStatus;
   // T-shirt orders always start in COMMANDE_A_TRAITER (atelier workflow)
   const hasTshirtItem = body.items.some((item) =>
-    /t[-\s]?shirt|tee\b/i.test(item.name ?? "")
+    /t[-\s]?shirt|tee\b/i.test(typeof item.name === "string" ? item.name : "")
   );
   const status = hasTshirtItem ? "COMMANDE_A_TRAITER" : mappedStatus;
   const paymentStatus = body.paymentStatus ?? "PENDING";
@@ -201,10 +206,10 @@ export async function POST(request: NextRequest) {
           ${body.customerPhone ?? null},
           ${status}::"OrderStatus",
           ${paymentStatus}::"PaymentStatus",
-          ${body.total},
-          ${body.subtotal},
-          ${body.shipping ?? 0},
-          ${body.tax ?? 0},
+          ${safeNum(body.total)},
+          ${safeNum(body.subtotal)},
+          ${safeNum(body.shipping)},
+          ${safeNum(body.tax)},
           ${body.currency ?? "EUR"},
           ${body.notes ?? null},
           ${shippingAddr}::jsonb,
@@ -218,8 +223,8 @@ export async function POST(request: NextRequest) {
         await prisma.$executeRaw`
           INSERT INTO order_items (id, "orderId", name, sku, quantity, price, "imageUrl")
           VALUES (
-            ${itemId}, ${orderId}, ${item.name}, ${item.sku ?? null},
-            ${item.quantity}, ${item.price}, ${item.imageUrl ?? null}
+            ${itemId}, ${orderId}, ${String(item.name ?? "")}, ${item.sku ?? null},
+            ${safeNum(item.quantity, 1)}, ${safeNum(item.price)}, ${item.imageUrl ?? null}
           )
         `;
       }
@@ -255,15 +260,16 @@ export async function POST(request: NextRequest) {
 
     // Push real-time notification to SSE clients only for brand-new orders
     if (existing.length === 0) {
+      console.log(`Commande insérée en base ID: ${orderId}`);
       orderEvents.emit("new-order", formattedOrder);
-      console.log(`[OLDA] Nouvelle commande créée : #${body.orderNumber} (id=${orderId}, status=${status})`);
+      console.log(`[OLDA] Nouvelle commande créée : #${body.orderNumber} (status=${status})`);
     } else {
       console.log(`[OLDA] Commande mise à jour : #${body.orderNumber} (id=${orderId})`);
     }
 
     return NextResponse.json(
       { success: true, order: formattedOrder },
-      { status: 201, headers: cors }
+      { status: 200, headers: cors }
     );
   } catch (error) {
     console.error("POST /api/orders error:", error);

@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Order, OrderStatus } from "@/types/order";
-import { Inbox, Pencil, Layers, Phone, FileText, CheckSquare, RefreshCw } from "lucide-react";
+import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PersonNoteModal, type NoteData, type TodoItem } from "./person-note-modal";
+import type { NoteData, TodoItem } from "./person-note-modal";
+import { RemindersGrid } from "./reminders-grid";
 import { TshirtOrderCard } from "./tshirt-order-card";
 
 // ── Product type detection ─────────────────────────────────────────────────────
@@ -219,85 +220,6 @@ function ProductBoard({
   );
 }
 
-// ── Person note card ───────────────────────────────────────────────────────────
-
-function PersonNoteCard({
-  person,
-  orderCount,
-  note,
-  onClick,
-  index,
-}: {
-  person: typeof PEOPLE[number];
-  orderCount: number;
-  note: NoteData | null;
-  onClick: () => void;
-  index: number;
-}) {
-  const Icon    = person.icon;
-  const pending = (note?.todos ?? []).filter((t: TodoItem) => !t.done).length;
-  const total   = (note?.todos ?? []).length;
-
-  const preview = note?.content
-    ?.split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0)
-    ?.slice(0, 80) ?? null;
-
-  return (
-    <button
-      onClick={onClick}
-      className="group relative overflow-hidden text-left rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm p-6 hover:border-border hover:shadow-md hover:shadow-black/[0.04] dark:hover:shadow-black/20 transition-all duration-300 animate-fade-up cursor-pointer"
-      style={{ animationDelay: `${index * 0.06}s` }}
-    >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-      <div className="flex items-start justify-between mb-4">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-            {person.role}
-          </p>
-          <p className="text-2xl font-bold tracking-tight">{orderCount}</p>
-          <p className="text-xs text-muted-foreground">{person.name}</p>
-        </div>
-        <div className="rounded-xl p-2.5 bg-muted/70 ring-1 ring-border/40 text-foreground">
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-
-      <div className="border-t border-border/40 pt-3 space-y-2">
-        {preview ? (
-          <p className="text-[12px] leading-relaxed text-muted-foreground line-clamp-2 italic">
-            {preview}
-          </p>
-        ) : (
-          <p className="text-[12px] text-muted-foreground/30 italic">
-            Aucune note…
-          </p>
-        )}
-
-        <div className="flex items-center gap-2 pt-0.5">
-          {note?.content && note.content.trim().length > 0 && (
-            <span className="flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-              <FileText className="h-2.5 w-2.5" />
-              Note
-            </span>
-          )}
-          {total > 0 && (
-            <span className="flex items-center gap-1 rounded-md bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
-              <CheckSquare className="h-2.5 w-2.5" />
-              {pending}/{total}
-            </span>
-          )}
-          <span className="ml-auto text-[10px] text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors">
-            Ouvrir
-          </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
 // ── Real-time status indicator ─────────────────────────────────────────────────
 
 function LiveIndicator({ connected }: { connected: boolean }) {
@@ -324,8 +246,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [orders, setOrders]             = useState<Order[]>(initialOrders);
   const [newOrderIds, setNewOrderIds]   = useState<Set<string>>(new Set());
   const [sseConnected, setSseConnected] = useState(false);
-  const [notes, setNotes]               = useState<Record<string, NoteData>>({});
-  const [activePerson, setActivePerson] = useState<string | null>(null);
+  const [notes, setNotes]           = useState<Record<string, NoteData>>({});
+  const [notesReady, setNotesReady] = useState(false);
 
   const pollTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef    = useRef(true);
@@ -474,13 +396,10 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           };
         }
         setNotes(map);
+        setNotesReady(true);
       })
       .catch(() => {});
   }, []);
-
-  const handleSave = (note: NoteData) => {
-    setNotes((prev) => ({ ...prev, [note.person]: note }));
-  };
 
   // ── Categorise orders ──────────────────────────────────────────────────────
 
@@ -496,10 +415,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     }
     return { tshirt, mug, other };
   }, [orders]);
-
-  const activePersonData = activePerson
-    ? PEOPLE.find((p) => p.key === activePerson) ?? null
-    : null;
 
   return (
     <div className="p-6 space-y-8">
@@ -521,24 +436,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
       </div>
 
-      {/* ── Person note cards ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {PEOPLE.map((person, i) => {
-          const personOrders = orders.filter((o) =>
-            person.statuses.includes(o.status)
-          );
-          return (
-            <PersonNoteCard
-              key={person.key}
-              person={person}
-              orderCount={personOrders.length}
-              note={notes[person.key] ?? null}
-              onClick={() => setActivePerson(person.key)}
-              index={i}
-            />
-          );
-        })}
-      </div>
+      {/* ── Rappels (Apple Reminders) ───────────────────────────────────────── */}
+      <RemindersGrid
+        key={String(notesReady)}
+        notesMap={Object.fromEntries(
+          PEOPLE.map((p) => [p.key, notes[p.key]?.todos ?? []])
+        )}
+      />
 
       {/* ── Catégories kanban ──────────────────────────────────────────────── */}
 
@@ -584,18 +488,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
       )}
 
-      {/* ── Apple Notes modal ──────────────────────────────────────────────── */}
-      {activePersonData && (
-        <PersonNoteModal
-          open={activePerson !== null}
-          onOpenChange={(o) => { if (!o) setActivePerson(null); }}
-          personKey={activePersonData.key}
-          personName={activePersonData.name}
-          personRole={activePersonData.role}
-          initialNote={notes[activePersonData.key] ?? null}
-          onSave={handleSave}
-        />
-      )}
     </div>
   );
 }

@@ -260,15 +260,16 @@ export async function POST(request: NextRequest) {
 
     // Push real-time notification to SSE clients only for brand-new orders
     if (existing.length === 0) {
+      console.log(`Commande insérée en base ID: ${orderId}`);
       orderEvents.emit("new-order", formattedOrder);
-      console.log(`[OLDA] Nouvelle commande créée : #${body.orderNumber} (id=${orderId}, status=${status})`);
+      console.log(`[OLDA] Nouvelle commande créée : #${body.orderNumber} (status=${status})`);
     } else {
       console.log(`[OLDA] Commande mise à jour : #${body.orderNumber} (id=${orderId})`);
     }
 
     return NextResponse.json(
       { success: true, order: formattedOrder },
-      { status: 201, headers: cors }
+      { status: 200, headers: cors }
     );
   } catch (error) {
     console.error("POST /api/orders error:", error);

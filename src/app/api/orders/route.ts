@@ -89,7 +89,12 @@ export async function POST(request: NextRequest) {
   }
 
   const rawStatus = body.status ?? "COMMANDE_A_TRAITER";
-  const status = LEGACY_STATUS_MAP[rawStatus] ?? rawStatus;
+  const mappedStatus = LEGACY_STATUS_MAP[rawStatus] ?? rawStatus;
+  // T-shirt orders always start in COMMANDE_A_TRAITER (atelier workflow)
+  const hasTshirtItem = body.items.some((item) =>
+    /t[-\s]?shirt|tee\b/i.test(item.name ?? "")
+  );
+  const status = hasTshirtItem ? "COMMANDE_A_TRAITER" : mappedStatus;
   const paymentStatus = body.paymentStatus ?? "PENDING";
   const shippingAddr = body.shippingAddress ? JSON.stringify(body.shippingAddress) : null;
   const billingAddr = body.billingAddress ? JSON.stringify(body.billingAddress) : null;

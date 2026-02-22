@@ -10,13 +10,15 @@ import {
   Settings,
   Webhook,
   Sparkles,
+  Factory,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const primaryNav = [
-  { label: "Vue d'ensemble", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Commandes",      href: "/dashboard/orders",    icon: ShoppingBag },
-  { label: "Analytiques",   href: "/dashboard/analytics", icon: BarChart3 },
+  { label: "Vue d'ensemble",  href: "/dashboard",          icon: LayoutDashboard },
+  { label: "Dashboard OLDA",  href: "/dashboard/olda",     icon: Factory },
+  { label: "Commandes",       href: "/dashboard/orders",   icon: ShoppingBag },
+  { label: "Analytiques",     href: "/dashboard/analytics", icon: BarChart3 },
 ];
 
 const secondaryNav = [

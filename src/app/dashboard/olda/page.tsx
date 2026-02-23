@@ -20,11 +20,22 @@ async function getOrders(): Promise<Order[]> {
     ORDER BY o."createdAt" DESC
   `;
 
-  return rows.map((o) => ({
-    ...o,
-    createdAt: o.createdAt instanceof Date ? (o.createdAt as Date).toISOString() : String(o.createdAt),
-    updatedAt: o.updatedAt instanceof Date ? (o.updatedAt as Date).toISOString() : String(o.updatedAt),
-  })) as unknown as Order[];
+  return rows.map((o: Record<string, unknown>) => {
+    // json_agg may arrive as a parsed array or as a raw JSON string depending on
+    // the Prisma / pg driver version — normalise to array here.
+    let items = o.items;
+    if (typeof items === "string") {
+      try { items = JSON.parse(items); } catch { items = []; }
+    }
+    if (!Array.isArray(items)) items = [];
+
+    return {
+      ...o,
+      items,
+      createdAt: o.createdAt instanceof Date ? (o.createdAt as Date).toISOString() : String(o.createdAt),
+      updatedAt: o.updatedAt instanceof Date ? (o.updatedAt as Date).toISOString() : String(o.updatedAt),
+    };
+  }) as unknown as Order[];
 }
 
 export default async function OldaDashboardPage() {

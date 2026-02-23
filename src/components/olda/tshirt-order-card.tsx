@@ -255,14 +255,14 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
           {/* Left: 6-line info stack */}
           <div className="flex-1 flex flex-col gap-[5px] min-w-0">
 
-            {/* L1 — Date · label */}
+            {/* L1 — Date · Bon de Commande */}
             <p className="text-[12px] text-gray-400 truncate">
-              {formattedDate}<span className="font-medium"> · Bon de Commande</span>
+              {formattedDate}<span className="font-bold text-gray-700"> · Bon de Commande</span>
             </p>
 
             {/* L2 — Référence */}
             <p className="text-[15px] font-bold text-gray-900 truncate leading-tight">
-              #{order.orderNumber}
+              Réf. #{order.orderNumber}
             </p>
 
             {/* L3 — Client */}
@@ -284,9 +284,9 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
               {limitText ?? "—"}
             </p>
 
-            {/* L6 — DTF arrière */}
+            {/* L6 — DTF Arrière */}
             <p className="text-[12px] text-gray-400 truncate">
-              DTF arr. : {dtfLabel ?? "—"}
+              DTF Arrière : {dtfLabel ?? "—"}
             </p>
           </div>
 

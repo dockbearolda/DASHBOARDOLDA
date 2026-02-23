@@ -13,12 +13,10 @@ import { TshirtOrderCard } from "./tshirt-order-card";
 type ProductType = "tshirt" | "mug" | "other";
 
 function detectProductType(order: Order): ProductType {
-  // 1. Explicit category field (sent by oldastudio — most reliable)
   const cat = (order.category ?? "").toLowerCase().replace(/[-_\s]/g, "");
-  if (cat === "tshirt")  return "tshirt";
-  if (cat === "mug")     return "mug";
+  if (cat === "tshirt") return "tshirt";
+  if (cat === "mug")    return "mug";
 
-  // 2. Fallback: scan item names (for orders without category field)
   const items = Array.isArray(order.items) ? order.items : [];
   const names = items.map((i) => (i.name ?? "").toLowerCase()).join(" ");
   if (/t[-\s_]?shirt|tee\b/.test(names)) return "tshirt";
@@ -29,11 +27,7 @@ function detectProductType(order: Order): ProductType {
 
 // ── Kanban column definitions ──────────────────────────────────────────────────
 
-type KanbanCol = {
-  status: OrderStatus;
-  label: string;
-  dot: string;
-};
+type KanbanCol = { status: OrderStatus; label: string; dot: string };
 
 const TSHIRT_COLUMNS: KanbanCol[] = [
   { status: "COMMANDE_A_TRAITER",    label: "Commande à traiter",  dot: "bg-blue-400" },
@@ -59,43 +53,23 @@ const MUG_COLUMNS: KanbanCol[] = [
 // ── People definitions ─────────────────────────────────────────────────────────
 
 const PEOPLE = [
-  {
-    key:      "loic",
-    name:     "Loïc",
-    role:     "Nouvelles commandes",
-    icon:     Inbox,
-    statuses: ["COMMANDE_A_TRAITER", "COMMANDE_EN_ATTENTE"] as OrderStatus[],
-  },
-  {
-    key:      "charlie",
-    name:     "Charlie",
-    role:     "Maquettes & design",
-    icon:     Pencil,
-    statuses: ["MAQUETTE_A_FAIRE"] as OrderStatus[],
-  },
-  {
-    key:      "melina",
-    name:     "Mélina",
-    role:     "Validation & production",
-    icon:     Layers,
-    statuses: [
-      "EN_ATTENTE_VALIDATION",
-      "PRT_A_FAIRE",
-      "COMMANDE_A_PREPARER",
-      "EN_COURS_IMPRESSION",
-      "PRESSAGE_A_FAIRE",
-    ] as OrderStatus[],
-  },
-  {
-    key:      "amandine",
-    name:     "Amandine",
-    role:     "Relation client",
-    icon:     Phone,
-    statuses: ["CLIENT_A_CONTACTER", "CLIENT_PREVENU"] as OrderStatus[],
-  },
+  { key: "loic",     name: "Loïc",     role: "Nouvelles commandes",    icon: Inbox,   statuses: ["COMMANDE_A_TRAITER", "COMMANDE_EN_ATTENTE"] as OrderStatus[] },
+  { key: "charlie",  name: "Charlie",  role: "Maquettes & design",     icon: Pencil,  statuses: ["MAQUETTE_A_FAIRE"] as OrderStatus[] },
+  { key: "melina",   name: "Mélina",   role: "Validation & production", icon: Layers,  statuses: ["EN_ATTENTE_VALIDATION", "PRT_A_FAIRE", "COMMANDE_A_PREPARER", "EN_COURS_IMPRESSION", "PRESSAGE_A_FAIRE"] as OrderStatus[] },
+  { key: "amandine", name: "Amandine", role: "Relation client",         icon: Phone,   statuses: ["CLIENT_A_CONTACTER", "CLIENT_PREVENU"] as OrderStatus[] },
 ];
 
-// ── Standard compact order card (all non-COMMANDE_A_TRAITER columns) ──────────
+// ── Category tab definitions ───────────────────────────────────────────────────
+
+type BoardTab = "tshirt" | "mug" | "other";
+
+const TABS: { key: BoardTab; label: string; enabled: boolean }[] = [
+  { key: "tshirt", label: "Commande Tshirt",     enabled: true  },
+  { key: "mug",    label: "Commande Tasse",       enabled: false },
+  { key: "other",  label: "Commande accessoire",  enabled: false },
+];
+
+// ── Standard compact order card ────────────────────────────────────────────────
 
 function OrderCard({ order }: { order: Order }) {
   const items    = Array.isArray(order.items) ? order.items : [];
@@ -104,19 +78,13 @@ function OrderCard({ order }: { order: Order }) {
 
   return (
     <div className="rounded-xl border border-border/50 bg-white dark:bg-[#1C1C1E] p-3 hover:border-border/80 hover:shadow-sm transition-all cursor-default">
-      <p className="text-[12px] font-bold text-foreground truncate">
-        #{order.orderNumber}
-      </p>
-      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
-        {order.customerName}
-      </p>
+      <p className="text-[12px] font-bold text-foreground truncate">#{order.orderNumber}</p>
+      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{order.customerName}</p>
       <div className="flex items-center justify-between mt-2 gap-1">
         <span className="text-[11px] text-muted-foreground">{totalQty} art.</span>
         <span className="text-[12px] font-semibold tabular-nums">
           {Number(order.total).toLocaleString("fr-FR", {
-            style: "currency",
-            currency,
-            maximumFractionDigits: 0,
+            style: "currency", currency, maximumFractionDigits: 0,
           })}
         </span>
       </div>
@@ -127,27 +95,22 @@ function OrderCard({ order }: { order: Order }) {
 // ── Kanban column ──────────────────────────────────────────────────────────────
 
 function KanbanColumn({
-  col,
-  orders,
-  richCards,
-  newOrderIds,
+  col, orders, richCards, newOrderIds,
 }: {
   col: KanbanCol;
   orders: Order[];
   richCards?: boolean;
   newOrderIds?: Set<string>;
 }) {
-  // Rich "Commande à traiter" column is wider to fit QR + images
-  const colWidth = richCards ? "w-72" : "w-44";
+  // Rich column is wider to accommodate the new horizontal card layout
+  const colWidth = richCards ? "w-64" : "w-44";
 
   return (
     <div className={cn("shrink-0 flex flex-col gap-2", colWidth)}>
       <div className="rounded-xl border border-border/50 bg-white/90 dark:bg-[#1C1C1E]/80 px-3 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.dot)} />
-          <span className="text-[12px] font-semibold text-foreground truncate leading-tight">
-            {col.label}
-          </span>
+          <span className="text-[12px] font-semibold text-foreground truncate leading-tight">{col.label}</span>
         </div>
         <span className="shrink-0 rounded-full bg-gray-100 dark:bg-white/[0.1] px-1.5 py-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
           {orders.length}
@@ -161,11 +124,7 @@ function KanbanColumn({
           </div>
         ) : richCards ? (
           orders.map((o) => (
-            <TshirtOrderCard
-              key={o.id}
-              order={o}
-              isNew={newOrderIds?.has(o.id)}
-            />
+            <TshirtOrderCard key={o.id} order={o} isNew={newOrderIds?.has(o.id)} />
           ))
         ) : (
           orders.map((o) => <OrderCard key={o.id} order={o} />)
@@ -178,11 +137,7 @@ function KanbanColumn({
 // ── Product board ──────────────────────────────────────────────────────────────
 
 function ProductBoard({
-  label,
-  columns,
-  orders,
-  richFirstColumn,
-  newOrderIds,
+  label, columns, orders, richFirstColumn, newOrderIds,
 }: {
   label: string;
   columns: KanbanCol[];
@@ -194,11 +149,8 @@ function ProductBoard({
     const map: Record<string, Order[]> = {};
     for (const col of columns) map[col.status] = [];
     for (const order of orders) {
-      if (map[order.status] !== undefined) {
-        map[order.status].push(order);
-      } else {
-        map[columns[0].status].push(order);
-      }
+      if (map[order.status] !== undefined) map[order.status].push(order);
+      else map[columns[0].status].push(order);
     }
     return map;
   }, [columns, orders]);
@@ -217,7 +169,6 @@ function ProductBoard({
             key={col.status}
             col={col}
             orders={ordersByStatus[col.status] ?? []}
-            // Activate rich cards only on the very first column (Commande à traiter)
             richCards={richFirstColumn && idx === 0}
             newOrderIds={newOrderIds}
           />
@@ -227,19 +178,15 @@ function ProductBoard({
   );
 }
 
-// ── Real-time status indicator ─────────────────────────────────────────────────
+// ── Live indicator ─────────────────────────────────────────────────────────────
 
 function LiveIndicator({ connected }: { connected: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span
-        className={cn(
-          "h-1.5 w-1.5 rounded-full",
-          connected
-            ? "bg-emerald-500 animate-pulse-dot"
-            : "bg-muted-foreground/30"
-        )}
-      />
+      <span className={cn(
+        "h-1.5 w-1.5 rounded-full",
+        connected ? "bg-emerald-500 animate-pulse-dot" : "bg-muted-foreground/30"
+      )} />
       <span className="text-[11px] text-muted-foreground/50">
         {connected ? "En direct" : "Hors ligne"}
       </span>
@@ -250,14 +197,15 @@ function LiveIndicator({ connected }: { connected: boolean }) {
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
-  const [orders, setOrders]             = useState<Order[]>(initialOrders);
-  const [newOrderIds, setNewOrderIds]   = useState<Set<string>>(new Set());
+  const [orders, setOrders]           = useState<Order[]>(initialOrders);
+  const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
   const [sseConnected, setSseConnected] = useState(false);
-  const [notes, setNotes]           = useState<Record<string, NoteData>>({});
-  const [notesReady, setNotesReady] = useState(false);
+  const [notes, setNotes]             = useState<Record<string, NoteData>>({});
+  const [notesReady, setNotesReady]   = useState(false);
+  const [activeTab, setActiveTab]     = useState<BoardTab>("tshirt");
 
-  const pollTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mountedRef    = useRef(true);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mountedRef   = useRef(true);
 
   // ── Highlight new order IDs for 6 s ───────────────────────────────────────
 
@@ -273,8 +221,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     }, 6_000);
   }, []);
 
-  // ── Full refresh: replaces ALL orders so imageUrl / status are always fresh.
-  //    Detects truly new IDs (not in previous state) and highlights them.       ──
+  // ── Full refresh ───────────────────────────────────────────────────────────
 
   const refreshOrders = useCallback(async () => {
     try {
@@ -283,46 +230,28 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       const incoming = data.orders ?? [];
       setOrders((prev) => {
         const existingIds = new Set(prev.map((o) => o.id));
-        const freshIds    = incoming
-          .filter((o) => !existingIds.has(o.id))
-          .map((o) => o.id);
+        const freshIds    = incoming.filter((o) => !existingIds.has(o.id)).map((o) => o.id);
         if (freshIds.length > 0) markNew(freshIds);
-        return incoming; // full replace — keeps imageUrl / status current
+        return incoming;
       });
-    } catch {
-      /* ignore transient network errors */
-    }
+    } catch { /* ignore */ }
   }, [markNew]);
 
-  // ── Fallback polling every 5 s (used when SSE is unavailable) ────────────
+  // ── Fallback polling (when SSE unavailable) ────────────────────────────────
 
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return;
-    pollTimerRef.current = setInterval(() => {
-      if (mountedRef.current) refreshOrders();
-    }, 5_000);
+    pollTimerRef.current = setInterval(() => { if (mountedRef.current) refreshOrders(); }, 5_000);
   }, [refreshOrders]);
 
   const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
+    if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
   }, []);
 
-  // ── Initial fetch on mount ─────────────────────────────────────────────────
-  // Covers the gap between SSR page render and SSE connection establishment.
+  useEffect(() => { refreshOrders(); }, [refreshOrders]);
 
   useEffect(() => {
-    refreshOrders();
-  }, [refreshOrders]);
-
-  // ── Refresh on tab visibility (user returns after being away) ─────────────
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refreshOrders();
-    };
+    const onVisible = () => { if (document.visibilityState === "visible") refreshOrders(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refreshOrders]);
@@ -342,8 +271,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         es.addEventListener("connected", () => {
           if (!mountedRef.current) return;
           setSseConnected(true);
-          stopPolling(); // SSE is live — polling not needed
-          // Catch any orders that arrived while SSE was reconnecting
+          stopPolling();
           refreshOrders();
         });
 
@@ -351,35 +279,26 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           if (!mountedRef.current) return;
           try {
             const order = JSON.parse((event as MessageEvent).data) as Order;
-            // Prepend immediately for instant display; full refresh catches rest
             setOrders((prev) => {
               if (prev.find((o) => o.id === order.id)) return prev;
               markNew([order.id]);
               return [order, ...prev];
             });
-            // Schedule a full refresh 2 s later to ensure imageUrl etc. are
-            // populated (SSE payload already includes them, but this is a
-            // safety net for any timing edge-case).
             setTimeout(refreshOrders, 2_000);
-          } catch {
-            /* malformed SSE payload — ignore */
-          }
+          } catch { /* malformed payload */ }
         });
 
         es.onerror = () => {
           if (!mountedRef.current) return;
           setSseConnected(false);
           es?.close();
-          startPolling(); // fall back until SSE reconnects
+          startPolling();
           reconnectTimer = setTimeout(connect, 10_000);
         };
-      } catch {
-        startPolling();
-      }
+      } catch { startPolling(); }
     };
 
     connect();
-
     return () => {
       mountedRef.current = false;
       es?.close();
@@ -388,7 +307,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     };
   }, [markNew, refreshOrders, startPolling, stopPolling]);
 
-  // ── Fetch person notes once on mount ──────────────────────────────────────
+  // ── Fetch person notes ─────────────────────────────────────────────────────
 
   useEffect(() => {
     fetch("/api/notes")
@@ -411,9 +330,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   // ── Categorise orders ──────────────────────────────────────────────────────
 
   const { tshirt, mug, other } = useMemo(() => {
-    const tshirt: Order[] = [];
-    const mug:    Order[] = [];
-    const other:  Order[] = [];
+    const tshirt: Order[] = [], mug: Order[] = [], other: Order[] = [];
     for (const o of orders) {
       const t = detectProductType(o);
       if      (t === "tshirt") tshirt.push(o);
@@ -423,66 +340,96 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     return { tshirt, mug, other };
   }, [orders]);
 
-  return (
-    <div className="p-6 space-y-8">
+  const notesMap = Object.fromEntries(PEOPLE.map((p) => [p.key, notes[p.key]?.todos ?? []]));
 
-      {/* ── Hero ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-end justify-between">
-        <div>
-          <p className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
-            Atelier
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Vue d&apos;ensemble de la production par type de produit
-          </p>
-        </div>
-        {/* Live indicator */}
-        <div className="shrink-0 pb-1">
-          <LiveIndicator connected={sseConnected} />
+  return (
+    <div className="flex flex-col">
+
+      {/* ══ Sticky header — 4 person reminder cards ═══════════════════════════ */}
+      <div className="sticky top-0 z-40 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-md border-b border-gray-100 dark:border-white/[0.06]">
+        <div className="px-6 py-3">
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} />
         </div>
       </div>
 
-      {/* ── Rappels (Apple Reminders) ───────────────────────────────────────── */}
-      <RemindersGrid
-        key={String(notesReady)}
-        notesMap={Object.fromEntries(
-          PEOPLE.map((p) => [p.key, notes[p.key]?.todos ?? []])
+      {/* ══ Scrollable body ═══════════════════════════════════════════════════ */}
+      <div className="px-6 py-6 space-y-6">
+
+        {/* ── Hero ────────────────────────────────────────────────────────── */}
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+              Atelier
+            </p>
+            <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Vue d&apos;ensemble de la production par type de produit
+            </p>
+          </div>
+          <div className="shrink-0 pb-1">
+            <LiveIndicator connected={sseConnected} />
+          </div>
+        </div>
+
+        {/* ── Category tabs ───────────────────────────────────────────────── */}
+        <div className="border-b border-gray-100 dark:border-white/[0.06] flex gap-0">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              disabled={!tab.enabled}
+              onClick={() => tab.enabled && setActiveTab(tab.key)}
+              className={cn(
+                "relative px-4 pb-3 pt-1 text-[13px] font-medium transition-colors whitespace-nowrap",
+                tab.key === activeTab
+                  ? "text-blue-600 dark:text-blue-400"
+                  : tab.enabled
+                  ? "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  : "text-gray-300 dark:text-gray-600 cursor-not-allowed"
+              )}
+            >
+              {tab.label}
+              {!tab.enabled && (
+                <span className="ml-1.5 text-[10px] text-gray-300 dark:text-gray-600 font-normal">
+                  bientôt
+                </span>
+              )}
+              {/* Active underline indicator */}
+              {tab.key === activeTab && (
+                <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 dark:bg-blue-400 rounded-full" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Active board ────────────────────────────────────────────────── */}
+        {activeTab === "tshirt" && (
+          <ProductBoard
+            label="T-shirt"
+            columns={TSHIRT_COLUMNS}
+            orders={tshirt}
+            richFirstColumn
+            newOrderIds={newOrderIds}
+          />
         )}
-      />
+        {activeTab === "mug" && (
+          <ProductBoard
+            label="Mug"
+            columns={MUG_COLUMNS}
+            orders={mug}
+            newOrderIds={newOrderIds}
+          />
+        )}
+        {activeTab === "other" && (
+          <ProductBoard
+            label="Accessoire"
+            columns={TSHIRT_COLUMNS}
+            orders={other}
+            newOrderIds={newOrderIds}
+          />
+        )}
+      </div>
 
-      {/* ── Catégories kanban ──────────────────────────────────────────────── */}
-
-      {/*
-        T-shirt board — the "Commande à traiter" column (index 0) uses the
-        full Carte Totale design: QR code + Avant/Arrière visuals + todo list.
-        All other columns keep the compact OrderCard.
-      */}
-      <ProductBoard
-        label="T-shirt"
-        columns={TSHIRT_COLUMNS}
-        orders={tshirt}
-        richFirstColumn
-        newOrderIds={newOrderIds}
-      />
-
-      <ProductBoard
-        label="Mug"
-        columns={MUG_COLUMNS}
-        orders={mug}
-        newOrderIds={newOrderIds}
-      />
-
-      {other.length > 0 && (
-        <ProductBoard
-          label="Autre"
-          columns={TSHIRT_COLUMNS}
-          orders={other}
-          newOrderIds={newOrderIds}
-        />
-      )}
-
-      {/* ── New-order toast banner ─────────────────────────────────────────── */}
+      {/* ── New-order toast ──────────────────────────────────────────────── */}
       {newOrderIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
           <div className="flex items-center gap-2.5 rounded-2xl border border-blue-300/40 bg-blue-50 dark:bg-blue-950/80 dark:border-blue-700/40 px-4 py-2.5 shadow-lg backdrop-blur-sm">
@@ -494,7 +441,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           </div>
         </div>
       )}
-
     </div>
   );
 }

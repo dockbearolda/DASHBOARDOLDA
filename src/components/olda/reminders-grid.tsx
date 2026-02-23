@@ -173,37 +173,16 @@ function ReminderCard({
 
 export function RemindersGrid({ notesMap }: { notesMap: Record<string, TodoItem[]> }) {
   return (
-    /*
-     * Mobile  (<md): horizontal snap-scroll row — each card is ≈72vw so the
-     *   next card peeks on the right, giving a clear affordance to swipe.
-     *   Negative margin + matching padding bleeds the scroll container to the
-     *   edge while keeping inner content aligned.
-     * md+: switch to CSS grid (2-col then 4-col at lg).
-     */
-    <div className={cn(
-      // ── shared ──
-      "gap-3",
-      // ── mobile: flex snap-scroll row ──
-      "flex overflow-x-auto no-scrollbar snap-x snap-mandatory",
-      "-mx-4 px-4 sm:-mx-6 sm:px-6 pb-1",
-      // ── md+: CSS grid ──
-      "md:grid md:grid-cols-2 md:overflow-visible md:snap-none",
-      "md:mx-0 md:px-0 md:pb-0",
-      // ── lg+: 4 columns ──
-      "lg:grid-cols-4",
-    )}>
+    // 2-col compact grid on mobile, 4-col on lg+
+    // No negative-margin bleed (backdrop-blur on parent clips overflow in WebKit)
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
       {PEOPLE.map((p) => (
-        // Wrapper gives each card the correct width per breakpoint
-        <div
+        <ReminderCard
           key={p.key}
-          className="snap-start shrink-0 w-[74vw] sm:w-[58vw] md:w-auto"
-        >
-          <ReminderCard
-            personKey={p.key}
-            personName={p.name}
-            initialTodos={notesMap[p.key] ?? []}
-          />
-        </div>
+          personKey={p.key}
+          personName={p.name}
+          initialTodos={notesMap[p.key] ?? []}
+        />
       ))}
     </div>
   );

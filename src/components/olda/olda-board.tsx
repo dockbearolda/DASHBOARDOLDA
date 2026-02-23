@@ -97,7 +97,7 @@ function KanbanColumn({
   return (
     // Mobile: full viewport width with snap point so user swipes column-by-column
     // md+: fixed 272 px column in a free-scrolling horizontal list
-    <div className="snap-start shrink-0 w-[calc(100svw-2rem)] sm:w-[calc(100svw-3rem)] md:w-[272px] flex flex-col gap-2">
+    <div className="snap-start shrink-0 w-[88vw] sm:w-[80vw] md:w-[272px] flex flex-col gap-2">
 
       {/* Status bubble / column header */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm px-3 py-2 flex items-center justify-between gap-2">
@@ -341,14 +341,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       {/* ══ ZONE 1 — Sticky header: 4 person reminder cards ══════════════════ */}
       {/* pt-safe: pushes content below iOS notch / Dynamic Island               */}
       <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm pt-safe">
-        <div className="px-safe-4 sm:px-safe-6 py-3">
+        <div className="px-4 sm:px-6 py-3">
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} />
         </div>
       </div>
 
       {/* ══ ZONE 2 — Scrollable workspace ════════════════════════════════════ */}
-      {/* px-safe-4/6: respects landscape side notch insets                     */}
-      <div className="px-safe-4 sm:px-safe-6 py-5 md:py-6 space-y-5">
+      <div className="px-4 sm:px-6 py-5 md:py-6 space-y-5">
 
         {/* ── Hero ── */}
         <div className="flex items-end justify-between gap-3">
@@ -368,9 +367,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           </div>
         </div>
 
-        {/* ── Navigation tabs ── */}
-        {/* min-h-[44px] on each button satisfies Apple HIG 44×44 pt touch target */}
-        <div className="border-b border-gray-200 flex gap-0 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto no-scrollbar">
+        {/* ── Navigation tabs — min-h-[44px] = Apple HIG 44 pt touch target ── */}
+        <div className="border-b border-gray-200 flex gap-0">
           {TABS.map((tab) => (
             <button
               key={tab.key}

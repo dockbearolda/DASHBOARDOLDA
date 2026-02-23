@@ -151,19 +151,20 @@ function KanbanBoard({
 
   return (
     /*
-     * Two-layer scroll pattern — required for iOS Safari:
-     *   outer: block element with overflow-x-auto → reliable scroll container
-     *   inner: flex row → expands freely to total column width
-     * A single flex+overflow-x-auto is unreliable on WebKit (flex axis
-     * fights the scroll axis and the container often refuses to scroll).
-     * overflow-x-hidden on OldaBoard root prevents page-level bleed.
+     * Two-layer scroll — iOS Safari:
+     *   outer: block + overflow-x-auto = reliable scroll container.
+     *   inner: flex + w-max = explicit intrinsic width (WebKit needs this).
+     * CRITICAL: scroll-snap-type goes on the SCROLL CONTAINER (outer), not
+     * the flex child. Placing snap-x on a non-scroll element is undefined
+     * behaviour in WebKit and causes the scrollport to collapse to zero.
+     * overflow-x-clip on OldaBoard root prevents page bleed without creating
+     * a competing scroll context (unlike overflow-x-hidden).
      */
-    <div className="w-full overflow-x-auto no-scrollbar pb-safe-6">
-      <div className={cn(
-        "flex gap-3 pb-4",
-        "snap-x snap-mandatory",
-        "md:snap-none",
-      )}>
+    <div className={cn(
+      "w-full overflow-x-auto no-scrollbar pb-safe-6",
+      "snap-x snap-mandatory md:snap-none",
+    )}>
+      <div className="flex gap-3 pb-4 w-max">
         {columns.map((col) => (
           <KanbanColumn
             key={col.status}
@@ -376,7 +377,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
 
         {/* ── Navigation tabs — min-h-[44px] = Apple HIG 44 pt touch target ── */}
-        <div className="border-b border-gray-200 flex gap-0">
+        {/* overflow-x-auto: prevents long labels from overflowing into Kanban */}
+        <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar">
           {TABS.map((tab) => (
             <button
               key={tab.key}

@@ -1,5 +1,10 @@
 "use client";
 
+/**
+ * OldaBoard — Light mode only. Zero dark: variants.
+ * Sticky header (RemindersGrid) + category tabs + kanban boards.
+ */
+
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Order, OrderStatus } from "@/types/order";
 import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
@@ -16,12 +21,10 @@ function detectProductType(order: Order): ProductType {
   const cat = (order.category ?? "").toLowerCase().replace(/[-_\s]/g, "");
   if (cat === "tshirt") return "tshirt";
   if (cat === "mug")    return "mug";
-
   const items = Array.isArray(order.items) ? order.items : [];
   const names = items.map((i) => (i.name ?? "").toLowerCase()).join(" ");
   if (/t[-\s_]?shirt|tee\b/.test(names)) return "tshirt";
   if (/mug|tasse/.test(names))            return "mug";
-
   return "other";
 }
 
@@ -50,16 +53,16 @@ const MUG_COLUMNS: KanbanCol[] = [
   { status: "ARCHIVES",              label: "Archive / terminé",   dot: "bg-slate-300" },
 ];
 
-// ── People definitions ─────────────────────────────────────────────────────────
+// ── People ─────────────────────────────────────────────────────────────────────
 
 const PEOPLE = [
-  { key: "loic",     name: "Loïc",     role: "Nouvelles commandes",    icon: Inbox,   statuses: ["COMMANDE_A_TRAITER", "COMMANDE_EN_ATTENTE"] as OrderStatus[] },
-  { key: "charlie",  name: "Charlie",  role: "Maquettes & design",     icon: Pencil,  statuses: ["MAQUETTE_A_FAIRE"] as OrderStatus[] },
-  { key: "melina",   name: "Mélina",   role: "Validation & production", icon: Layers,  statuses: ["EN_ATTENTE_VALIDATION", "PRT_A_FAIRE", "COMMANDE_A_PREPARER", "EN_COURS_IMPRESSION", "PRESSAGE_A_FAIRE"] as OrderStatus[] },
-  { key: "amandine", name: "Amandine", role: "Relation client",         icon: Phone,   statuses: ["CLIENT_A_CONTACTER", "CLIENT_PREVENU"] as OrderStatus[] },
+  { key: "loic",     name: "Loïc",     icon: Inbox,   statuses: ["COMMANDE_A_TRAITER", "COMMANDE_EN_ATTENTE"] as OrderStatus[] },
+  { key: "charlie",  name: "Charlie",  icon: Pencil,  statuses: ["MAQUETTE_A_FAIRE"] as OrderStatus[] },
+  { key: "melina",   name: "Mélina",   icon: Layers,  statuses: ["EN_ATTENTE_VALIDATION", "PRT_A_FAIRE", "COMMANDE_A_PREPARER", "EN_COURS_IMPRESSION", "PRESSAGE_A_FAIRE"] as OrderStatus[] },
+  { key: "amandine", name: "Amandine", icon: Phone,   statuses: ["CLIENT_A_CONTACTER", "CLIENT_PREVENU"] as OrderStatus[] },
 ];
 
-// ── Category tab definitions ───────────────────────────────────────────────────
+// ── Category tabs ──────────────────────────────────────────────────────────────
 
 type BoardTab = "tshirt" | "mug" | "other";
 
@@ -77,15 +80,13 @@ function OrderCard({ order }: { order: Order }) {
   const currency = (order.currency as string) ?? "EUR";
 
   return (
-    <div className="rounded-xl border border-border/50 bg-white dark:bg-[#1C1C1E] p-3 hover:border-border/80 hover:shadow-sm transition-all cursor-default">
-      <p className="text-[12px] font-bold text-foreground truncate">#{order.orderNumber}</p>
-      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{order.customerName}</p>
+    <div className="rounded-xl border border-gray-200 bg-white p-3 hover:border-gray-300 hover:shadow-sm transition-all cursor-default">
+      <p className="text-[13px] font-bold text-gray-900 truncate">#{order.orderNumber}</p>
+      <p className="text-[13px] text-gray-500 mt-0.5 truncate">{order.customerName}</p>
       <div className="flex items-center justify-between mt-2 gap-1">
-        <span className="text-[11px] text-muted-foreground">{totalQty} art.</span>
-        <span className="text-[12px] font-semibold tabular-nums">
-          {Number(order.total).toLocaleString("fr-FR", {
-            style: "currency", currency, maximumFractionDigits: 0,
-          })}
+        <span className="text-[12px] text-gray-400">{totalQty} art.</span>
+        <span className="text-[13px] font-semibold tabular-nums text-gray-900">
+          {Number(order.total).toLocaleString("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 })}
         </span>
       </div>
     </div>
@@ -102,30 +103,28 @@ function KanbanColumn({
   richCards?: boolean;
   newOrderIds?: Set<string>;
 }) {
-  // Rich column is wider to accommodate the new horizontal card layout
   const colWidth = richCards ? "w-64" : "w-44";
 
   return (
     <div className={cn("shrink-0 flex flex-col gap-2", colWidth)}>
-      <div className="rounded-xl border border-border/50 bg-white/90 dark:bg-[#1C1C1E]/80 px-3 py-2 flex items-center justify-between gap-2">
+      {/* Column header / status bubble */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm px-3 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.dot)} />
-          <span className="text-[12px] font-semibold text-foreground truncate leading-tight">{col.label}</span>
+          <span className="text-[13px] font-semibold text-gray-900 truncate leading-tight">{col.label}</span>
         </div>
-        <span className="shrink-0 rounded-full bg-gray-100 dark:bg-white/[0.1] px-1.5 py-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+        <span className="shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[12px] font-semibold text-gray-500">
           {orders.length}
         </span>
       </div>
 
       <div className="flex flex-col gap-1.5">
         {orders.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border/30 h-12 flex items-center justify-center">
-            <span className="text-[11px] text-muted-foreground/40">vide</span>
+          <div className="rounded-xl border border-dashed border-gray-200 h-12 flex items-center justify-center">
+            <span className="text-[12px] text-gray-300">vide</span>
           </div>
         ) : richCards ? (
-          orders.map((o) => (
-            <TshirtOrderCard key={o.id} order={o} isNew={newOrderIds?.has(o.id)} />
-          ))
+          orders.map((o) => <TshirtOrderCard key={o.id} order={o} isNew={newOrderIds?.has(o.id)} />)
         ) : (
           orders.map((o) => <OrderCard key={o.id} order={o} />)
         )}
@@ -158,8 +157,8 @@ function ProductBoard({
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-2">
-        <h2 className="text-base font-semibold">{label}</h2>
-        <span className="rounded-full bg-gray-100 dark:bg-white/[0.1] px-2 py-0.5 text-[12px] font-medium text-gray-500 dark:text-gray-400">
+        <h2 className="text-[18px] font-semibold text-gray-900">{label}</h2>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[13px] font-medium text-gray-500">
           {orders.length} commande{orders.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -185,9 +184,9 @@ function LiveIndicator({ connected }: { connected: boolean }) {
     <div className="flex items-center gap-1.5">
       <span className={cn(
         "h-1.5 w-1.5 rounded-full",
-        connected ? "bg-emerald-500 animate-pulse-dot" : "bg-muted-foreground/30"
+        connected ? "bg-emerald-500 animate-pulse-dot" : "bg-gray-300"
       )} />
-      <span className="text-[11px] text-muted-foreground/50">
+      <span className="text-[12px] text-gray-400">
         {connected ? "En direct" : "Hors ligne"}
       </span>
     </div>
@@ -207,8 +206,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
 
-  // ── Highlight new order IDs for 6 s ───────────────────────────────────────
-
   const markNew = useCallback((ids: string[]) => {
     if (ids.length === 0) return;
     setNewOrderIds((prev) => new Set([...prev, ...ids]));
@@ -220,8 +217,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       });
     }, 6_000);
   }, []);
-
-  // ── Full refresh ───────────────────────────────────────────────────────────
 
   const refreshOrders = useCallback(async () => {
     try {
@@ -236,8 +231,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       });
     } catch { /* ignore */ }
   }, [markNew]);
-
-  // ── Fallback polling (when SSE unavailable) ────────────────────────────────
 
   const startPolling = useCallback(() => {
     if (pollTimerRef.current) return;
@@ -256,8 +249,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refreshOrders]);
 
-  // ── SSE subscription ───────────────────────────────────────────────────────
-
   useEffect(() => {
     mountedRef.current = true;
     let es: EventSource | null = null;
@@ -267,14 +258,12 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       if (!mountedRef.current) return;
       try {
         es = new EventSource("/api/orders/stream");
-
         es.addEventListener("connected", () => {
           if (!mountedRef.current) return;
           setSseConnected(true);
           stopPolling();
           refreshOrders();
         });
-
         es.addEventListener("new-order", (event) => {
           if (!mountedRef.current) return;
           try {
@@ -285,9 +274,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
               return [order, ...prev];
             });
             setTimeout(refreshOrders, 2_000);
-          } catch { /* malformed payload */ }
+          } catch { /* malformed */ }
         });
-
         es.onerror = () => {
           if (!mountedRef.current) return;
           setSseConnected(false);
@@ -307,27 +295,19 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     };
   }, [markNew, refreshOrders, startPolling, stopPolling]);
 
-  // ── Fetch person notes ─────────────────────────────────────────────────────
-
   useEffect(() => {
     fetch("/api/notes")
       .then((r) => r.json())
       .then((data) => {
         const map: Record<string, NoteData> = {};
         for (const n of data.notes ?? []) {
-          map[n.person] = {
-            person:  n.person,
-            content: n.content ?? "",
-            todos:   Array.isArray(n.todos) ? (n.todos as TodoItem[]) : [],
-          };
+          map[n.person] = { person: n.person, content: n.content ?? "", todos: Array.isArray(n.todos) ? (n.todos as TodoItem[]) : [] };
         }
         setNotes(map);
         setNotesReady(true);
       })
       .catch(() => {});
   }, []);
-
-  // ── Categorise orders ──────────────────────────────────────────────────────
 
   const { tshirt, mug, other } = useMemo(() => {
     const tshirt: Order[] = [], mug: Order[] = [], other: Order[] = [];
@@ -343,26 +323,26 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const notesMap = Object.fromEntries(PEOPLE.map((p) => [p.key, notes[p.key]?.todos ?? []]));
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col bg-white min-h-screen">
 
-      {/* ══ Sticky header — 4 person reminder cards ═══════════════════════════ */}
-      <div className="sticky top-0 z-40 bg-white/95 dark:bg-[#0A0A0A]/95 backdrop-blur-md border-b border-gray-100 dark:border-white/[0.06]">
+      {/* ══ Sticky header — person reminder cards ═════════════════════════════ */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="px-6 py-3">
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} />
         </div>
       </div>
 
-      {/* ══ Scrollable body ═══════════════════════════════════════════════════ */}
+      {/* ══ Scrollable body ════════════════════════════════════════════════════ */}
       <div className="px-6 py-6 space-y-6">
 
-        {/* ── Hero ────────────────────────────────────────────────────────── */}
+        {/* ── Hero ── */}
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+            <p className="text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
               Atelier
             </p>
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <h1 className="text-[26px] font-bold tracking-tight text-gray-900">Dashboard OLDA</h1>
+            <p className="text-[15px] text-gray-500 mt-1">
               Vue d&apos;ensemble de la production par type de produit
             </p>
           </div>
@@ -371,70 +351,51 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           </div>
         </div>
 
-        {/* ── Category tabs ───────────────────────────────────────────────── */}
-        <div className="border-b border-gray-100 dark:border-white/[0.06] flex gap-0">
+        {/* ── Category tabs ── */}
+        <div className="border-b border-gray-200 flex gap-0">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               disabled={!tab.enabled}
               onClick={() => tab.enabled && setActiveTab(tab.key)}
               className={cn(
-                "relative px-4 pb-3 pt-1 text-[13px] font-medium transition-colors whitespace-nowrap",
+                "relative px-4 pb-3 pt-1 text-[14px] font-medium transition-colors whitespace-nowrap",
                 tab.key === activeTab
-                  ? "text-blue-600 dark:text-blue-400"
+                  ? "text-blue-600"
                   : tab.enabled
-                  ? "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                  : "text-gray-300 dark:text-gray-600 cursor-not-allowed"
+                  ? "text-gray-500 hover:text-gray-700"
+                  : "text-gray-300 cursor-not-allowed"
               )}
             >
               {tab.label}
               {!tab.enabled && (
-                <span className="ml-1.5 text-[10px] text-gray-300 dark:text-gray-600 font-normal">
-                  bientôt
-                </span>
+                <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
               )}
-              {/* Active underline indicator */}
               {tab.key === activeTab && (
-                <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 dark:bg-blue-400 rounded-full" />
+                <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
               )}
             </button>
           ))}
         </div>
 
-        {/* ── Active board ────────────────────────────────────────────────── */}
+        {/* ── Active board ── */}
         {activeTab === "tshirt" && (
-          <ProductBoard
-            label="T-shirt"
-            columns={TSHIRT_COLUMNS}
-            orders={tshirt}
-            richFirstColumn
-            newOrderIds={newOrderIds}
-          />
+          <ProductBoard label="T-shirt" columns={TSHIRT_COLUMNS} orders={tshirt} richFirstColumn newOrderIds={newOrderIds} />
         )}
         {activeTab === "mug" && (
-          <ProductBoard
-            label="Mug"
-            columns={MUG_COLUMNS}
-            orders={mug}
-            newOrderIds={newOrderIds}
-          />
+          <ProductBoard label="Mug" columns={MUG_COLUMNS} orders={mug} newOrderIds={newOrderIds} />
         )}
         {activeTab === "other" && (
-          <ProductBoard
-            label="Accessoire"
-            columns={TSHIRT_COLUMNS}
-            orders={other}
-            newOrderIds={newOrderIds}
-          />
+          <ProductBoard label="Accessoire" columns={TSHIRT_COLUMNS} orders={other} newOrderIds={newOrderIds} />
         )}
       </div>
 
-      {/* ── New-order toast ──────────────────────────────────────────────── */}
+      {/* ── New-order toast ── */}
       {newOrderIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
-          <div className="flex items-center gap-2.5 rounded-2xl border border-blue-300/40 bg-blue-50 dark:bg-blue-950/80 dark:border-blue-700/40 px-4 py-2.5 shadow-lg backdrop-blur-sm">
-            <RefreshCw className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 animate-spin" />
-            <span className="text-[13px] font-semibold text-blue-700 dark:text-blue-300">
+          <div className="flex items-center gap-2.5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 shadow-lg">
+            <RefreshCw className="h-3.5 w-3.5 text-blue-600 animate-spin" />
+            <span className="text-[14px] font-semibold text-blue-700">
               {newOrderIds.size} nouvelle{newOrderIds.size > 1 ? "s" : ""} commande
               {newOrderIds.size > 1 ? "s" : ""} reçue{newOrderIds.size > 1 ? "s" : ""}
             </span>

@@ -74,22 +74,29 @@ export async function GET(request: NextRequest) {
       ORDER BY o."createdAt" DESC
     `;
 
-    return NextResponse.json(
-      {
-        orders: orders.map((o: Record<string, unknown>) => ({
-          ...o,
-          createdAt:
-            o.createdAt instanceof Date
-              ? (o.createdAt as Date).toISOString()
-              : o.createdAt,
-          updatedAt:
-            o.updatedAt instanceof Date
-              ? (o.updatedAt as Date).toISOString()
-              : o.updatedAt,
-        })),
-      },
-      { headers: corsHeaders(request) }
-    );
+    const mapped = orders.map((o: Record<string, unknown>) => {
+      // Normalise items — json_agg may arrive as a raw JSON string.
+      let items = o.items;
+      if (typeof items === "string") {
+        try { items = JSON.parse(items); } catch { items = []; }
+      }
+      if (!Array.isArray(items)) items = [];
+
+      return {
+        ...o,
+        items,
+        createdAt:
+          o.createdAt instanceof Date
+            ? (o.createdAt as Date).toISOString()
+            : o.createdAt,
+        updatedAt:
+          o.updatedAt instanceof Date
+            ? (o.updatedAt as Date).toISOString()
+            : o.updatedAt,
+      };
+    });
+
+    return NextResponse.json({ orders: mapped }, { headers: corsHeaders(request) });
   } catch (error) {
     console.error("GET /api/orders error:", error);
     return NextResponse.json(

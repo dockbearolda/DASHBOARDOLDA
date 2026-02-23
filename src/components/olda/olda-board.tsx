@@ -24,13 +24,28 @@ type ProductType = "tshirt" | "mug" | "other";
 
 function detectProductType(order: Order): ProductType {
   const cat = (order.category ?? "").toLowerCase().replace(/[-_\s]/g, "");
+
+  // Explicit mug check first
+  if (cat === "mug" || cat === "tasse") return "mug";
+  // Explicit tshirt check (covers "t-shirt", "tshirt", "t_shirt" after normalise)
   if (cat === "tshirt") return "tshirt";
-  if (cat === "mug")    return "mug";
-  const items = Array.isArray(order.items) ? order.items : [];
+
+  // Safely parse items — Prisma $queryRaw with json_agg may return a raw JSON
+  // string instead of a parsed array in some configurations.
+  let items: Order["items"] = [];
+  if (Array.isArray(order.items)) {
+    items = order.items;
+  } else if (typeof order.items === "string") {
+    try { items = JSON.parse(order.items as unknown as string); } catch { items = []; }
+  }
+
   const names = items.map((i) => (i.name ?? "").toLowerCase()).join(" ");
-  if (/t[-\s_]?shirt|tee\b/.test(names)) return "tshirt";
-  if (/mug|tasse/.test(names))            return "mug";
-  return "other";
+  if (/mug|tasse/.test(names)) return "mug";
+
+  // Default → tshirt. Every non-mug order on this board is a t-shirt order.
+  // (When category is empty and item names are generic, we must not lose orders
+  //  into the disabled "other" tab.)
+  return "tshirt";
 }
 
 // ── Kanban column definitions ──────────────────────────────────────────────────

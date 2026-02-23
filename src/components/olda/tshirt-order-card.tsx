@@ -7,13 +7,14 @@
  * Features:
  *  • QR code linking to the order detail page
  *  • Front / Back t-shirt visuals (object-contain — never deformed)
+ *  • File upload fallback when no server images are available (localStorage)
  *  • Interactive per-order to-do list (saved in localStorage)
  *  • Apple-style minimal spacing
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, Plus, X, Clock } from "lucide-react";
+import { Check, Plus, X, Clock, Upload } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -77,6 +78,37 @@ function useTodos(orderId: string) {
   return { todos, addTodo, toggleTodo, deleteTodo };
 }
 
+// ── Local image upload (fallback when no server images) ────────────────────────
+
+function useLocalImages(orderId: string) {
+  const key = `olda-images-${orderId}`;
+
+  const [localImages, setLocalImages] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const addImage = useCallback(
+    (dataUrl: string) => {
+      setLocalImages((prev) => {
+        const updated = [...prev, dataUrl].slice(0, 2);
+        try {
+          localStorage.setItem(key, JSON.stringify(updated));
+        } catch { /* ignore */ }
+        return updated;
+      });
+    },
+    [key]
+  );
+
+  return { localImages, addImage };
+}
+
 // ── QR code origin (client-only) ───────────────────────────────────────────────
 
 function useOrigin() {
@@ -101,11 +133,30 @@ export function TshirtOrderCard({
   const currency = (order.currency as string) ?? "EUR";
   const origin   = useOrigin();
 
-  // Up to 2 product images (front = index 0, back = index 1)
-  const images = items
+  // Server images (up to 2: front = index 0, back = index 1)
+  const serverImages = items
     .filter((i) => i.imageUrl)
     .map((i) => i.imageUrl as string)
     .slice(0, 2);
+
+  // Local uploaded images — used only when no server images exist
+  const { localImages, addImage } = useLocalImages(order.id);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const displayImages = serverImages.length > 0 ? serverImages : localImages;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      addImage(dataUrl);
+    };
+    reader.readAsDataURL(file);
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+  };
 
   const { todos, addTodo, toggleTodo, deleteTodo } = useTodos(order.id);
   const [newText, setNewText]     = useState("");
@@ -142,7 +193,7 @@ export function TshirtOrderCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border bg-card overflow-hidden",
+        "rounded-2xl border bg-white dark:bg-[#1C1C1E] overflow-hidden",
         "transition-all duration-300 cursor-default",
         "hover:border-border hover:shadow-md hover:shadow-black/[0.06] dark:hover:shadow-black/20",
         isNew
@@ -154,14 +205,14 @@ export function TshirtOrderCard({
       <div className="px-3 pt-3 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold text-foreground truncate">
+            <p className="text-[12px] font-bold text-foreground truncate">
               #{order.orderNumber}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
               {order.customerName}
             </p>
           </div>
-          <div className="flex items-center gap-1 shrink-0 text-[9px] text-muted-foreground/50">
+          <div className="flex items-center gap-1 shrink-0 text-[10px] text-muted-foreground/50">
             <Clock className="h-2.5 w-2.5" />
             <span className="whitespace-nowrap">{timeAgo}</span>
           </div>
@@ -172,7 +223,7 @@ export function TshirtOrderCard({
       <div className="px-3 pb-2.5 flex gap-2 items-stretch">
         {/* QR code */}
         {origin && (
-          <div className="shrink-0 h-[68px] w-[68px] rounded-xl overflow-hidden bg-white dark:bg-white border border-border/20 flex items-center justify-center p-1.5">
+          <div className="shrink-0 h-[68px] w-[68px] rounded-xl overflow-hidden bg-white border border-border/20 flex items-center justify-center p-1.5">
             <QRCodeSVG
               value={qrValue}
               size={56}
@@ -184,14 +235,14 @@ export function TshirtOrderCard({
         )}
 
         {/* T-shirt visuals */}
-        {images.length > 0 ? (
+        {displayImages.length > 0 ? (
           <div className="flex-1 flex gap-1.5">
-            {images.map((url, idx) => (
+            {displayImages.map((url, idx) => (
               <div
                 key={idx}
-                className="flex-1 rounded-xl overflow-hidden bg-muted/30 border border-border/20 flex flex-col items-center"
+                className="flex-1 rounded-xl overflow-hidden bg-gray-50 dark:bg-white/[0.05] border border-border/20 flex flex-col items-center"
               >
-                <span className="text-[8px] font-semibold text-muted-foreground/50 pt-1 uppercase tracking-wider leading-none">
+                <span className="text-[9px] font-semibold text-muted-foreground/50 pt-1 uppercase tracking-wider leading-none">
                   {idx === 0 ? "Avant" : "Arrière"}
                 </span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -206,12 +257,20 @@ export function TshirtOrderCard({
             ))}
           </div>
         ) : (
-          /* No images yet — empty slot */
-          <div className="flex-1 h-[68px] rounded-xl border border-dashed border-border/30 bg-muted/10 flex items-center justify-center">
-            <span className="text-[9px] text-muted-foreground/30">
-              Visuels à venir
+          /* No images — file upload zone */
+          <label className="flex-1 h-[68px] rounded-xl border border-dashed border-border/40 bg-gray-50 dark:bg-white/[0.03] flex flex-col items-center justify-center gap-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.07] hover:border-border/70 transition-all">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={handleFileChange}
+            />
+            <Upload className="h-3.5 w-3.5 text-muted-foreground/40" />
+            <span className="text-[10px] text-muted-foreground/40">
+              Ajouter visuel
             </span>
-          </div>
+          </label>
         )}
       </div>
 
@@ -222,14 +281,14 @@ export function TshirtOrderCard({
           onClick={() => setTodoOpen((v) => !v)}
           className="w-full flex items-center justify-between mb-1 group"
         >
-          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 group-hover:text-muted-foreground/80 transition-colors">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 group-hover:text-muted-foreground/80 transition-colors">
             Tâches
           </span>
           <span className="flex items-center gap-1.5">
             {todos.length > 0 && (
               <span
                 className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none",
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
                   pendingCount > 0
                     ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400"
                     : "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
@@ -238,7 +297,7 @@ export function TshirtOrderCard({
                 {pendingCount}/{todos.length}
               </span>
             )}
-            <span className="text-[9px] text-muted-foreground/30">
+            <span className="text-[10px] text-muted-foreground/30">
               {todoOpen ? "▴" : "▾"}
             </span>
           </span>
@@ -269,7 +328,7 @@ export function TshirtOrderCard({
                 {/* Text */}
                 <span
                   className={cn(
-                    "flex-1 text-[11px] leading-relaxed select-text",
+                    "flex-1 text-[12px] leading-relaxed select-text",
                     todo.done
                       ? "line-through text-muted-foreground/40"
                       : "text-foreground/80"
@@ -301,7 +360,7 @@ export function TshirtOrderCard({
                 onChange={(e) => setNewText(e.target.value)}
                 onKeyDown={handleTodoKey}
                 placeholder="Ajouter une tâche…"
-                className="flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
+                className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
               />
             </div>
           </div>
@@ -310,10 +369,10 @@ export function TshirtOrderCard({
 
       {/* ── Footer: qty + total ──────────────────────────────────────────── */}
       <div className="flex items-center justify-between border-t border-border/20 px-3 py-1.5">
-        <span className="text-[10px] text-muted-foreground/60">
+        <span className="text-[11px] text-muted-foreground/60">
           {totalQty} art.
         </span>
-        <span className="text-[11px] font-semibold tabular-nums">
+        <span className="text-[12px] font-semibold tabular-nums">
           {Number(order.total).toLocaleString("fr-FR", {
             style: "currency",
             currency,

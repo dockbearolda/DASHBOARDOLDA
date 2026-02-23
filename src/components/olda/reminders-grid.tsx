@@ -2,13 +2,14 @@
 
 /**
  * RemindersGrid — Apple Reminders style, 4 inline cards (one per person).
- * • Circle on the left → click strikes through + greys the item (optimistic)
+ * • Circle on the left → click toggles done state
+ * • Click anywhere on a row → reveals X delete button (click again to hide)
  * • Pencil icon top-right → reveals an invisible input to add a new reminder
  * • Auto-saves to PATCH /api/notes/[person] with 600 ms debounce
  */
 
 import { useState, useRef, useCallback } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TodoItem } from "./person-note-modal";
 
@@ -36,11 +37,12 @@ function ReminderCard({
   personName: string;
   initialTodos: TodoItem[];
 }) {
-  const [todos, setTodos]     = useState<TodoItem[]>(initialTodos);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState("");
-  const inputRef              = useRef<HTMLInputElement>(null);
-  const saveTimer             = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [todos, setTodos]         = useState<TodoItem[]>(initialTodos);
+  const [editing, setEditing]     = useState(false);
+  const [draft, setDraft]         = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const inputRef                  = useRef<HTMLInputElement>(null);
+  const saveTimer                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounced persist — fires 600 ms after last change
   const persist = useCallback(
@@ -64,6 +66,18 @@ function ReminderCard({
         persist(next);
         return next;
       });
+    },
+    [persist]
+  );
+
+  const remove = useCallback(
+    (id: string) => {
+      setTodos((prev) => {
+        const next = prev.filter((t) => t.id !== id);
+        persist(next);
+        return next;
+      });
+      setSelectedId(null);
     },
     [persist]
   );
@@ -93,7 +107,7 @@ function ReminderCard({
     >
       {/* ── Header ──────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[13px] font-semibold tracking-tight text-gray-800 dark:text-gray-100">
+        <span className="text-[14px] font-semibold tracking-tight text-gray-800 dark:text-gray-100">
           {personName}
         </span>
         <button
@@ -108,30 +122,31 @@ function ReminderCard({
       {/* ── Todo list ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-1.5">
         {todos.length === 0 && !editing && (
-          <p className="text-[11px] italic text-gray-300 dark:text-gray-600 pl-[22px]">
+          <p className="text-[12px] italic text-gray-300 dark:text-gray-600 pl-[22px]">
             Aucun rappel…
           </p>
         )}
 
         {todos.map((todo) => (
-          <button
+          <div
             key={todo.id}
-            onClick={() => toggle(todo.id)}
-            className="group flex items-start gap-2 text-left w-full"
+            onClick={() => setSelectedId((prev) => (prev === todo.id ? null : todo.id))}
+            className="group flex items-center gap-2 w-full cursor-pointer rounded-md -mx-1 px-1 py-[3px] hover:bg-gray-50 dark:hover:bg-white/[0.04] transition-colors"
           >
-            {/* Circle */}
-            <span
+            {/* Circle — stops propagation so it only toggles done */}
+            <button
+              onClick={(e) => { e.stopPropagation(); toggle(todo.id); }}
               className={cn(
-                "mt-[2px] shrink-0 h-[13px] w-[13px] rounded-full border transition-all duration-200",
+                "shrink-0 h-[14px] w-[14px] rounded-full border transition-all duration-200",
                 todo.done
                   ? "bg-gray-200 border-gray-200 dark:bg-gray-600 dark:border-gray-600"
-                  : "border-gray-300 dark:border-gray-500 group-hover:border-gray-500 dark:group-hover:border-gray-300"
+                  : "border-gray-300 dark:border-gray-500 hover:border-gray-500 dark:hover:border-gray-300"
               )}
             />
             {/* Text */}
             <span
               className={cn(
-                "text-[12px] leading-snug transition-all duration-200",
+                "flex-1 text-[13px] leading-snug transition-all duration-200",
                 todo.done
                   ? "line-through text-gray-300 dark:text-gray-600"
                   : "text-gray-700 dark:text-gray-200"
@@ -139,13 +154,23 @@ function ReminderCard({
             >
               {todo.text}
             </span>
-          </button>
+            {/* Delete button — visible when row is selected */}
+            {selectedId === todo.id && (
+              <button
+                onClick={(e) => { e.stopPropagation(); remove(todo.id); }}
+                aria-label="Supprimer"
+                className="shrink-0 rounded p-0.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              >
+                <X size={11} strokeWidth={2} />
+              </button>
+            )}
+          </div>
         ))}
 
         {/* ── Inline input (hidden until pencil click) ────────────────────── */}
         {editing && (
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="mt-[2px] shrink-0 h-[13px] w-[13px] rounded-full border border-gray-200 dark:border-gray-600" />
+            <span className="shrink-0 h-[14px] w-[14px] rounded-full border border-gray-200 dark:border-gray-600" />
             <input
               ref={inputRef}
               value={draft}
@@ -156,7 +181,7 @@ function ReminderCard({
               }}
               onBlur={() => { commitDraft(); setEditing(false); }}
               placeholder="Nouveau rappel…"
-              className="flex-1 text-[12px] text-gray-700 dark:text-gray-200 placeholder:text-gray-300 dark:placeholder:text-gray-600 bg-transparent outline-none"
+              className="flex-1 text-[13px] text-gray-700 dark:text-gray-200 placeholder:text-gray-300 dark:placeholder:text-gray-600 bg-transparent outline-none"
             />
           </div>
         )}

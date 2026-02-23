@@ -103,16 +103,16 @@ function OrderCard({ order }: { order: Order }) {
   const currency = (order.currency as string) ?? "EUR";
 
   return (
-    <div className="rounded-xl border border-border/50 bg-card p-3 hover:border-border/80 hover:shadow-sm transition-all cursor-default">
-      <p className="text-[11px] font-bold text-foreground truncate">
+    <div className="rounded-xl border border-border/50 bg-white dark:bg-[#1C1C1E] p-3 hover:border-border/80 hover:shadow-sm transition-all cursor-default">
+      <p className="text-[12px] font-bold text-foreground truncate">
         #{order.orderNumber}
       </p>
-      <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+      <p className="text-[12px] text-muted-foreground mt-0.5 truncate">
         {order.customerName}
       </p>
       <div className="flex items-center justify-between mt-2 gap-1">
-        <span className="text-[10px] text-muted-foreground">{totalQty} art.</span>
-        <span className="text-[11px] font-semibold tabular-nums">
+        <span className="text-[11px] text-muted-foreground">{totalQty} art.</span>
+        <span className="text-[12px] font-semibold tabular-nums">
           {Number(order.total).toLocaleString("fr-FR", {
             style: "currency",
             currency,
@@ -142,14 +142,14 @@ function KanbanColumn({
 
   return (
     <div className={cn("shrink-0 flex flex-col gap-2", colWidth)}>
-      <div className="rounded-xl border border-border/50 bg-card/60 px-3 py-2 flex items-center justify-between gap-2">
+      <div className="rounded-xl border border-border/50 bg-white/90 dark:bg-[#1C1C1E]/80 px-3 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.dot)} />
-          <span className="text-[11px] font-semibold text-foreground truncate leading-tight">
+          <span className="text-[12px] font-semibold text-foreground truncate leading-tight">
             {col.label}
           </span>
         </div>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
           {orders.length}
         </span>
       </div>
@@ -157,7 +157,7 @@ function KanbanColumn({
       <div className="flex flex-col gap-1.5">
         {orders.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border/30 h-12 flex items-center justify-center">
-            <span className="text-[10px] text-muted-foreground/40">vide</span>
+            <span className="text-[11px] text-muted-foreground/40">vide</span>
           </div>
         ) : richCards ? (
           orders.map((o) => (
@@ -207,7 +207,7 @@ function ProductBoard({
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-base font-semibold">{label}</h2>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] font-medium text-muted-foreground">
           {orders.length} commande{orders.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -240,7 +240,7 @@ function LiveIndicator({ connected }: { connected: boolean }) {
             : "bg-muted-foreground/30"
         )}
       />
-      <span className="text-[10px] text-muted-foreground/50">
+      <span className="text-[11px] text-muted-foreground/50">
         {connected ? "En direct" : "Hors ligne"}
       </span>
     </div>
@@ -429,7 +429,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div className="flex items-end justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">
+          <p className="text-[13px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">
             Atelier
           </p>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard OLDA</h1>
@@ -487,7 +487,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
           <div className="flex items-center gap-2.5 rounded-2xl border border-blue-300/40 bg-blue-50 dark:bg-blue-950/80 dark:border-blue-700/40 px-4 py-2.5 shadow-lg backdrop-blur-sm">
             <RefreshCw className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 animate-spin" />
-            <span className="text-[12px] font-semibold text-blue-700 dark:text-blue-300">
+            <span className="text-[13px] font-semibold text-blue-700 dark:text-blue-300">
               {newOrderIds.size} nouvelle{newOrderIds.size > 1 ? "s" : ""} commande
               {newOrderIds.size > 1 ? "s" : ""} reçue{newOrderIds.size > 1 ? "s" : ""}
             </span>

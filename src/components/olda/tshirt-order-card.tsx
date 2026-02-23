@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * TshirtOrderCard — Compact kanban card (flex-row: info left / QR right).
- * Light mode only — zero dark: variants.
- * Click card → OrderDetailModal (front + back visuals).
+ * TshirtOrderCard
+ * ─ Kanban card: flex-row (info stack left / QR right)
+ * ─ Click anywhere → OrderDetailModal (visuals + all items + summary)
+ * ─ Light mode only — zero dark: variants
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, Plus, X, Upload, AlertCircle } from "lucide-react";
+import { Check, Plus, X, Upload, AlertCircle, Package } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { Order } from "@/types/order";
+import type { Order, OrderItem } from "@/types/order";
 
 // ── Per-card todo ──────────────────────────────────────────────────────────────
 
@@ -25,57 +26,47 @@ function useTodos(orderId: string) {
     try { const r = localStorage.getItem(key); return r ? (JSON.parse(r) as CardTodo[]) : []; }
     catch { return []; }
   });
-
-  const save = useCallback((updated: CardTodo[]) => {
-    setTodos(updated);
-    try { localStorage.setItem(key, JSON.stringify(updated)); } catch { /* quota */ }
+  const save = useCallback((u: CardTodo[]) => {
+    setTodos(u);
+    try { localStorage.setItem(key, JSON.stringify(u)); } catch { /* quota */ }
   }, [key]);
-
-  const addTodo    = useCallback((text: string) => {
-    if (!text.trim()) return;
-    save([...todos, { id: crypto.randomUUID(), text: text.trim(), done: false }]);
-  }, [todos, save]);
-
-  const toggleTodo = useCallback(
-    (id: string) => save(todos.map((t) => (t.id === id ? { ...t, done: !t.done } : t))),
-    [todos, save]
-  );
-
-  const deleteTodo = useCallback(
-    (id: string) => save(todos.filter((t) => t.id !== id)),
-    [todos, save]
-  );
-
+  const addTodo    = useCallback((t: string) => { if (t.trim()) save([...todos, { id: crypto.randomUUID(), text: t.trim(), done: false }]); }, [todos, save]);
+  const toggleTodo = useCallback((id: string) => save(todos.map((t) => t.id === id ? { ...t, done: !t.done } : t)), [todos, save]);
+  const deleteTodo = useCallback((id: string) => save(todos.filter((t) => t.id !== id)), [todos, save]);
   return { todos, addTodo, toggleTodo, deleteTodo };
 }
 
-// ── Local image upload ─────────────────────────────────────────────────────────
+// ── Local images ───────────────────────────────────────────────────────────────
 
 function useLocalImages(orderId: string) {
   const key = `olda-images-${orderId}`;
-  const [localImages, setLocalImages] = useState<string[]>(() => {
+  const [imgs, setImgs] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try { const r = localStorage.getItem(key); return r ? (JSON.parse(r) as string[]) : []; }
     catch { return []; }
   });
-
   const addImage = useCallback((dataUrl: string) => {
-    setLocalImages((prev) => {
+    setImgs((prev) => {
       const updated = [...prev, dataUrl].slice(0, 2);
       try { localStorage.setItem(key, JSON.stringify(updated)); } catch { /* ignore */ }
       return updated;
     });
   }, [key]);
-
-  return { localImages, addImage };
+  return { localImages: imgs, addImage };
 }
 
-// ── QR origin ──────────────────────────────────────────────────────────────────
+// ── QR origin (client-only) ────────────────────────────────────────────────────
 
 function useOrigin() {
-  const [origin, setOrigin] = useState("");
-  useEffect(() => { setOrigin(window.location.origin); }, []);
-  return origin;
+  const [o, setO] = useState("");
+  useEffect(() => { setO(window.location.origin); }, []);
+  return o;
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+function fmtPrice(amount: number, currency: string) {
+  return Number(amount).toLocaleString("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 });
 }
 
 // ── Order detail modal ──────────────────────────────────────────────────────────
@@ -96,9 +87,7 @@ function OrderDetailModal({
   const createdAt     = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt as string);
   const formattedDate = format(createdAt, "d MMMM yyyy", { locale: fr });
 
-  const dtfItem  = items.find((i) =>
-    /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? "")
-  );
+  const dtfItem   = items.find((i) => /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? ""));
   const dtfLabel  = dtfItem?.sku || dtfItem?.name || items[0]?.sku || null;
   const limitText = order.notes?.trim() || null;
 
@@ -112,20 +101,10 @@ function OrderDetailModal({
   };
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    const fn = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", fn);
+    return () => document.removeEventListener("keydown", fn);
   }, [onClose]);
-
-  const infoRows: { label: string; value: string }[] = [
-    { label: "Date",        value: formattedDate },
-    { label: "Référence",   value: `#${order.orderNumber}` },
-    { label: "Client",      value: order.customerName },
-    { label: "Téléphone",   value: order.customerPhone ?? "—" },
-    { label: "DTF arrière", value: dtfLabel ?? "—" },
-    { label: "Articles",    value: `${totalQty}` },
-    { label: "Total",       value: Number(order.total).toLocaleString("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 }) },
-  ];
 
   return (
     <div
@@ -136,15 +115,16 @@ function OrderDetailModal({
         className="w-full max-w-lg bg-white rounded-3xl shadow-2xl shadow-black/[0.12] border border-gray-200 overflow-hidden max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Modal header ── */}
+        {/* ── Header ── */}
         <div className="sticky top-0 z-10 bg-white flex items-start justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-widest text-gray-400">
               Bon de Commande · {formattedDate}
             </p>
-            <h2 className="text-[21px] font-bold text-gray-900 mt-0.5">
+            <h2 className="text-[22px] font-bold text-gray-900 mt-0.5 leading-tight">
               #{order.orderNumber}
             </h2>
+            <p className="text-[13px] text-gray-500 mt-0.5">{order.customerName}</p>
           </div>
           <button
             onClick={onClose}
@@ -154,13 +134,16 @@ function OrderDetailModal({
           </button>
         </div>
 
-        {/* ── Visuals ── */}
-        <div className="px-5 py-4 bg-gray-50">
+        {/* ── Visuals: Avant / Arrière ── */}
+        <div className="px-5 pt-4 pb-3 bg-gray-50 border-b border-gray-100">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">
+            Visuels
+          </p>
           {images.length > 0 ? (
             <div className="flex gap-3">
               {images.map((url, idx) => (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
+                <div key={idx} className="flex-1 flex flex-col items-center gap-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
                     {idx === 0 ? "Avant" : "Arrière"}
                   </span>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -168,41 +151,110 @@ function OrderDetailModal({
                     src={url}
                     alt={idx === 0 ? "Visual avant" : "Visual arrière"}
                     className="w-full object-contain rounded-2xl border border-gray-200 bg-white shadow-sm"
-                    style={{ maxHeight: 220 }}
+                    style={{ maxHeight: 210 }}
                   />
                 </div>
               ))}
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center gap-2 h-32 rounded-2xl border border-dashed border-gray-300 cursor-pointer hover:bg-gray-100 transition-colors">
+            <label className="flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border border-dashed border-gray-300 cursor-pointer hover:bg-white transition-colors">
               <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
               <Upload className="h-5 w-5 text-gray-400" />
-              <span className="text-[14px] text-gray-400">Ajouter des visuels</span>
+              <span className="text-[13px] text-gray-400">Ajouter Avant + Arrière</span>
             </label>
           )}
         </div>
 
-        {/* ── Info rows ── */}
-        <div className="px-5 py-4 space-y-3">
-          {infoRows.map(({ label, value }) => (
+        {/* ── Priority alert ── */}
+        {limitText && (
+          <div className="mx-5 mt-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100">
+            <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+            <span className="text-[13px] font-semibold text-red-600">{limitText}</span>
+          </div>
+        )}
+
+        {/* ── Summary info ── */}
+        <div className="px-5 pt-4 pb-2 space-y-2.5">
+          {([
+            ["Référence",   `#${order.orderNumber}`],
+            ["Client",      order.customerName],
+            ["Téléphone",   order.customerPhone ?? "—"],
+            ["DTF Arrière", dtfLabel ?? "—"],
+            ["Date",        formattedDate],
+          ] as [string, string][]).map(([label, value]) => (
             <div key={label} className="flex items-center justify-between gap-4">
-              <span className="text-[13px] text-gray-400 shrink-0">{label}</span>
-              <span className="text-[14px] font-medium text-gray-800 text-right">{value}</span>
+              <span className="text-[12px] text-gray-400 shrink-0">{label}</span>
+              <span className="text-[13px] font-medium text-gray-800 text-right">{value}</span>
             </div>
           ))}
-          {limitText && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-50 border border-red-100 mt-1">
-              <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-              <span className="text-[13px] font-semibold text-red-600">{limitText}</span>
-            </div>
-          )}
         </div>
+
+        {/* ── All items ── */}
+        {items.length > 0 && (
+          <div className="px-5 pt-3 pb-5">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Package className="h-3.5 w-3.5 text-gray-400" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
+                Articles · {totalQty} pcs
+              </p>
+            </div>
+            <div className="space-y-2">
+              {items.map((item: OrderItem) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
+                >
+                  {/* Thumbnail */}
+                  {item.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="h-10 w-10 rounded-lg object-cover border border-gray-200 bg-white shrink-0"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-lg border border-gray-200 bg-white shrink-0 flex items-center justify-center">
+                      <Package className="h-4 w-4 text-gray-300" />
+                    </div>
+                  )}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">
+                      {item.name}
+                    </p>
+                    {item.sku && (
+                      <p className="text-[11px] text-gray-400 mt-0.5 font-mono truncate">
+                        {item.sku}
+                      </p>
+                    )}
+                  </div>
+                  {/* Qty + price */}
+                  <div className="shrink-0 flex flex-col items-end gap-0.5">
+                    <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-600 leading-none">
+                      ×{item.quantity}
+                    </span>
+                    <span className="text-[12px] font-semibold tabular-nums text-gray-700">
+                      {fmtPrice(item.price * item.quantity, currency)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Total line */}
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+              <span className="text-[13px] font-semibold text-gray-900">Total</span>
+              <span className="text-[15px] font-bold tabular-nums text-gray-900">
+                {fmtPrice(order.total, currency)}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Main card ─────────────────────────────────────────────────────────────────
 
 export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolean }) {
   const items    = Array.isArray(order.items) ? order.items : [];
@@ -224,9 +276,7 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
   const createdAt     = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt as string);
   const formattedDate = format(createdAt, "d MMM yyyy", { locale: fr });
 
-  const dtfItem  = items.find((i) =>
-    /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? "")
-  );
+  const dtfItem  = items.find((i) => /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? ""));
   const dtfLabel  = dtfItem?.sku || dtfItem?.name || items[0]?.sku || null;
   const limitText = order.notes?.trim() || null;
   const qrValue   = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
@@ -238,11 +288,12 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
 
   return (
     <>
+      {/* ── Card shell ── */}
       <div
         className={cn(
           "rounded-2xl bg-white border overflow-hidden",
-          "transition-all duration-200 cursor-pointer",
-          "hover:shadow-md hover:shadow-black/[0.08] hover:border-gray-300",
+          "transition-all duration-200 cursor-pointer select-none",
+          "hover:shadow-md hover:shadow-black/[0.07] hover:border-gray-300",
           isNew
             ? "border-blue-400/60 ring-2 ring-blue-400/30 animate-fade-up"
             : "border-gray-200"
@@ -250,55 +301,63 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
         onClick={() => setModalOpen(true)}
       >
         {/* ── Info + QR row ── */}
-        <div className="px-3 pt-3 pb-3 flex gap-3 items-start">
+        <div className="px-3 pt-3 pb-2.5 flex gap-3 items-start">
 
-          {/* Left: 6-line info stack */}
-          <div className="flex-1 flex flex-col gap-[5px] min-w-0">
+          {/* ─ Left: 6-line stack ─ */}
+          <div className="flex-1 flex flex-col gap-[4px] min-w-0">
 
-            {/* L1 — Date · Bon de Commande */}
-            <p className="text-[12px] text-gray-400 truncate">
-              {formattedDate}<span className="font-bold text-gray-700"> · Bon de Commande</span>
+            {/* L1 — Date — Bon de Commande */}
+            <p className="text-[11px] text-gray-400 truncate leading-tight">
+              {formattedDate}
+              <span className="font-bold text-gray-600"> — Bon de Commande</span>
             </p>
 
             {/* L2 — Référence */}
-            <p className="text-[15px] font-bold text-gray-900 truncate leading-tight">
-              Réf. #{order.orderNumber}
+            <p className="text-[15px] font-bold text-gray-900 truncate leading-snug">
+              <span className="text-gray-400 font-medium text-[12px]">Ref : </span>
+              #{order.orderNumber}
             </p>
 
-            {/* L3 — Client */}
-            <p className="text-[14px] font-medium text-gray-700 truncate">
+            {/* L3 — Nom complet */}
+            <p className="text-[13px] font-semibold text-gray-800 truncate">
               {order.customerName}
             </p>
 
-            {/* L4 — Phone */}
-            <p className="text-[13px] text-gray-500">
+            {/* L4 — Téléphone */}
+            <p className="text-[12px] text-gray-500 truncate">
+              <span className="font-medium text-gray-400">Tel : </span>
               {order.customerPhone ?? "—"}
             </p>
 
-            {/* L5 — Limit / priority */}
+            {/* L5 — Limit / urgence */}
             <p className={cn(
-              "text-[13px] font-medium flex items-center gap-1 truncate",
+              "text-[12px] font-medium flex items-center gap-1 truncate",
               limitText ? "text-red-500" : "text-gray-300"
             )}>
-              {limitText && <AlertCircle className="h-3 w-3 shrink-0" />}
-              {limitText ?? "—"}
+              <span className={cn("font-medium", limitText ? "text-red-400" : "text-gray-300")}>
+                Limit :
+              </span>
+              {limitText
+                ? <><AlertCircle className="h-2.5 w-2.5 shrink-0" />{limitText}</>
+                : "—"}
             </p>
 
             {/* L6 — DTF Arrière */}
-            <p className="text-[12px] text-gray-400 truncate">
-              DTF Arrière : {dtfLabel ?? "—"}
+            <p className="text-[11px] text-gray-400 truncate">
+              <span className="font-medium">DTF Arrière : </span>
+              {dtfLabel ?? "—"}
             </p>
           </div>
 
-          {/* Right: QR code */}
+          {/* ─ Right: QR code ─ */}
           {origin && (
-            <div className="shrink-0 h-[84px] w-[84px] rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center p-[5px]">
-              <QRCodeSVG value={qrValue} size={72} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+            <div className="shrink-0 h-[88px] w-[88px] rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center p-[6px]">
+              <QRCodeSVG value={qrValue} size={74} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
             </div>
           )}
         </div>
 
-        {/* ── Tâches ── */}
+        {/* ── Tâches (stops card click) ── */}
         <div
           className="border-t border-gray-100 px-3 pt-2 pb-2"
           onClick={(e) => e.stopPropagation()}
@@ -307,19 +366,19 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
             onClick={() => setTodoOpen((v) => !v)}
             className="w-full flex items-center justify-between mb-1 group"
           >
-            <span className="text-[11px] font-bold uppercase tracking-widest text-gray-400 group-hover:text-gray-600 transition-colors">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 group-hover:text-gray-600 transition-colors">
               Tâches
             </span>
             <span className="flex items-center gap-1.5">
               {todos.length > 0 && (
                 <span className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[11px] font-bold leading-none",
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
                   pendingCount > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
                 )}>
                   {pendingCount}/{todos.length}
                 </span>
               )}
-              <span className="text-[11px] text-gray-300">{todoOpen ? "▴" : "▾"}</span>
+              <span className="text-[10px] text-gray-300">{todoOpen ? "▴" : "▾"}</span>
             </span>
           </button>
 
@@ -340,7 +399,7 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
                     {todo.done && <Check className="h-2 w-2 text-white" strokeWidth={3.5} />}
                   </button>
                   <span className={cn(
-                    "flex-1 text-[13px] leading-relaxed select-text",
+                    "flex-1 text-[12px] leading-relaxed select-text",
                     todo.done ? "line-through text-gray-300" : "text-gray-700"
                   )}>
                     {todo.text}
@@ -364,25 +423,26 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
                   onChange={(e) => setNewText(e.target.value)}
                   onKeyDown={handleTodoKey}
                   placeholder="Ajouter une tâche…"
-                  className="flex-1 bg-transparent text-[13px] text-gray-700 placeholder:text-gray-300 focus:outline-none"
+                  className="flex-1 bg-transparent text-[12px] text-gray-700 placeholder:text-gray-300 focus:outline-none"
                 />
               </div>
             </div>
           )}
         </div>
 
-        {/* ── Footer ── */}
+        {/* ── Footer: qty + total ── */}
         <div
           className="flex items-center justify-between border-t border-gray-100 px-3 py-2"
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="text-[12px] text-gray-400">{totalQty} art.</span>
-          <span className="text-[13px] font-semibold tabular-nums text-gray-900">
-            {Number(order.total).toLocaleString("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 })}
+          <span className="text-[11px] text-gray-400">{totalQty} art.</span>
+          <span className="text-[13px] font-bold tabular-nums text-gray-900">
+            {fmtPrice(order.total, currency)}
           </span>
         </div>
       </div>
 
+      {/* ── Modal ── */}
       {modalOpen && (
         <OrderDetailModal
           order={order}

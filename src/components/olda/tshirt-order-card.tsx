@@ -112,7 +112,7 @@ function OrderDetailModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-white rounded-3xl shadow-2xl shadow-black/[0.12] border border-gray-200 overflow-hidden max-h-[92vh] overflow-y-auto"
+        className="w-full max-w-lg bg-white rounded-3xl shadow-2xl shadow-black/[0.12] border border-gray-200 overflow-hidden max-h-[92svh] overflow-y-auto pb-safe"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -349,10 +349,19 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
             </p>
           </div>
 
-          {/* ─ Right: QR code ─ */}
+          {/* ─ Right: QR code ─
+               On very narrow screens (<sm) the container shrinks to 68×68 px so
+               the 6-line text stack never gets crushed. sm+ restores full 88×88. */}
           {origin && (
-            <div className="shrink-0 h-[88px] w-[88px] rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center p-[6px]">
-              <QRCodeSVG value={qrValue} size={74} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+            <div className="shrink-0 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center h-[68px] w-[68px] p-[4px] sm:h-[88px] sm:w-[88px] sm:p-[6px]">
+              {/* Mobile QR — 58 px */}
+              <span className="sm:hidden">
+                <QRCodeSVG value={qrValue} size={58} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+              </span>
+              {/* sm+ QR — 74 px */}
+              <span className="hidden sm:block">
+                <QRCodeSVG value={qrValue} size={74} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+              </span>
             </div>
           )}
         </div>
@@ -362,9 +371,10 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
           className="border-t border-gray-100 px-3 pt-2 pb-2"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* min-h-[44px] = Apple HIG touch target */}
           <button
             onClick={() => setTodoOpen((v) => !v)}
-            className="w-full flex items-center justify-between mb-1 group"
+            className="w-full min-h-[44px] flex items-center justify-between group"
           >
             <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 group-hover:text-gray-600 transition-colors">
               Tâches
@@ -430,9 +440,9 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
           )}
         </div>
 
-        {/* ── Footer: qty + total ── */}
+        {/* ── Footer: qty + total — min-h-[44px] for touch ── */}
         <div
-          className="flex items-center justify-between border-t border-gray-100 px-3 py-2"
+          className="flex items-center justify-between border-t border-gray-100 px-3 min-h-[44px]"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="text-[11px] text-gray-400">{totalQty} art.</span>

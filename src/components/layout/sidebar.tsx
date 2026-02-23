@@ -64,7 +64,7 @@ export function Sidebar() {
       : pathname.startsWith(href);
 
   return (
-    <aside className="fixed left-0 top-0 z-40 flex h-full w-64 flex-col border-r border-border/50 bg-background/85 backdrop-blur-2xl">
+    <aside className="fixed left-0 top-0 z-40 hidden md:flex h-full w-64 flex-col border-r border-border/50 bg-background/85 backdrop-blur-2xl pl-safe">
       {/* ── Logo ─────────────────────────────────────────────────────── */}
       <div className="flex h-[60px] shrink-0 items-center gap-3 px-5 border-b border-border/50">
         {/* Gradient logo mark */}

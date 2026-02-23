@@ -95,7 +95,9 @@ function KanbanColumn({
   newOrderIds?: Set<string>;
 }) {
   return (
-    <div className="shrink-0 w-[272px] flex flex-col gap-2">
+    // Mobile: full viewport width with snap point so user swipes column-by-column
+    // md+: fixed 272 px column in a free-scrolling horizontal list
+    <div className="snap-start shrink-0 w-[calc(100svw-2rem)] sm:w-[calc(100svw-3rem)] md:w-[272px] flex flex-col gap-2">
 
       {/* Status bubble / column header */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm px-3 py-2 flex items-center justify-between gap-2">
@@ -148,7 +150,13 @@ function KanbanBoard({
   }, [columns, orders]);
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-4">
+    // Mobile: snap-x mandatory — each full-width column snaps into view
+    // md+: free horizontal scroll (snap disabled, normal desktop behaviour)
+    <div className={cn(
+      "flex gap-3 overflow-x-auto pb-4 no-scrollbar",
+      "snap-x snap-mandatory",
+      "md:snap-none md:[scrollbar-width:thin]",
+    )}>
       {columns.map((col) => (
         <KanbanColumn
           key={col.status}
@@ -331,25 +339,27 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     <div className="flex flex-col bg-white min-h-screen">
 
       {/* ══ ZONE 1 — Sticky header: 4 person reminder cards ══════════════════ */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-3">
+      {/* pt-safe: pushes content below iOS notch / Dynamic Island               */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm pt-safe">
+        <div className="px-safe-4 sm:px-safe-6 py-3">
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} />
         </div>
       </div>
 
       {/* ══ ZONE 2 — Scrollable workspace ════════════════════════════════════ */}
-      <div className="px-6 py-6 space-y-5">
+      {/* px-safe-4/6: respects landscape side notch insets                     */}
+      <div className="px-safe-4 sm:px-safe-6 py-5 md:py-6 space-y-5">
 
         {/* ── Hero ── */}
-        <div className="flex items-end justify-between">
+        <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+            <p className="text-[13px] md:text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
               Atelier
             </p>
-            <h1 className="text-[26px] font-bold tracking-tight text-gray-900">
+            <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-gray-900">
               Dashboard OLDA
             </h1>
-            <p className="text-[15px] text-gray-500 mt-1">
+            <p className="hidden sm:block text-[15px] text-gray-500 mt-1">
               Vue d&apos;ensemble de la production par type de produit
             </p>
           </div>
@@ -359,14 +369,16 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
 
         {/* ── Navigation tabs ── */}
-        <div className="border-b border-gray-200 flex gap-0">
+        {/* min-h-[44px] on each button satisfies Apple HIG 44×44 pt touch target */}
+        <div className="border-b border-gray-200 flex gap-0 -mx-4 sm:-mx-6 px-4 sm:px-6 overflow-x-auto no-scrollbar">
           {TABS.map((tab) => (
             <button
               key={tab.key}
               disabled={!tab.enabled}
               onClick={() => tab.enabled && setActiveTab(tab.key)}
               className={cn(
-                "relative px-4 pb-3 pt-1 text-[14px] font-medium transition-colors whitespace-nowrap",
+                "relative shrink-0 px-4 min-h-[44px] flex items-center",
+                "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
                 tab.key === activeTab
                   ? "text-blue-600"
                   : tab.enabled
@@ -395,7 +407,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
       {/* ── New-order toast ── */}
       {newOrderIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
+        <div className="fixed bottom-6 mb-safe-6 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
           <div className="flex items-center gap-2.5 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2.5 shadow-lg">
             <RefreshCw className="h-3.5 w-3.5 text-blue-600 animate-spin" />
             <span className="text-[14px] font-semibold text-blue-700">

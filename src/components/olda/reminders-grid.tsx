@@ -85,17 +85,18 @@ function ReminderCard({
   };
 
   return (
-    <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-4 flex flex-col min-h-[110px]">
+    <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-3 md:p-4 flex flex-col min-h-[96px] md:min-h-[110px]">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[15px] font-semibold tracking-tight text-gray-900">
+      <div className="flex items-center justify-between mb-2 md:mb-3">
+        <span className="text-[14px] md:text-[15px] font-semibold tracking-tight text-gray-900">
           {personName}
         </span>
+        {/* 44×44 pt touch target (Apple HIG) — negative margin keeps visual size tight */}
         <button
           onClick={openEdit}
           aria-label="Ajouter un rappel"
-          className="rounded-md p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          className="flex items-center justify-center -mr-1.5 -mt-1 h-[44px] w-[44px] rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
         >
           <Pencil size={13} strokeWidth={1.8} />
         </button>
@@ -172,14 +173,37 @@ function ReminderCard({
 
 export function RemindersGrid({ notesMap }: { notesMap: Record<string, TodoItem[]> }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    /*
+     * Mobile  (<md): horizontal snap-scroll row — each card is ≈72vw so the
+     *   next card peeks on the right, giving a clear affordance to swipe.
+     *   Negative margin + matching padding bleeds the scroll container to the
+     *   edge while keeping inner content aligned.
+     * md+: switch to CSS grid (2-col then 4-col at lg).
+     */
+    <div className={cn(
+      // ── shared ──
+      "gap-3",
+      // ── mobile: flex snap-scroll row ──
+      "flex overflow-x-auto no-scrollbar snap-x snap-mandatory",
+      "-mx-4 px-4 sm:-mx-6 sm:px-6 pb-1",
+      // ── md+: CSS grid ──
+      "md:grid md:grid-cols-2 md:overflow-visible md:snap-none",
+      "md:mx-0 md:px-0 md:pb-0",
+      // ── lg+: 4 columns ──
+      "lg:grid-cols-4",
+    )}>
       {PEOPLE.map((p) => (
-        <ReminderCard
+        // Wrapper gives each card the correct width per breakpoint
+        <div
           key={p.key}
-          personKey={p.key}
-          personName={p.name}
-          initialTodos={notesMap[p.key] ?? []}
-        />
+          className="snap-start shrink-0 w-[74vw] sm:w-[58vw] md:w-auto"
+        >
+          <ReminderCard
+            personKey={p.key}
+            personName={p.name}
+            initialTodos={notesMap[p.key] ?? []}
+          />
+        </div>
       ))}
     </div>
   );

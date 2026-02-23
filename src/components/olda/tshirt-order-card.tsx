@@ -2,18 +2,36 @@
 
 /**
  * TshirtOrderCard
- * ─ Kanban card: flex-row (info stack left / QR right)
- * ─ Click anywhere → OrderDetailModal (visuals + all items + summary)
+ * ─ Bulle Apple (coins 24px, fond blanc, ombre légère, SF Pro)
+ * ─ Supporte les deux formats : webhook legacy + nouveau format Olda Studio JSON
+ * ─ Click → Fiche de commande (modal) avec @media print format autocollant
+ * ─ Attribution utilisateur : chaque tâche ajoutée est préfixée [prenom]
  * ─ Light mode only — zero dark: variants
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, Plus, X, Upload, AlertCircle, Package } from "lucide-react";
-import { format } from "date-fns";
+import { Check, Plus, X, Upload, AlertCircle, Package, Printer } from "lucide-react";
+import { format, differenceInCalendarDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { Order, OrderItem } from "@/types/order";
+import type { Order, OrderItem, OldaExtraData } from "@/types/order";
+
+// ── Utilisateur connecté (session 07h/13h) ────────────────────────────────────
+// Lit le nom depuis localStorage sans prop drilling — utilisé pour attribuer les tâches.
+
+function useActiveUser(): string {
+  const [user, setUser] = useState("");
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("olda_session");
+      if (!raw) return;
+      const s = JSON.parse(raw) as { name?: string };
+      setUser(s.name ?? "");
+    } catch { /* ignore */ }
+  }, []);
+  return user;
+}
 
 // ── Per-card todo ──────────────────────────────────────────────────────────────
 
@@ -30,6 +48,7 @@ function useTodos(orderId: string) {
     setTodos(u);
     try { localStorage.setItem(key, JSON.stringify(u)); } catch { /* quota */ }
   }, [key]);
+  // Le texte est déjà préfixé [utilisateur] par l'appelant si nécessaire
   const addTodo    = useCallback((t: string) => { if (t.trim()) save([...todos, { id: crypto.randomUUID(), text: t.trim(), done: false }]); }, [todos, save]);
   const toggleTodo = useCallback((id: string) => save(todos.map((t) => t.id === id ? { ...t, done: !t.done } : t)), [todos, save]);
   const deleteTodo = useCallback((id: string) => save(todos.filter((t) => t.id !== id)), [todos, save]);
@@ -63,33 +82,87 @@ function useOrigin() {
   return o;
 }
 
-// ── helpers ────────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function fmtPrice(amount: number, currency: string) {
   return Number(amount).toLocaleString("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 });
 }
 
-// ── Order detail modal ──────────────────────────────────────────────────────────
+/** Deadline → "Dans 3 jours · 15 janv." | "Aujourd'hui !" | "⚠️ En retard (2j)" */
+function deadlineLabel(deadline: string | undefined | null): string | null {
+  if (!deadline) return null;
+  try {
+    const d = new Date(deadline);
+    if (isNaN(d.getTime())) return deadline; // texte brut non parseable → affiché tel quel
+    const diff = differenceInCalendarDays(d, new Date());
+    if (diff < 0)   return `⚠️ En retard (${Math.abs(diff)}j)`;
+    if (diff === 0) return "Aujourd'hui !";
+    if (diff === 1) return "Demain";
+    return `Dans ${diff} jours · ${format(d, "d MMM", { locale: fr })}`;
+  } catch { return deadline; }
+}
 
-function OrderDetailModal({
-  order, images, addImage, onClose,
+/** Lit les données extra Olda Studio depuis shippingAddress (JSONB) */
+function readExtra(order: Order): OldaExtraData {
+  if (!order.shippingAddress) return {};
+  const sa = order.shippingAddress as Record<string, unknown>;
+  if (sa._source === "olda_studio") return sa as unknown as OldaExtraData;
+  return {};
+}
+
+/** Vérifie si une chaîne est un code DTF (pas une URL ni un data URL) */
+function isDtfCode(s: string | undefined | null): boolean {
+  if (!s) return false;
+  return !s.startsWith("http") && !s.startsWith("data:");
+}
+
+// ── Pastille de paiement ───────────────────────────────────────────────────────
+
+function PaymentDot({ status }: { status: string }) {
+  const paid = status === "PAID";
+  return (
+    <span
+      title={paid ? "Payé ✓" : "Paiement en attente"}
+      className={cn(
+        "h-2 w-2 rounded-full shrink-0 transition-colors",
+        paid ? "bg-emerald-500" : "bg-amber-400"
+      )}
+    />
+  );
+}
+
+// ── Fiche de commande (modal + impression) ─────────────────────────────────────
+
+function OrderFicheModal({
+  order, extra, images, addImage, origin, onClose,
 }: {
   order: Order;
+  extra: OldaExtraData;
   images: string[];
   addImage: (url: string) => void;
+  origin: string;
   onClose: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const items    = Array.isArray(order.items) ? order.items : [];
   const currency = (order.currency as string) ?? "EUR";
-  const totalQty = items.reduce((s, i) => s + (i.quantity ?? 0), 0);
+
+  // QR Code : URL vers la fiche complète dans le dashboard
+  const qrValue = origin
+    ? `${origin}/dashboard/orders/${order.id}`
+    : order.orderNumber;
 
   const createdAt     = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt as string);
   const formattedDate = format(createdAt, "d MMMM yyyy", { locale: fr });
 
-  const dtfItem   = items.find((i) => /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? ""));
-  const dtfLabel  = dtfItem?.sku || dtfItem?.name || items[0]?.sku || null;
-  const limitText = order.notes?.trim() || null;
+  // ── Données de la fiche — Olda Studio en priorité, fallback legacy ──────────
+  const reference   = extra.reference || order.orderNumber;
+  const deadlineTxt = deadlineLabel(extra.deadline ?? order.notes);
+  const dtfSize     = extra.coteLogoAr ?? null;
+
+  // Visuels : codes DTF ou images uploadées localement
+  const logoAvant   = extra.logoAvant   ?? images[0] ?? null;
+  const logoArriere = extra.logoArriere ?? images[1] ?? null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -111,53 +184,167 @@ function OrderDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-[3px]"
       onClick={onClose}
     >
+      {/*
+        CSS @media print — isole uniquement la fiche autocollant.
+        "visibility: hidden" sur body masque tout sauf .olda-fiche-print
+        sans retirer les éléments du flux (évite les sauts de mise en page).
+      */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .olda-fiche-print, .olda-fiche-print * { visibility: visible !important; }
+          .olda-fiche-print {
+            position: fixed !important;
+            inset: 0 !important;
+            padding: 1cm !important;
+            background: white !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif !important;
+          }
+        }
+      `}</style>
+
       <div
         className="w-full max-w-lg bg-white rounded-[28px] shadow-[0_24px_64px_rgba(0,0,0,0.15)] border border-gray-200/80 overflow-hidden max-h-[92svh] overflow-y-auto pb-safe"
+        style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif" }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header ── */}
-        <div className="sticky top-0 z-10 bg-white flex items-start justify-between px-5 pt-5 pb-4 border-b border-gray-100">
+        {/* ── Toolbar ── */}
+        <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-5 pt-5 pb-4 border-b border-gray-100">
           <div>
-            <p className="text-[12px] font-semibold uppercase tracking-widest text-gray-400">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
               Bon de Commande · {formattedDate}
             </p>
-            <h2 className="text-[22px] font-bold text-gray-900 mt-0.5 leading-tight">
-              #{order.orderNumber}
+            <h2 className="text-[20px] font-bold text-gray-900 mt-0.5 leading-tight">
+              {reference}
             </h2>
-            <p className="text-[13px] text-gray-500 mt-0.5">{order.customerName}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="mt-0.5 rounded-full h-7 w-7 flex items-center justify-center bg-gray-100 hover:bg-gray-200 transition-colors"
-          >
-            <X className="h-3.5 w-3.5 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Bouton impression */}
+            <button
+              onClick={() => window.print()}
+              className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+              title="Imprimer l'autocollant"
+            >
+              <Printer className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            >
+              <X className="h-3.5 w-3.5 text-gray-600" />
+            </button>
+          </div>
         </div>
 
-        {/* ── Visuals: Avant / Arrière ── */}
-        <div className="px-5 pt-4 pb-3 bg-gray-50 border-b border-gray-100">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-3">
+        {/* ══ FICHE AUTOCOLLANT — seul ce bloc est imprimé (@media print) ══════ */}
+        <div className="olda-fiche-print px-5 pt-5 pb-4">
+          <div className="flex items-start gap-5">
+
+            {/* ─ Gauche : 6 lignes dans l'ordre exact ─ */}
+            <div className="flex-1 space-y-[6px] min-w-0">
+
+              {/* L1 — "Bon de Commande" */}
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                Bon de Commande
+              </p>
+
+              {/* L2 — Référence produit */}
+              <p className="text-[17px] font-bold text-gray-900 truncate leading-tight">
+                {reference}
+              </p>
+
+              {/* L3 — Prénom Nom */}
+              <p className="text-[14px] font-semibold text-gray-800 truncate">
+                {order.customerName}
+              </p>
+
+              {/* L4 — Téléphone */}
+              <p className="text-[13px] text-gray-600 truncate">
+                {order.customerPhone ?? "—"}
+              </p>
+
+              {/* L5 — Deadline + jours restants */}
+              <p className={cn(
+                "text-[12px] font-medium truncate flex items-center gap-1",
+                deadlineTxt?.includes("retard") ? "text-red-500" : "text-gray-700"
+              )}>
+                {deadlineTxt
+                  ? <><AlertCircle className="h-2.5 w-2.5 shrink-0" />{deadlineTxt}</>
+                  : <span className="text-gray-300">Deadline : —</span>
+                }
+              </p>
+
+              {/* L6 — Taille DTF Arrière (fiche.coteLogoAr) */}
+              <p className="text-[12px] text-gray-500 truncate">
+                <span className="font-medium text-gray-400">DTF AR : </span>
+                {dtfSize ?? (isDtfCode(logoArriere) ? logoArriere : "—")}
+              </p>
+            </div>
+
+            {/* ─ Droite : QR Code ─ */}
+            {origin && (
+              <div className="shrink-0 rounded-xl border border-gray-200 p-[5px] bg-white shadow-sm">
+                <QRCodeSVG
+                  value={qrValue}
+                  size={96}
+                  bgColor="#ffffff"
+                  fgColor="#1d1d1f"
+                  level="M"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Pastille paiement dans la fiche */}
+          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+            <PaymentDot status={order.paymentStatus} />
+            <span className="text-[11px] text-gray-400">
+              {order.paymentStatus === "PAID" ? "Payé" : "Paiement en attente"}
+            </span>
+            <span className="ml-auto text-[11px] font-semibold tabular-nums text-gray-700">
+              {fmtPrice(order.total, currency)}
+            </span>
+          </div>
+        </div>
+        {/* ══ fin bloc @media print ═════════════════════════════════════════════ */}
+
+        {/* ── Visuels (logos DTF) ── */}
+        <div className="px-5 pt-3 pb-4 bg-gray-50 border-t border-gray-100">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2.5">
             Visuels
           </p>
-          {images.length > 0 ? (
+          {(logoAvant || logoArriere) ? (
             <div className="flex gap-3">
-              {images.map((url, idx) => (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    {idx === 0 ? "Avant" : "Arrière"}
-                  </span>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={url}
-                    alt={idx === 0 ? "Visual avant" : "Visual arrière"}
-                    className="w-full object-contain rounded-2xl border border-gray-200 bg-white shadow-sm"
-                    style={{ maxHeight: 210 }}
-                  />
-                </div>
-              ))}
+              {([
+                { src: logoAvant,   label: "Avant" },
+                { src: logoArriere, label: "Arrière" },
+              ] as { src: string | null; label: string }[]).map(({ src, label }) =>
+                src ? (
+                  <div key={label} className="flex-1 flex flex-col items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      {label}
+                    </span>
+                    {isDtfCode(src) ? (
+                      /* Code DTF référence — affiché comme tag monospace */
+                      <div className="w-full flex items-center justify-center h-16 rounded-2xl border border-gray-200 bg-white font-mono text-[13px] font-semibold text-gray-700 shadow-sm px-2 text-center">
+                        {src}
+                      </div>
+                    ) : (
+                      /* Image uploadée localement ou URL */
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={src}
+                        alt={`Visual ${label}`}
+                        className="w-full object-contain rounded-2xl border border-gray-200 bg-white shadow-sm"
+                        style={{ maxHeight: 180 }}
+                      />
+                    )}
+                  </div>
+                ) : null
+              )}
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border border-dashed border-gray-300 cursor-pointer hover:bg-white transition-colors">
+            <label className="flex flex-col items-center justify-center gap-2 h-24 rounded-2xl border border-dashed border-gray-300 cursor-pointer hover:bg-white transition-colors">
               <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
               <Upload className="h-5 w-5 text-gray-400" />
               <span className="text-[13px] text-gray-400">Ajouter Avant + Arrière</span>
@@ -165,74 +352,32 @@ function OrderDetailModal({
           )}
         </div>
 
-        {/* ── Priority alert ── */}
-        {limitText && (
-          <div className="mx-5 mt-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-50 border border-red-100">
-            <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-            <span className="text-[13px] font-semibold text-red-600">{limitText}</span>
-          </div>
-        )}
-
-        {/* ── Summary info ── */}
-        <div className="px-5 pt-4 pb-2 space-y-2.5">
-          {([
-            ["Référence",   `#${order.orderNumber}`],
-            ["Client",      order.customerName],
-            ["Téléphone",   order.customerPhone ?? "—"],
-            ["DTF Arrière", dtfLabel ?? "—"],
-            ["Date",        formattedDate],
-          ] as [string, string][]).map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-4">
-              <span className="text-[12px] text-gray-400 shrink-0">{label}</span>
-              <span className="text-[13px] font-medium text-gray-800 text-right">{value}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* ── All items ── */}
-        {items.length > 0 && (
-          <div className="px-5 pt-3 pb-5">
+        {/* ── Articles (format legacy avec prix > 0) ── */}
+        {items.filter(i => i.price > 0).length > 0 && (
+          <div className="px-5 pt-4 pb-5">
             <div className="flex items-center gap-1.5 mb-3">
               <Package className="h-3.5 w-3.5 text-gray-400" />
-              <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400">
-                Articles · {totalQty} pcs
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                Articles
               </p>
             </div>
             <div className="space-y-2">
               {items.map((item: OrderItem) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5"
-                >
-                  {/* Thumbnail */}
-                  {item.imageUrl ? (
+                <div key={item.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5">
+                  {item.imageUrl && !isDtfCode(item.imageUrl) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={item.imageUrl}
-                      alt={item.name}
-                      className="h-10 w-10 rounded-lg object-cover border border-gray-200 bg-white shrink-0"
-                    />
+                    <img src={item.imageUrl} alt={item.name} className="h-10 w-10 rounded-lg object-cover border border-gray-200 bg-white shrink-0" />
                   ) : (
                     <div className="h-10 w-10 rounded-lg border border-gray-200 bg-white shrink-0 flex items-center justify-center">
                       <Package className="h-4 w-4 text-gray-300" />
                     </div>
                   )}
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-semibold text-gray-900 truncate leading-tight">
-                      {item.name}
-                    </p>
-                    {item.sku && (
-                      <p className="text-[11px] text-gray-400 mt-0.5 font-mono truncate">
-                        {item.sku}
-                      </p>
-                    )}
+                    <p className="text-[13px] font-semibold text-gray-900 truncate">{item.name}</p>
+                    {item.sku && <p className="text-[11px] text-gray-400 font-mono truncate">{item.sku}</p>}
                   </div>
-                  {/* Qty + price */}
                   <div className="shrink-0 flex flex-col items-end gap-0.5">
-                    <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-600 leading-none">
-                      ×{item.quantity}
-                    </span>
+                    <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[11px] font-bold text-gray-600">×{item.quantity}</span>
                     <span className="text-[12px] font-semibold tabular-nums text-gray-700">
                       {fmtPrice(item.price * item.quantity, currency)}
                     </span>
@@ -240,7 +385,6 @@ function OrderDetailModal({
                 </div>
               ))}
             </div>
-            {/* Total line */}
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
               <span className="text-[13px] font-semibold text-gray-900">Total</span>
               <span className="text-[15px] font-bold tabular-nums text-gray-900">
@@ -254,15 +398,25 @@ function OrderDetailModal({
   );
 }
 
-// ── Main card ─────────────────────────────────────────────────────────────────
+// ── Main card — Bulle Apple ───────────────────────────────────────────────────
 
 export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolean }) {
-  const items    = Array.isArray(order.items) ? order.items : [];
-  const totalQty = items.reduce((s, i) => s + (i.quantity ?? 0), 0);
-  const currency = (order.currency as string) ?? "EUR";
-  const origin   = useOrigin();
+  const items      = Array.isArray(order.items) ? order.items : [];
+  const totalQty   = items.reduce((s, i) => s + (i.quantity ?? 0), 0);
+  const currency   = (order.currency as string) ?? "EUR";
+  const origin     = useOrigin();
+  const activeUser = useActiveUser(); // utilisateur connecté (session 07h/13h)
 
-  const serverImages  = items.filter((i) => i.imageUrl).map((i) => i.imageUrl as string).slice(0, 2);
+  // ── Données Olda Studio (extra data) ──────────────────────────────────────
+  const extra     = readExtra(order);
+  const reference = extra.reference || order.orderNumber;
+  const deadline  = deadlineLabel(extra.deadline ?? order.notes);
+
+  // DTF Arrière : coteLogoAr > logoArriere (code) > détection legacy depuis items
+  const dtfItem  = items.find((i) => /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? ""));
+  const dtfLabel = extra.coteLogoAr ?? extra.logoArriere ?? dtfItem?.sku ?? dtfItem?.name ?? items[0]?.sku ?? null;
+
+  const serverImages  = items.filter((i) => i.imageUrl && !isDtfCode(i.imageUrl)).map((i) => i.imageUrl as string).slice(0, 2);
   const { localImages, addImage } = useLocalImages(order.id);
   const displayImages = serverImages.length > 0 ? serverImages : localImages;
 
@@ -276,19 +430,22 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
   const createdAt     = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt as string);
   const formattedDate = format(createdAt, "d MMM yyyy", { locale: fr });
 
-  const dtfItem  = items.find((i) => /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? ""));
-  const dtfLabel  = dtfItem?.sku || dtfItem?.name || items[0]?.sku || null;
-  const limitText = order.notes?.trim() || null;
-  const qrValue   = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
+  const qrValue = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
 
-  const handleAddTodo = () => { addTodo(newText); setNewText(""); };
+  // Attribution utilisateur : [prenom] texte — trace qui a créé la tâche
+  const handleAddTodo = () => {
+    if (!newText.trim()) return;
+    const prefix = activeUser ? `[${activeUser}] ` : "";
+    addTodo(prefix + newText.trim());
+    setNewText("");
+  };
   const handleTodoKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") { e.preventDefault(); handleAddTodo(); }
   };
 
   return (
     <>
-      {/* ── Card shell ── */}
+      {/* ── Card shell — Bulle Apple 24px ── */}
       <div
         className={cn(
           // Bulle Apple : coins 24 px, fond blanc immaculé, ombre légère
@@ -304,22 +461,25 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
         {/* ── Info + QR row ── */}
         <div className="px-3 pt-3 pb-2.5 flex gap-3 items-start">
 
-          {/* ─ Left: 6-line stack ─ */}
+          {/* ─ Gauche : 6 lignes ─ */}
           <div className="flex-1 flex flex-col gap-[4px] min-w-0">
 
-            {/* L1 — Date — Bon de Commande */}
+            {/* L1 — Date · label */}
             <p className="text-[11px] text-gray-400 truncate leading-tight">
               {formattedDate}
               <span className="font-bold text-gray-600"> — Bon de Commande</span>
             </p>
 
-            {/* L2 — Référence */}
-            <p className="text-[15px] font-bold text-gray-900 truncate leading-snug">
-              <span className="text-gray-400 font-medium text-[12px]">Ref : </span>
-              #{order.orderNumber}
-            </p>
+            {/* L2 — Référence + pastille paiement */}
+            <div className="flex items-center gap-1.5">
+              <PaymentDot status={order.paymentStatus} />
+              <p className="text-[15px] font-bold text-gray-900 truncate leading-snug">
+                <span className="text-gray-400 font-medium text-[12px]">Ref : </span>
+                {reference}
+              </p>
+            </div>
 
-            {/* L3 — Nom complet */}
+            {/* L3 — Nom client */}
             <p className="text-[13px] font-semibold text-gray-800 truncate">
               {order.customerName}
             </p>
@@ -330,36 +490,30 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
               {order.customerPhone ?? "—"}
             </p>
 
-            {/* L5 — Limit / urgence */}
+            {/* L5 — Deadline + jours restants */}
             <p className={cn(
               "text-[12px] font-medium flex items-center gap-1 truncate",
-              limitText ? "text-red-500" : "text-gray-300"
+              deadline?.includes("retard") ? "text-red-500" : deadline ? "text-amber-600" : "text-gray-300"
             )}>
-              <span className={cn("font-medium", limitText ? "text-red-400" : "text-gray-300")}>
-                Limit :
-              </span>
-              {limitText
-                ? <><AlertCircle className="h-2.5 w-2.5 shrink-0" />{limitText}</>
-                : "—"}
+              <span className="font-medium text-gray-400">Deadline :</span>
+              {deadline
+                ? <><AlertCircle className="h-2.5 w-2.5 shrink-0" />{deadline}</>
+                : " —"}
             </p>
 
-            {/* L6 — DTF Arrière */}
+            {/* L6 — DTF Arrière / Taille */}
             <p className="text-[11px] text-gray-400 truncate">
-              <span className="font-medium">DTF Arrière : </span>
+              <span className="font-medium">DTF AR : </span>
               {dtfLabel ?? "—"}
             </p>
           </div>
 
-          {/* ─ Right: QR code ─
-               On very narrow screens (<sm) the container shrinks to 68×68 px so
-               the 6-line text stack never gets crushed. sm+ restores full 88×88. */}
+          {/* ─ Droite : QR Code — encode l'ID commande ─ */}
           {origin && (
             <div className="shrink-0 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center h-[68px] w-[68px] p-[4px] sm:h-[88px] sm:w-[88px] sm:p-[6px]">
-              {/* Mobile QR — 58 px */}
               <span className="sm:hidden">
                 <QRCodeSVG value={qrValue} size={58} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
               </span>
-              {/* sm+ QR — 74 px */}
               <span className="hidden sm:block">
                 <QRCodeSVG value={qrValue} size={74} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
               </span>
@@ -367,12 +521,11 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
           )}
         </div>
 
-        {/* ── Tâches (stops card click) ── */}
+        {/* ── Tâches (stop propagation — ne déclenche pas le modal) ── */}
         <div
           className="border-t border-gray-100 px-3 pt-2 pb-2"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* min-h-[44px] = Apple HIG touch target */}
           <button
             onClick={() => setTodoOpen((v) => !v)}
             className="w-full min-h-[44px] flex items-center justify-between group"
@@ -421,7 +574,7 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
                 </div>
               ))}
 
-              {/* Add row */}
+              {/* Ajouter — préfixé [utilisateur connecté] */}
               <div className="flex items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 hover:bg-gray-50 transition-colors">
                 <button
                   onClick={handleAddTodo}
@@ -433,7 +586,7 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
                   value={newText}
                   onChange={(e) => setNewText(e.target.value)}
                   onKeyDown={handleTodoKey}
-                  placeholder="Ajouter une tâche…"
+                  placeholder={activeUser ? `Tâche pour ${activeUser}…` : "Ajouter une tâche…"}
                   className="flex-1 bg-transparent text-[12px] text-gray-700 placeholder:text-gray-300 focus:outline-none"
                 />
               </div>
@@ -441,7 +594,7 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
           )}
         </div>
 
-        {/* ── Footer: qty + total — min-h-[44px] for touch ── */}
+        {/* ── Footer : total ── */}
         <div
           className="flex items-center justify-between border-t border-gray-100 px-3 min-h-[44px]"
           onClick={(e) => e.stopPropagation()}
@@ -453,12 +606,14 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
         </div>
       </div>
 
-      {/* ── Modal ── */}
+      {/* ── Modal fiche de commande ── */}
       {modalOpen && (
-        <OrderDetailModal
+        <OrderFicheModal
           order={order}
+          extra={extra}
           images={displayImages}
           addImage={addImage}
+          origin={origin}
           onClose={() => setModalOpen(false)}
         />
       )}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { WebhookOrderPayload } from "@/types/order";
+import { WebhookOrderPayload, OldaCommandePayload, OldaExtraData } from "@/types/order";
 import { orderEvents } from "@/lib/events";
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -55,6 +55,54 @@ function verifyToken(request: NextRequest): boolean {
 
 function newId(): string {
   return `c${Date.now()}${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// ── Détection et mapping du format Olda Studio ────────────────────────────────
+// Le format Olda Studio se reconnaît à la présence du champ "commande" (vs "orderNumber").
+// Les données extra (reference, logos, deadline, taille DTF) sont stockées dans
+// shippingAddress (JSONB) pour être lues côté client sans migration DB.
+
+function isOldaFormat(raw: unknown): raw is OldaCommandePayload {
+  return typeof raw === "object" && raw !== null && "commande" in raw;
+}
+
+function mapOldaToWebhook(o: OldaCommandePayload): WebhookOrderPayload {
+  const totalAmt = Number(o.prix?.total ?? 0);
+  const paymentStatus = o.paiement?.statut === "OUI" ? "PAID" : "PENDING";
+
+  // Extra data stockée dans shippingAddress pour la carte kanban
+  const extra: OldaExtraData = {
+    reference:   o.reference,
+    logoAvant:   o.logoAvant,
+    logoArriere: o.logoArriere,
+    deadline:    o.deadline,
+    coteLogoAr:  o.fiche?.coteLogoAr,
+    _source:     "olda_studio",
+  };
+
+  // Items : logoDTF avant + arrière comme articles (permet la détection DTF existante)
+  const items: WebhookOrderPayload["items"] = [];
+  if (o.logoAvant)   items.push({ name: "Logo Avant",   sku: o.logoAvant,   quantity: 1, price: 0 });
+  if (o.logoArriere) items.push({ name: "Logo Arrière", sku: o.logoArriere, quantity: 1, price: 0 });
+  if (items.length === 0) {
+    // Fallback : au moins un article pour passer la validation
+    items.push({ name: o.reference ?? "Commande T-shirt", sku: o.reference, quantity: 1, price: totalAmt });
+  }
+
+  return {
+    orderNumber:     o.commande,
+    customerName:    o.nom ?? "",
+    customerEmail:   "olda@studio",       // champ requis, non fourni par ce format
+    customerPhone:   o.telephone,
+    status:          "COMMANDE_A_TRAITER",
+    paymentStatus,
+    total:           totalAmt,
+    subtotal:        totalAmt,
+    notes:           o.deadline ?? undefined, // affiché comme "Limit" sur la carte legacy
+    category:        "t-shirt",
+    shippingAddress: extra as unknown as import("@/types/order").Address,
+    items,
+  };
 }
 
 // ── GET /api/orders — list all orders (for client-side refresh) ───────────────
@@ -138,7 +186,9 @@ export async function POST(request: NextRequest) {
 
   let body: WebhookOrderPayload;
   try {
-    body = await request.json();
+    const raw = await request.json();
+    // Détection automatique : format Olda Studio ("commande") vs format legacy ("orderNumber")
+    body = isOldaFormat(raw) ? mapOldaToWebhook(raw) : (raw as WebhookOrderPayload);
   } catch {
     return NextResponse.json(
       { error: "Invalid JSON payload" },

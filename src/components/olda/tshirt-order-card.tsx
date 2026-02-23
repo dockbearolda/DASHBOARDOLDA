@@ -308,7 +308,7 @@ export function TshirtOrderCard({
             {todos.map((todo) => (
               <div
                 key={todo.id}
-                className="group/item flex items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 hover:bg-muted/30 transition-colors"
+                className="group/item flex items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 hover:bg-gray-100/70 dark:hover:bg-white/[0.05] transition-colors"
               >
                 {/* Circle checkbox */}
                 <button
@@ -348,7 +348,7 @@ export function TshirtOrderCard({
             ))}
 
             {/* Add row */}
-            <div className="flex items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 hover:bg-muted/30 transition-colors">
+            <div className="flex items-center gap-2 rounded-lg px-1 py-0.5 -mx-1 hover:bg-gray-100/70 dark:hover:bg-white/[0.05] transition-colors">
               <button
                 onClick={handleAddTodo}
                 className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px] border-dashed border-border/40 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"

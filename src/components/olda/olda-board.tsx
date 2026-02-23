@@ -149,7 +149,7 @@ function KanbanColumn({
             {col.label}
           </span>
         </div>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-gray-100 dark:bg-white/[0.1] px-1.5 py-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400">
           {orders.length}
         </span>
       </div>
@@ -207,7 +207,7 @@ function ProductBoard({
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-base font-semibold">{label}</h2>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] font-medium text-muted-foreground">
+        <span className="rounded-full bg-gray-100 dark:bg-white/[0.1] px-2 py-0.5 text-[12px] font-medium text-gray-500 dark:text-gray-400">
           {orders.length} commande{orders.length !== 1 ? "s" : ""}
         </span>
       </div>

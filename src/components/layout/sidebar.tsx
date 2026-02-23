@@ -5,8 +5,6 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard,
-  ShoppingBag,
-  BarChart3,
   Settings,
   Webhook,
   Sparkles,
@@ -15,10 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const primaryNav = [
-  { label: "Vue d'ensemble",  href: "/dashboard",          icon: LayoutDashboard },
-  { label: "Dashboard OLDA",  href: "/dashboard/olda",     icon: Factory },
-  { label: "Commandes",       href: "/dashboard/orders",   icon: ShoppingBag },
-  { label: "Analytiques",     href: "/dashboard/analytics", icon: BarChart3 },
+  { label: "Vue d'ensemble", href: "/dashboard",      icon: LayoutDashboard },
+  { label: "Dashboard OLDA", href: "/dashboard/olda", icon: Factory },
 ];
 
 const secondaryNav = [

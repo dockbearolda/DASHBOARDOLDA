@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * OrderDetail — Fiche de commande Apple-style
+ * OrderDetail — Fiche de commande Apple-style dark
  *
  * Structure (de haut en bas) :
  *  1. Header       — récap, ID commande, date, QR + menu gear
  *  2. Visuels      — Face Avant / Dos (DTF codes ou images)
- *  3. CLIENT       — Nom, Téléphone, Deadline
+ *  3. CLIENT       — Nom, Téléphone, Limit (deadline)
  *  4. PRODUIT      — Collection, Référence, Coloris, Taille, DTF arrière
  *  5. LOGOS        — Logo avant, Couleur AV, Logo arrière, Couleur AR
  *  6. NOTES        — Texte libre
@@ -24,7 +24,6 @@ import {
   Pencil,
   Trash2,
   Send,
-  X,
   Check,
   Loader2,
 } from "lucide-react";
@@ -73,7 +72,44 @@ function fmtDate(d: string | Date) {
   return format(new Date(d), "dd/MM/yyyy", { locale: fr });
 }
 
-/** Pastel swatch pour un nom de couleur français */
+// ─────────────────────────────────────────────────────────────────────────────
+// Status dot (dark-theme)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STATUS_DOT: Record<OrderStatus, { label: string; color: string }> = {
+  COMMANDE_A_TRAITER:    { label: "À traiter",            color: "bg-red-500" },
+  COMMANDE_EN_ATTENTE:   { label: "En attente",            color: "bg-amber-400" },
+  COMMANDE_A_PREPARER:   { label: "À préparer",            color: "bg-blue-500" },
+  MAQUETTE_A_FAIRE:      { label: "Maquette à faire",      color: "bg-purple-500" },
+  PRT_A_FAIRE:           { label: "PRT à faire",           color: "bg-amber-500" },
+  EN_ATTENTE_VALIDATION: { label: "Validation en attente", color: "bg-sky-400" },
+  EN_COURS_IMPRESSION:   { label: "En impression",         color: "bg-blue-400" },
+  PRESSAGE_A_FAIRE:      { label: "Pressage à faire",      color: "bg-violet-500" },
+  CLIENT_A_CONTACTER:    { label: "Client à contacter",    color: "bg-red-400" },
+  CLIENT_PREVENU:        { label: "Client prévenu",        color: "bg-green-500" },
+  ARCHIVES:              { label: "Archivé",               color: "bg-zinc-500" },
+};
+
+const PAYMENT_DOT: Record<PaymentStatus, { label: string; color: string }> = {
+  PENDING:  { label: "En attente", color: "bg-amber-400" },
+  PAID:     { label: "Payé",       color: "bg-green-500" },
+  FAILED:   { label: "Échoué",     color: "bg-red-500" },
+  REFUNDED: { label: "Remboursé",  color: "bg-zinc-500" },
+};
+
+function StatusDot({ label, color }: { label: string; color: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${color}`} />
+      <span className="text-white text-[12px] font-medium">{label}</span>
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Color swatch
+// ─────────────────────────────────────────────────────────────────────────────
+
 const COLOR_SWATCHES: Record<string, string> = {
   noir:     "#1d1d1f",
   blanc:    "#f5f5f7",
@@ -102,7 +138,7 @@ function ColorDot({ color }: { color?: string }) {
     <span
       className={cn(
         "inline-block h-3 w-3 rounded-full shrink-0",
-        needsBorder && "border border-gray-300"
+        needsBorder && "border border-zinc-600"
       )}
       style={{ background: fill }}
       title={color}
@@ -111,19 +147,19 @@ function ColorDot({ color }: { color?: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Primitives de mise en page
+// Primitives de mise en page (dark)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-5 pt-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400 select-none">
+    <p className="px-5 pt-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400 select-none">
       {children}
     </p>
   );
 }
 
 function Divider() {
-  return <div className="mx-5 border-t border-gray-100" />;
+  return <div className="mx-5 border-t border-zinc-800" />;
 }
 
 interface DataRowProps {
@@ -137,14 +173,14 @@ function DataRow({ label, value, mono = false, last = false }: DataRowProps) {
   return (
     <>
       <div className="flex items-center justify-between gap-4 px-5 py-[11px]">
-        <span className="text-[13px] font-medium text-gray-500 shrink-0">{label}</span>
+        <span className="text-[13px] font-medium text-zinc-400 shrink-0">{label}</span>
         <span
           className={cn(
-            "text-[13px] font-semibold text-gray-900 text-right truncate max-w-[60%]",
+            "text-[13px] font-semibold text-white text-right truncate max-w-[60%]",
             mono && "font-mono"
           )}
         >
-          {value ?? <span className="text-gray-300 font-normal">—</span>}
+          {value ?? <span className="text-zinc-600 font-normal">—</span>}
         </span>
       </div>
       {!last && <Divider />}
@@ -154,39 +190,33 @@ function DataRow({ label, value, mono = false, last = false }: DataRowProps) {
 
 function SectionCard({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div
-      className={cn(
-        "rounded-[18px] bg-white overflow-hidden",
-        "shadow-[0_1px_4px_rgba(0,0,0,0.06),0_4px_16px_rgba(0,0,0,0.04)]",
-        className
-      )}
-    >
+    <div className={cn("rounded-[18px] bg-zinc-900 overflow-hidden", className)}>
       {children}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Carte visuel (DTF code ou image)
+// Carte visuel (DTF code ou image) — dark
 // ─────────────────────────────────────────────────────────────────────────────
 
 function VisuelCard({ label, src }: { label: string; src?: string | null }) {
   const isUrl = src && (src.startsWith("http") || src.startsWith("data:"));
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 text-center">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 text-center">
         {label}
       </p>
-      <div className="aspect-square rounded-[14px] bg-gray-50 border border-gray-100 flex items-center justify-center overflow-hidden">
+      <div className="aspect-square rounded-[14px] bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
         {isUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src!} alt={label} className="w-full h-full object-contain" />
         ) : src ? (
-          <span className="text-[12px] font-mono font-semibold text-gray-700 px-3 text-center break-all leading-snug">
+          <span className="text-[12px] font-mono font-semibold text-zinc-300 px-3 text-center break-all leading-snug">
             {src}
           </span>
         ) : (
-          <span className="text-[11px] text-gray-300">Pas d&apos;image</span>
+          <span className="text-[11px] text-zinc-600">Pas d&apos;image</span>
         )}
       </div>
     </div>
@@ -314,7 +344,7 @@ function EditModal({
               <Input className={fieldClass} value={fields.customerPhone} onChange={set("customerPhone")} placeholder="0XXXXXXXXX" />
             </label>
             <label className="block space-y-1">
-              <span className="text-[12px] text-gray-500 font-medium">Deadline</span>
+              <span className="text-[12px] text-gray-500 font-medium">Limit</span>
               <Input className={fieldClass} value={fields.deadline} onChange={set("deadline")} placeholder="2026-03-15 ou texte libre" />
             </label>
           </fieldset>
@@ -500,7 +530,7 @@ function DeleteModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Menu gear (dropdown discret)
+// Menu gear (dropdown discret — dark)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GearMenu({
@@ -527,7 +557,9 @@ function GearMenu({
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "h-8 w-8 flex items-center justify-center rounded-full transition-colors",
-          open ? "bg-gray-200 text-gray-900" : "bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-900"
+          open
+            ? "bg-zinc-700 text-white"
+            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
         )}
         aria-label="Options"
       >
@@ -542,22 +574,22 @@ function GearMenu({
             exit={{ opacity: 0, scale: 0.92, y: -4 }}
             transition={{ duration: 0.12 }}
             className={cn(
-              "absolute right-0 top-10 z-30 min-w-[148px] rounded-[14px] bg-white",
-              "border border-gray-200/80 shadow-[0_8px_32px_rgba(0,0,0,0.12)]",
+              "absolute right-0 top-10 z-30 min-w-[148px] rounded-[14px] bg-zinc-900",
+              "border border-zinc-700 shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
               "py-1 overflow-hidden"
             )}
           >
             <button
               onClick={() => { setOpen(false); onEdit(); }}
-              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[13px] font-medium text-gray-800 hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[13px] font-medium text-zinc-100 hover:bg-zinc-800 transition-colors"
             >
-              <Pencil className="h-3.5 w-3.5 text-gray-400" />
+              <Pencil className="h-3.5 w-3.5 text-zinc-400" />
               Modifier
             </button>
-            <div className="mx-3 border-t border-gray-100" />
+            <div className="mx-3 border-t border-zinc-800" />
             <button
               onClick={() => { setOpen(false); onDelete(); }}
-              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[13px] font-medium text-red-500 hover:bg-red-50 transition-colors"
+              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[13px] font-medium text-red-400 hover:bg-zinc-800 transition-colors"
             >
               <Trash2 className="h-3.5 w-3.5" />
               Supprimer
@@ -566,49 +598,6 @@ function GearMenu({
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Barre de statut commande (pill colorée)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const STATUS_LABELS: Record<OrderStatus, string> = {
-  COMMANDE_A_TRAITER:     "À traiter",
-  COMMANDE_EN_ATTENTE:    "En attente",
-  COMMANDE_A_PREPARER:    "À préparer",
-  MAQUETTE_A_FAIRE:       "Maquette",
-  PRT_A_FAIRE:            "PRT",
-  EN_ATTENTE_VALIDATION:  "Validation",
-  EN_COURS_IMPRESSION:    "Impression",
-  PRESSAGE_A_FAIRE:       "Pressage",
-  CLIENT_A_CONTACTER:     "À contacter",
-  CLIENT_PREVENU:         "Prévenu",
-  ARCHIVES:               "Archivé",
-};
-
-const STATUS_COLORS: Record<OrderStatus, string> = {
-  COMMANDE_A_TRAITER:     "bg-blue-50 text-blue-600",
-  COMMANDE_EN_ATTENTE:    "bg-red-50 text-red-500",
-  COMMANDE_A_PREPARER:    "bg-amber-50 text-amber-600",
-  MAQUETTE_A_FAIRE:       "bg-purple-50 text-purple-600",
-  PRT_A_FAIRE:            "bg-purple-50 text-purple-600",
-  EN_ATTENTE_VALIDATION:  "bg-amber-50 text-amber-600",
-  EN_COURS_IMPRESSION:    "bg-orange-50 text-orange-600",
-  PRESSAGE_A_FAIRE:       "bg-orange-50 text-orange-600",
-  CLIENT_A_CONTACTER:     "bg-gray-100 text-gray-600",
-  CLIENT_PREVENU:         "bg-emerald-50 text-emerald-600",
-  ARCHIVES:               "bg-gray-100 text-gray-500",
-};
-
-function StatusPill({ status }: { status: OrderStatus }) {
-  return (
-    <span className={cn(
-      "inline-flex items-center rounded-full px-2.5 py-[3px] text-[11px] font-semibold",
-      STATUS_COLORS[status]
-    )}>
-      {STATUS_LABELS[status]}
-    </span>
   );
 }
 
@@ -630,6 +619,9 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
 
   const extra = readExtra(order);
   const createdAt = new Date(order.createdAt);
+
+  const orderDot   = STATUS_DOT[order.status]     ?? { label: order.status,        color: "bg-zinc-500" };
+  const paymentDot = PAYMENT_DOT[order.paymentStatus] ?? { label: order.paymentStatus, color: "bg-zinc-500" };
 
   // ── "Envoyer à l'Atelier" → passe en COMMANDE_A_PREPARER ──────────────────
   const handleSendToAtelier = async () => {
@@ -683,23 +675,23 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
 
         {/* ══ 1. HEADER ══════════════════════════════════════════════════════ */}
         <SectionCard>
-          {/* Mention récapitulatif */}
-          <div className="px-5 pt-4 pb-0 flex items-start justify-between gap-4">
+          <div className="px-5 pt-4 pb-4 flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-400 mb-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 mb-1">
                 Récapitulatif de commande
               </p>
-              {/* ID Commande — bold, noir */}
-              <p className="text-[17px] font-bold text-gray-900 leading-snug break-all">
+              {/* ID Commande */}
+              <p className="text-[17px] font-bold text-white leading-snug break-all">
                 {order.orderNumber}
               </p>
               {/* Date */}
-              <p className="text-[12px] text-gray-400 mt-1">
+              <p className="text-[12px] text-zinc-400 mt-1">
                 {fmtDate(createdAt)}
               </p>
-              {/* Statut pill */}
-              <div className="mt-2">
-                <StatusPill status={order.status} />
+              {/* Statuts */}
+              <div className="flex flex-wrap gap-3 mt-3">
+                <StatusDot label={orderDot.label}   color={orderDot.color} />
+                <StatusDot label={paymentDot.label} color={paymentDot.color} />
               </div>
             </div>
 
@@ -709,18 +701,17 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                 onEdit={() => setEditOpen(true)}
                 onDelete={() => setDeleteOpen(true)}
               />
-              <div className="rounded-[10px] border border-gray-200 p-[5px] bg-white shadow-sm">
+              <div className="rounded-[10px] border border-zinc-700 p-[5px] bg-zinc-800">
                 <QRCodeSVG
                   value={`${typeof window !== "undefined" ? window.location.origin : ""}/dashboard/orders/${order.id}`}
                   size={72}
-                  bgColor="#ffffff"
-                  fgColor="#1d1d1f"
+                  bgColor="transparent"
+                  fgColor="#e4e4e7"
                   level="M"
                 />
               </div>
             </div>
           </div>
-          <div className="pb-4" />
         </SectionCard>
 
         {/* ══ 2. VISUELS TECHNIQUES ══════════════════════════════════════════ */}
@@ -750,9 +741,9 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
         {/* ══ 3. CLIENT ══════════════════════════════════════════════════════ */}
         <SectionCard>
           <SectionLabel>Client</SectionLabel>
-          <DataRow label="Nom"        value={order.customerName} />
-          <DataRow label="Téléphone"  value={order.customerPhone} />
-          <DataRow label="Deadline"   value={extra.deadline} last />
+          <DataRow label="Nom"       value={order.customerName} />
+          <DataRow label="Téléphone" value={order.customerPhone} />
+          <DataRow label="Limit"     value={extra.deadline} last />
         </SectionCard>
 
         {/* ══ 4. PRODUIT ═════════════════════════════════════════════════════ */}
@@ -780,7 +771,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
           extra.couleurLogoAvant || extra.couleurLogoArriere) && (
           <SectionCard>
             <SectionLabel>Logos</SectionLabel>
-            <DataRow label="Logo avant"     value={extra.logoAvant}          mono />
+            <DataRow label="Logo avant"   value={extra.logoAvant}   mono />
             <DataRow
               label="Couleur avant"
               value={
@@ -792,7 +783,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                 ) : undefined
               }
             />
-            <DataRow label="Logo arrière"   value={extra.logoArriere}        mono />
+            <DataRow label="Logo arrière" value={extra.logoArriere} mono />
             <DataRow
               label="Couleur arrière"
               value={
@@ -812,7 +803,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
         {order.notes && (
           <SectionCard>
             <SectionLabel>Notes</SectionLabel>
-            <p className="px-5 pb-4 text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap">
+            <p className="px-5 pb-4 text-[13px] text-zinc-300 leading-relaxed whitespace-pre-wrap">
               {order.notes}
             </p>
           </SectionCard>
@@ -848,21 +839,20 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
           )}
 
           {/* Ligne Total */}
-          <div className="mx-5 border-t border-gray-200 mt-1" />
+          <div className="mx-5 border-t border-zinc-800 mt-1" />
           <div className="flex items-center justify-between px-5 py-3">
-            <span className="text-[14px] font-bold text-gray-900">Total</span>
+            <span className="text-[14px] font-bold text-white">Total</span>
             <div className="flex items-center gap-3">
-              <span className="text-[14px] font-bold text-gray-900 tabular-nums">
+              <span className="text-[14px] font-bold text-white tabular-nums">
                 {fmtPrice(order.total, order.currency)}
               </span>
-              {/* Statut paiement — aligné à droite */}
               <span
                 className={cn(
                   "text-[12px] font-semibold",
-                  order.paymentStatus === "PAID"     && "text-emerald-500",
-                  order.paymentStatus === "PENDING"  && "text-amber-500",
-                  order.paymentStatus === "FAILED"   && "text-red-500",
-                  order.paymentStatus === "REFUNDED" && "text-gray-400"
+                  order.paymentStatus === "PAID"     && "text-emerald-400",
+                  order.paymentStatus === "PENDING"  && "text-amber-400",
+                  order.paymentStatus === "FAILED"   && "text-red-400",
+                  order.paymentStatus === "REFUNDED" && "text-zinc-500"
                 )}
               >
                 {order.paymentStatus === "PAID"     && "Payé"}
@@ -896,7 +886,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
             disabled={sending || order.status === "COMMANDE_A_PREPARER"}
             className={cn(
               "flex-1 h-11 rounded-[14px] text-[14px] font-semibold gap-2",
-              "bg-[#1d1d1f] hover:bg-[#1d1d1f]/90 text-white",
+              "bg-white hover:bg-zinc-100 text-zinc-900",
               "disabled:opacity-60"
             )}
           >

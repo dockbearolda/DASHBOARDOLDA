@@ -49,10 +49,23 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
   const saveStatus = async () => {
     setSaving(true);
     try {
+      const statusChanged = newStatus !== order.status;
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      const dateStr = now.toLocaleDateString("fr-FR");
+      const autoNote = statusChanged
+        ? `Statut modifié par Dashboard le ${dateStr} à ${timeStr}`
+        : null;
+
+      const payload: any = { status: newStatus, paymentStatus: newPayment };
+      if (autoNote) {
+        payload.notes = order.notes ? `${order.notes}\n${autoNote}` : autoNote;
+      }
+
       const res = await fetch(`/api/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, paymentStatus: newPayment }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       setOrder(data.order);
@@ -89,18 +102,47 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
         <ArrowLeft className="h-4 w-4" />
       </Button>
 
-      {/* HEADER — Récapitulatif */}
-      <Card className="bg-white border-0 shadow-sm">
-        <CardContent className="p-6 flex items-start justify-between gap-6">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
-              Récapitulatif de commande
-            </p>
-            <h1 className="text-2xl font-bold font-mono mb-1">#{order.orderNumber}</h1>
-            <p className="text-sm text-muted-foreground">{formatDate(order.createdAt)}</p>
-          </div>
-          <div className="text-center">
-            <QRCodeSVG value={order.id} size={100} level="H" includeMargin={false} />
+      {/* HEADER — Récapitulatif avec QR code top-right et infos gauche */}
+      <Card className="bg-gray-50 border-0 shadow-sm">
+        <CardContent className="p-6">
+          <div className="flex gap-6">
+            {/* Left: Order info */}
+            <div className="flex-1 space-y-3">
+              <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-3">
+                <span className="text-muted-foreground">Commande</span>
+                <span className="font-bold font-mono">#{order.orderNumber}</span>
+              </div>
+              {order.customerPhone && (
+                <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-3">
+                  <span className="text-muted-foreground">Téléphone</span>
+                  <a href={`tel:${order.customerPhone}`} className="font-medium hover:text-foreground">
+                    {order.customerPhone}
+                  </a>
+                </div>
+              )}
+              {extra?.reference && (
+                <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-3">
+                  <span className="text-muted-foreground">Référence</span>
+                  <span className="font-medium font-mono">{extra.reference}</span>
+                </div>
+              )}
+              {extra?.deadline && (
+                <div className="flex justify-between items-center text-sm border-b border-gray-100 pb-3">
+                  <span className="text-muted-foreground">Limit</span>
+                  <span className="font-medium">{extra.deadline}</span>
+                </div>
+              )}
+              {extra?.coteLogoAr && (
+                <div className="flex justify-between items-center text-sm pb-3">
+                  <span className="text-muted-foreground">Taille DTF</span>
+                  <span className="font-medium">{extra.coteLogoAr}</span>
+                </div>
+              )}
+            </div>
+            {/* Right: QR code */}
+            <div className="flex items-start justify-center">
+              <QRCodeSVG value={order.id} size={110} level="H" includeMargin={false} />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -142,55 +184,19 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
         </Card>
       )}
 
-      {/* CLIENT */}
+      {/* CLIENT — Name only (other fields in header) */}
       <Card className="bg-white border-0 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Client</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="flex justify-between items-center text-sm border-b border-gray-100 py-3 px-6">
+          <div className="flex justify-between items-center text-sm py-3 px-6">
             <span className="text-muted-foreground">Nom</span>
             <span className="font-medium">{order.customerName}</span>
           </div>
-          {order.customerPhone && (
-            <div className="flex justify-between items-center text-sm border-b border-gray-100 py-3 px-6">
-              <span className="text-muted-foreground">Téléphone</span>
-              <a href={`tel:${order.customerPhone}`} className="font-medium hover:text-foreground">
-                {order.customerPhone}
-              </a>
-            </div>
-          )}
-          {extra?.deadline && (
-            <div className="flex justify-between items-center text-sm py-3 px-6">
-              <span className="text-muted-foreground">Deadline</span>
-              <span className="font-medium">{extra.deadline}</span>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* PRODUIT */}
-      {order.category === "t-shirt" && (
-        <Card className="bg-white border-0 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Produit</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {extra?.reference && (
-              <div className="flex justify-between items-center text-sm border-b border-gray-100 py-3 px-6">
-                <span className="text-muted-foreground">Référence</span>
-                <span className="font-medium font-mono">{extra.reference}</span>
-              </div>
-            )}
-            {extra?.coteLogoAr && (
-              <div className="flex justify-between items-center text-sm py-3 px-6">
-                <span className="text-muted-foreground">Taille DTF Arrière</span>
-                <span className="font-medium">{extra.coteLogoAr}</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* LOGOS */}
       {(extra?.logoAvant || extra?.logoArriere) && (

@@ -189,7 +189,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                     <img src={item.imageUrl} alt="Face avant" className="w-full rounded-lg border border-border" />
                   ) : (
                     <div className="aspect-square bg-muted rounded-lg flex items-center justify-center">
-                      <Package className="h-6 w-6 text-gray-600" />
+                      <span className="text-xs text-gray-400">Pas d'image</span>
                     </div>
                   )}
                 </div>
@@ -201,7 +201,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                     <img src={item.imageUrl} alt="Dos" className="w-full rounded-lg border border-border" />
                   ) : (
                     <div className="aspect-square bg-muted rounded-lg flex items-center justify-center">
-                      <Package className="h-6 w-6 text-gray-600" />
+                      <span className="text-xs text-gray-400">Pas d'image</span>
                     </div>
                   )}
                 </div>

@@ -425,6 +425,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
   const [activeTab, setActiveTab]       = useState<BoardTab>("tshirt");
+  const [viewTab,   setViewTab]         = useState<'flux' | 'commandes'>('flux');
 
   // ── Session temporelle ────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
@@ -736,43 +737,107 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             </div>
           </div>
 
-          {/* ── Navigation tabs — min-h-[44px] = Apple HIG 44 pt touch target ── */}
-          <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar">
-            {TABS.map((tab) => (
+          {/* ── Switcher principal : Flux | Commandes — Apple segmented style ── */}
+          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 self-start">
+            {(['flux', 'commandes'] as const).map((v) => (
               <button
-                key={tab.key}
-                disabled={!tab.enabled}
-                onClick={() => tab.enabled && setActiveTab(tab.key)}
+                key={v}
+                onClick={() => setViewTab(v)}
                 className={cn(
-                  "relative shrink-0 px-4 min-h-[44px] flex items-center",
-                  "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
+                  "px-4 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all",
                   "[touch-action:manipulation]",
-                  tab.key === activeTab
-                    ? "text-blue-600 cursor-pointer"
-                    : tab.enabled
-                    ? "text-gray-500 hover:text-gray-700 cursor-pointer"
-                    : "text-gray-300 cursor-not-allowed"
+                  viewTab === v
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                {tab.label}
-                {!tab.enabled && (
-                  <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
-                )}
-                {tab.key === activeTab && (
-                  <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
-                )}
+                {v === 'flux' ? 'Flux' : 'Commandes'}
               </button>
             ))}
           </div>
 
-          {/* ── ZONE 3 — Kanban workspace ── */}
-          <KanbanBoard
-            columns={TSHIRT_COLUMNS}
-            orders={activeOrders}
-            newOrderIds={newOrderIds}
-            onUpdateOrder={handleUpdateOrder}
-            onDeleteOrder={handleDeleteOrder}
-          />
+          {/* ══ VUE FLUX — Kanban avec fiches simplifiées ══════════════════════ */}
+          <div className={cn(viewTab !== 'flux' && 'hidden')}>
+            {/* ── Tabs produit — min-h-[44px] = Apple HIG 44 pt touch target ── */}
+            <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar mb-5">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  disabled={!tab.enabled}
+                  onClick={() => tab.enabled && setActiveTab(tab.key)}
+                  className={cn(
+                    "relative shrink-0 px-4 min-h-[44px] flex items-center",
+                    "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
+                    "[touch-action:manipulation]",
+                    tab.key === activeTab
+                      ? "text-blue-600 cursor-pointer"
+                      : tab.enabled
+                      ? "text-gray-500 hover:text-gray-700 cursor-pointer"
+                      : "text-gray-300 cursor-not-allowed"
+                  )}
+                >
+                  {tab.label}
+                  {!tab.enabled && (
+                    <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
+                  )}
+                  {tab.key === activeTab && (
+                    <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
+                  )}
+                </button>
+              ))}
+            </div>
+            <KanbanBoard
+              columns={TSHIRT_COLUMNS}
+              orders={activeOrders}
+              newOrderIds={newOrderIds}
+              onUpdateOrder={handleUpdateOrder}
+              onDeleteOrder={handleDeleteOrder}
+            />
+          </div>
+
+          {/* ══ VUE COMMANDES — Liste détaillée ════════════════════════════════ */}
+          <div className={cn(viewTab !== 'commandes' && 'hidden')}>
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-[13px]">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {["Commande", "Client", "Tél", "Statut", "Total", "Date"].map((h) => (
+                      <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-500 whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={o.id} className="border-t border-gray-100 hover:bg-gray-50/80 transition-colors">
+                      <td className="px-4 py-2.5 font-mono text-[12px] text-blue-600">{o.orderNumber ?? o.id.slice(0, 8)}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{o.customerName}</td>
+                      <td className="px-4 py-2.5 text-gray-500">{o.customerPhone ?? "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0",
+                            o.status === "ARCHIVES"             ? "bg-slate-300"  :
+                            o.status === "EN_COURS_IMPRESSION"  ? "bg-indigo-400" :
+                            o.status === "PRT_A_FAIRE"          ? "bg-orange-400" :
+                            o.status === "COMMANDE_EN_ATTENTE"  ? "bg-red-400"    : "bg-blue-400"
+                          )} />
+                          <span className="text-gray-600">{o.status.replace(/_/g, " ")}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">{(o.total ?? 0).toFixed(2)} {o.currency ?? "€"}</td>
+                      <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap">{new Date(o.createdAt).toLocaleDateString("fr-FR")}</td>
+                    </tr>
+                  ))}
+                  {orders.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-300">Aucune commande</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -211,6 +211,9 @@
     margin-bottom: max(1.5rem,  env(safe-area-inset-bottom));
   }
 
+  /* ── View toggle ────────────────────────────────────────────────── */
+  .hidden { display: none; }
+
   /* ── Scrollbar hiding (iOS-style snap containers) ───────────────── */
   .no-scrollbar {
     -ms-overflow-style: none;

@@ -18,9 +18,6 @@ import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
 import { TshirtOrderCard } from "./tshirt-order-card";
 
-// ── Resizer persistence ────────────────────────────────────────────────────────
-const COLLAB_HEIGHT_KEY = "olda_collab_height";
-const DEFAULT_COLLAB_H  = 160; // px — hauteur initiale de la section Collaborateurs
 
 // ════════════════════════════════════════════════════════════════════
 //  SYSTÈME DE SESSION TEMPORELLE  (Morning & Afternoon Reset)
@@ -235,15 +232,6 @@ const PEOPLE = [
   { key: "amandine", icon: Phone  },
 ] as const;
 
-// ── Category tabs ──────────────────────────────────────────────────────────────
-
-type BoardTab = "tshirt" | "mug" | "other";
-
-const TABS: { key: BoardTab; label: string; enabled: boolean }[] = [
-  { key: "tshirt", label: "Commande Tshirt",    enabled: true  },
-  { key: "mug",    label: "Commande Tasse",      enabled: false },
-  { key: "other",  label: "Commande accessoire", enabled: false },
-];
 
 // ── Kanban column ──────────────────────────────────────────────────────────────
 // All columns use TshirtOrderCard (full card with QR, L1-L6, todos).
@@ -424,17 +412,12 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [activeTab, setActiveTab]       = useState<BoardTab>("tshirt");
-  const [viewTab,   setViewTab]         = useState<'flux' | 'commandes'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'commandes'>('flux');
 
   // ── Session temporelle ────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [wasExpired, setWasExpired]         = useState(false);
-
-  // ── Resizer Collaborateurs / Atelier ──────────────────────────────────────
-  const [collabHeight, setCollabHeight] = useState(DEFAULT_COLLAB_H);
-  const [isDragging, setIsDragging]     = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -602,42 +585,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     setWasExpired(false);
   }, []);
 
-  // ── Charger hauteur Collaborateurs depuis localStorage ────────────────────
-  useEffect(() => {
-    const saved = localStorage.getItem(COLLAB_HEIGHT_KEY);
-    if (saved) {
-      const parsed = parseInt(saved, 10);
-      if (!isNaN(parsed)) {
-        setCollabHeight(Math.max(100, Math.min(window.innerHeight * 0.7, parsed)));
-      }
-    }
-  }, []);
-
-  // ── Drag du resizer ───────────────────────────────────────────────────────
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = collabHeight;
-    setIsDragging(true);
-    document.body.style.cursor     = "row-resize";
-    document.body.style.userSelect = "none";
-
-    const onMove = (ev: MouseEvent) => {
-      const next = Math.max(100, Math.min(window.innerHeight * 0.7, startH + ev.clientY - startY));
-      setCollabHeight(next);
-      try { localStorage.setItem(COLLAB_HEIGHT_KEY, String(Math.round(next))); } catch { /* quota */ }
-    };
-    const onUp = () => {
-      setIsDragging(false);
-      document.body.style.cursor     = "";
-      document.body.style.userSelect = "";
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
-  }, [collabHeight]);
-
   // ── Suppression d'une commande (optimistic) ───────────────────────────────
   const handleDeleteOrder = useCallback(async (orderId: string) => {
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
@@ -650,16 +597,10 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
   // ── Categorise orders ──────────────────────────────────────────────────────
 
-  const { tshirt, mug, other } = useMemo(() => {
-    const tshirt: Order[] = [], mug: Order[] = [], other: Order[] = [];
-    for (const o of orders) {
-      const t = detectProductType(o);
-      if      (t === "tshirt") tshirt.push(o);
-      else if (t === "mug")    mug.push(o);
-      else                     other.push(o);
-    }
-    return { tshirt, mug, other };
-  }, [orders]);
+  const tshirt = useMemo(
+    () => orders.filter((o) => detectProductType(o) === "tshirt"),
+    [orders]
+  );
 
   const notesMap = Object.fromEntries(PEOPLE.map((p) => [p.key, notes[p.key]?.todos ?? []]));
 
@@ -669,9 +610,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
     );
   }, []);
-
-  // Select orders for active tab
-  const activeOrders = activeTab === "tshirt" ? tshirt : activeTab === "mug" ? mug : other;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -683,68 +621,30 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   return (
     <div
       className="flex flex-col h-svh w-full overflow-hidden bg-white"
-      style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" }}
+      style={{ fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
     >
 
-      {/* ══ ZONE 1 — Collaborateurs (hauteur redimensionnable) ════════════════ */}
-      {/* pt-safe: repousse le contenu sous le notch / Dynamic Island iOS         */}
-      <div
-        style={{ height: collabHeight }}
-        className="shrink-0 overflow-y-auto bg-white pt-safe"
-      >
-        <div className="px-4 sm:px-6 py-3">
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+      {/* ── Header : hero + tabs top-right ──────────────────────────────────── */}
+      <div className="shrink-0 pt-safe px-4 sm:px-6 pt-5 md:pt-6 pb-3 flex items-center justify-between gap-4 border-b border-gray-100">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+            Atelier
+          </p>
+          <h1 className="text-[20px] md:text-[24px] font-bold tracking-tight text-gray-900 leading-tight">
+            Dashboard OLDA
+          </h1>
         </div>
-      </div>
 
-      {/* ══ DIVIDER — Resizer Apple style ════════════════════════════════════ */}
-      {/* Ligne fine zinc → bleue au hover/drag · cursor-row-resize             */}
-      <div
-        onMouseDown={handleResizeStart}
-        className={cn(
-          "h-[3px] shrink-0 cursor-row-resize relative z-30 group select-none",
-          isDragging ? "bg-blue-400" : "bg-zinc-800/10 hover:bg-blue-400/50"
-        )}
-        style={{ transition: isDragging ? "none" : "background-color 0.15s ease" }}
-      >
-        {/* Petite poignée centrale — pill grise → bleue */}
-        <div className={cn(
-          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-          "w-8 h-1 rounded-full transition-colors duration-150",
-          isDragging ? "bg-blue-400" : "bg-zinc-400/30 group-hover:bg-blue-400/50"
-        )} />
-      </div>
-
-      {/* ══ ZONE 2 — Atelier (s'étend pour remplir le reste de l'écran) ══════ */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-4 sm:px-6 py-5 md:py-6 space-y-5">
-
-          {/* ── Hero ── */}
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[13px] md:text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-                Atelier
-              </p>
-              <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-gray-900">
-                Dashboard OLDA
-              </h1>
-              <p className="text-[13px] sm:text-[15px] text-gray-500 mt-0.5">
-                Vue d&apos;ensemble · production
-              </p>
-            </div>
-            <div className="shrink-0 pb-1">
-              <LiveIndicator connected={sseConnected} />
-            </div>
-          </div>
-
-          {/* ── Switcher principal : Flux | Commandes — Apple segmented style ── */}
-          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 self-start">
+        {/* Tabs top-right : Flux | Commandes */}
+        <div className="flex items-center gap-3 shrink-0">
+          <LiveIndicator connected={sseConnected} />
+          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80">
             {(['flux', 'commandes'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => setViewTab(v)}
                 className={cn(
-                  "px-4 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all",
+                  "px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all",
                   "[touch-action:manipulation]",
                   viewTab === v
                     ? "bg-white text-gray-900 shadow-sm"
@@ -755,90 +655,28 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
               </button>
             ))}
           </div>
-
-          {/* ══ VUE FLUX — Kanban avec fiches simplifiées ══════════════════════ */}
-          <div className={cn(viewTab !== 'flux' && 'hidden')}>
-            {/* ── Tabs produit — min-h-[44px] = Apple HIG 44 pt touch target ── */}
-            <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar mb-5">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.key}
-                  disabled={!tab.enabled}
-                  onClick={() => tab.enabled && setActiveTab(tab.key)}
-                  className={cn(
-                    "relative shrink-0 px-4 min-h-[44px] flex items-center",
-                    "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
-                    "[touch-action:manipulation]",
-                    tab.key === activeTab
-                      ? "text-blue-600 cursor-pointer"
-                      : tab.enabled
-                      ? "text-gray-500 hover:text-gray-700 cursor-pointer"
-                      : "text-gray-300 cursor-not-allowed"
-                  )}
-                >
-                  {tab.label}
-                  {!tab.enabled && (
-                    <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
-                  )}
-                  {tab.key === activeTab && (
-                    <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
-                  )}
-                </button>
-              ))}
-            </div>
-            <KanbanBoard
-              columns={TSHIRT_COLUMNS}
-              orders={activeOrders}
-              newOrderIds={newOrderIds}
-              onUpdateOrder={handleUpdateOrder}
-              onDeleteOrder={handleDeleteOrder}
-            />
-          </div>
-
-          {/* ══ VUE COMMANDES — Liste détaillée ════════════════════════════════ */}
-          <div className={cn(viewTab !== 'commandes' && 'hidden')}>
-            <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="w-full text-[13px]">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {["Commande", "Client", "Tél", "Statut", "Total", "Date"].map((h) => (
-                      <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-500 whitespace-nowrap">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((o) => (
-                    <tr key={o.id} className="border-t border-gray-100 hover:bg-gray-50/80 transition-colors">
-                      <td className="px-4 py-2.5 font-mono text-[12px] text-blue-600">{o.orderNumber ?? o.id.slice(0, 8)}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{o.customerName}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{o.customerPhone ?? "—"}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0",
-                            o.status === "ARCHIVES"             ? "bg-slate-300"  :
-                            o.status === "EN_COURS_IMPRESSION"  ? "bg-indigo-400" :
-                            o.status === "PRT_A_FAIRE"          ? "bg-orange-400" :
-                            o.status === "COMMANDE_EN_ATTENTE"  ? "bg-red-400"    : "bg-blue-400"
-                          )} />
-                          <span className="text-gray-600">{o.status.replace(/_/g, " ")}</span>
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{(o.total ?? 0).toFixed(2)} {o.currency ?? "€"}</td>
-                      <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap">{new Date(o.createdAt).toLocaleDateString("fr-FR")}</td>
-                    </tr>
-                  ))}
-                  {orders.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-gray-300">Aucune commande</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
+      </div>
+
+      {/* ── Contenu principal ───────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
+
+        {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
+        <div className={cn(viewTab !== 'flux' && 'hidden')}>
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+        </div>
+
+        {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}
+        <div className={cn(viewTab !== 'commandes' && 'hidden')}>
+          <KanbanBoard
+            columns={TSHIRT_COLUMNS}
+            orders={tshirt}
+            newOrderIds={newOrderIds}
+            onUpdateOrder={handleUpdateOrder}
+            onDeleteOrder={handleDeleteOrder}
+          />
+        </div>
+
       </div>
 
       {/* ── New-order toast ── */}

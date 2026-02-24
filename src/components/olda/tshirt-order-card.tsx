@@ -400,7 +400,7 @@ function OrderFicheModal({
 
 // ── Main card — Bulle Apple ───────────────────────────────────────────────────
 
-export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolean }) {
+export function TshirtOrderCard({ order, isNew, onDelete }: { order: Order; isNew?: boolean; onDelete?: () => void }) {
   const items      = Array.isArray(order.items) ? order.items : [];
   const totalQty   = items.reduce((s, i) => s + (i.quantity ?? 0), 0);
   const currency   = (order.currency as string) ?? "EUR";
@@ -448,8 +448,7 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
       {/* ── Card shell — Bulle Apple 24px ── */}
       <div
         className={cn(
-          // Bulle Apple : coins 24 px, fond blanc immaculé, ombre légère
-          "rounded-[24px] bg-white border overflow-hidden",
+          "relative group/card rounded-[24px] bg-white border overflow-hidden",
           "transition-all duration-200 cursor-pointer select-none [touch-action:manipulation]",
           "shadow-[0_1px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)] hover:border-gray-300",
           isNew
@@ -458,6 +457,23 @@ export function TshirtOrderCard({ order, isNew }: { order: Order; isNew?: boolea
         )}
         onClick={() => setModalOpen(true)}
       >
+        {/* ── Croix de suppression — discrète, visible au hover, Apple style ── */}
+        {onDelete && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="Supprimer cette commande"
+            className={cn(
+              "absolute top-2.5 right-2.5 z-10",
+              "opacity-0 group-hover/card:opacity-100 transition-opacity duration-150",
+              "h-5 w-5 rounded-full flex items-center justify-center",
+              "bg-white border border-gray-200 shadow-sm",
+              "hover:bg-red-50 hover:border-red-300",
+            )}
+          >
+            <X className="h-2.5 w-2.5 text-gray-400 hover:text-red-500" />
+          </button>
+        )}
+
         {/* ── Info + QR row ── */}
         <div className="px-3 pt-3 pb-2.5 flex gap-3 items-start">
 

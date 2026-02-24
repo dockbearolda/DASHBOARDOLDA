@@ -18,6 +18,10 @@ import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
 import { TshirtOrderCard } from "./tshirt-order-card";
 
+// ── Resizer persistence ────────────────────────────────────────────────────────
+const COLLAB_HEIGHT_KEY = "olda_collab_height";
+const DEFAULT_COLLAB_H  = 160; // px — hauteur initiale de la section Collaborateurs
+
 // ════════════════════════════════════════════════════════════════════
 //  SYSTÈME DE SESSION TEMPORELLE  (Morning & Afternoon Reset)
 //
@@ -249,11 +253,13 @@ function KanbanColumn({
   orders,
   newOrderIds,
   onDropOrder,
+  onDeleteOrder,
 }: {
   col: KanbanCol;
   orders: Order[];
   newOrderIds?: Set<string>;
   onDropOrder?: (orderId: string, newStatus: OrderStatus) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -314,7 +320,11 @@ function KanbanColumn({
               }}
               className="cursor-grab active:cursor-grabbing"
             >
-              <TshirtOrderCard order={o} isNew={newOrderIds?.has(o.id)} />
+              <TshirtOrderCard
+                order={o}
+                isNew={newOrderIds?.has(o.id)}
+                onDelete={onDeleteOrder ? () => onDeleteOrder(o.id) : undefined}
+              />
             </div>
           ))
         )}
@@ -330,11 +340,13 @@ function KanbanBoard({
   orders,
   newOrderIds,
   onUpdateOrder,
+  onDeleteOrder,
 }: {
   columns: KanbanCol[];
   orders: Order[];
   newOrderIds?: Set<string>;
   onUpdateOrder?: (orderId: string, newStatus: OrderStatus) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }) {
   const ordersByStatus = useMemo(() => {
     const map: Record<string, Order[]> = {};
@@ -366,6 +378,7 @@ function KanbanBoard({
             orders={ordersByStatus[col.status] ?? []}
             newOrderIds={newOrderIds}
             onDropOrder={handleDropOrder}
+            onDeleteOrder={onDeleteOrder}
           />
         ))}
       </div>
@@ -415,8 +428,12 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
   // ── Session temporelle ────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
-  const [sessionChecked, setSessionChecked] = useState(false);  // true après lecture localStorage
-  const [wasExpired, setWasExpired]         = useState(false);   // true si la dernière session était expirée
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [wasExpired, setWasExpired]         = useState(false);
+
+  // ── Resizer Collaborateurs / Atelier ──────────────────────────────────────
+  const [collabHeight, setCollabHeight] = useState(DEFAULT_COLLAB_H);
+  const [isDragging, setIsDragging]     = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -578,13 +595,57 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   }, []);
 
   // ── Connexion utilisateur ──────────────────────────────────────────────────
-  // session.name est la clé envoyée à /api/notes/${name} pour les rappels et tâches.
-  // Chaque personne conserve ses données même après expiration de sa session.
   const handleLogin = useCallback((name: string) => {
     const s = saveSession(name);
     setSession(s);
     setWasExpired(false);
   }, []);
+
+  // ── Charger hauteur Collaborateurs depuis localStorage ────────────────────
+  useEffect(() => {
+    const saved = localStorage.getItem(COLLAB_HEIGHT_KEY);
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed)) {
+        setCollabHeight(Math.max(100, Math.min(window.innerHeight * 0.7, parsed)));
+      }
+    }
+  }, []);
+
+  // ── Drag du resizer ───────────────────────────────────────────────────────
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = collabHeight;
+    setIsDragging(true);
+    document.body.style.cursor     = "row-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(100, Math.min(window.innerHeight * 0.7, startH + ev.clientY - startY));
+      setCollabHeight(next);
+      try { localStorage.setItem(COLLAB_HEIGHT_KEY, String(Math.round(next))); } catch { /* quota */ }
+    };
+    const onUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor     = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup",   onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  }, [collabHeight]);
+
+  // ── Suppression d'une commande (optimistic) ───────────────────────────────
+  const handleDeleteOrder = useCallback(async (orderId: string) => {
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    try {
+      await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
+    } catch {
+      refreshOrders();
+    }
+  }, [refreshOrders]);
 
   // ── Categorise orders ──────────────────────────────────────────────────────
 
@@ -619,81 +680,100 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   if (!session) return <LoginScreen onLogin={handleLogin} wasExpired={wasExpired} />;
 
   return (
-    // SF Pro via la pile système Apple : sur macOS/iOS, -apple-system résout SF Pro.
-    // Sur les autres plateformes, Helvetica Neue / Arial prend le relais.
     <div
-      className="flex flex-col bg-white min-h-screen w-full overflow-x-clip"
+      className="flex flex-col h-svh w-full overflow-hidden bg-white"
       style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" }}
     >
 
-      {/* ══ ZONE 1 — Sticky header: 4 person reminder cards ══════════════════ */}
-      {/* pt-safe: pushes content below iOS notch / Dynamic Island               */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm pt-safe">
+      {/* ══ ZONE 1 — Collaborateurs (hauteur redimensionnable) ════════════════ */}
+      {/* pt-safe: repousse le contenu sous le notch / Dynamic Island iOS         */}
+      <div
+        style={{ height: collabHeight }}
+        className="shrink-0 overflow-y-auto bg-white pt-safe"
+      >
         <div className="px-4 sm:px-6 py-3">
-          {/* activeUser : met en valeur la carte de la personne connectée */}
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
         </div>
       </div>
 
-      {/* ══ ZONE 2 — Scrollable workspace ════════════════════════════════════ */}
-      <div className="px-4 sm:px-6 py-5 md:py-6 space-y-5">
+      {/* ══ DIVIDER — Resizer Apple style ════════════════════════════════════ */}
+      {/* Ligne fine zinc → bleue au hover/drag · cursor-row-resize             */}
+      <div
+        onMouseDown={handleResizeStart}
+        className={cn(
+          "h-[3px] shrink-0 cursor-row-resize relative z-30 group select-none",
+          isDragging ? "bg-blue-400" : "bg-zinc-800/10 hover:bg-blue-400/50"
+        )}
+        style={{ transition: isDragging ? "none" : "background-color 0.15s ease" }}
+      >
+        {/* Petite poignée centrale — pill grise → bleue */}
+        <div className={cn(
+          "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+          "w-8 h-1 rounded-full transition-colors duration-150",
+          isDragging ? "bg-blue-400" : "bg-zinc-400/30 group-hover:bg-blue-400/50"
+        )} />
+      </div>
 
-        {/* ── Hero ── */}
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[13px] md:text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-              Atelier
-            </p>
-            <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-gray-900">
-              Dashboard OLDA
-            </h1>
-            <p className="text-[13px] sm:text-[15px] text-gray-500 mt-0.5">
-              Vue d&apos;ensemble · production
-            </p>
+      {/* ══ ZONE 2 — Atelier (s'étend pour remplir le reste de l'écran) ══════ */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-4 sm:px-6 py-5 md:py-6 space-y-5">
+
+          {/* ── Hero ── */}
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[13px] md:text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+                Atelier
+              </p>
+              <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-gray-900">
+                Dashboard OLDA
+              </h1>
+              <p className="text-[13px] sm:text-[15px] text-gray-500 mt-0.5">
+                Vue d&apos;ensemble · production
+              </p>
+            </div>
+            <div className="shrink-0 pb-1">
+              <LiveIndicator connected={sseConnected} />
+            </div>
           </div>
-          <div className="shrink-0 pb-1">
-            <LiveIndicator connected={sseConnected} />
+
+          {/* ── Navigation tabs — min-h-[44px] = Apple HIG 44 pt touch target ── */}
+          <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar">
+            {TABS.map((tab) => (
+              <button
+                key={tab.key}
+                disabled={!tab.enabled}
+                onClick={() => tab.enabled && setActiveTab(tab.key)}
+                className={cn(
+                  "relative shrink-0 px-4 min-h-[44px] flex items-center",
+                  "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
+                  "[touch-action:manipulation]",
+                  tab.key === activeTab
+                    ? "text-blue-600 cursor-pointer"
+                    : tab.enabled
+                    ? "text-gray-500 hover:text-gray-700 cursor-pointer"
+                    : "text-gray-300 cursor-not-allowed"
+                )}
+              >
+                {tab.label}
+                {!tab.enabled && (
+                  <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
+                )}
+                {tab.key === activeTab && (
+                  <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
+                )}
+              </button>
+            ))}
           </div>
-        </div>
 
-        {/* ── Navigation tabs — min-h-[44px] = Apple HIG 44 pt touch target ── */}
-        {/* overflow-x-auto: prevents long labels from overflowing into Kanban */}
-        <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar">
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              disabled={!tab.enabled}
-              onClick={() => tab.enabled && setActiveTab(tab.key)}
-              className={cn(
-                // [touch-action:manipulation] removes iOS 300 ms tap delay
-                "relative shrink-0 px-4 min-h-[44px] flex items-center",
-                "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
-                "[touch-action:manipulation]",
-                tab.key === activeTab
-                  ? "text-blue-600 cursor-pointer"
-                  : tab.enabled
-                  ? "text-gray-500 hover:text-gray-700 cursor-pointer"
-                  : "text-gray-300 cursor-not-allowed"
-              )}
-            >
-              {tab.label}
-              {!tab.enabled && (
-                <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
-              )}
-              {tab.key === activeTab && (
-                <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
-              )}
-            </button>
-          ))}
+          {/* ── ZONE 3 — Kanban workspace ── */}
+          <KanbanBoard
+            columns={TSHIRT_COLUMNS}
+            orders={activeOrders}
+            newOrderIds={newOrderIds}
+            onUpdateOrder={handleUpdateOrder}
+            onDeleteOrder={handleDeleteOrder}
+          />
         </div>
-
-        {/* ── ZONE 3 — Kanban workspace (single board, updates with tab) ── */}
-        <KanbanBoard
-          columns={TSHIRT_COLUMNS}
-          orders={activeOrders}
-          newOrderIds={newOrderIds}
-          onUpdateOrder={handleUpdateOrder}
-        />
       </div>
 
       {/* ── New-order toast ── */}

@@ -401,16 +401,18 @@ function OrderFicheModal({
 // ── Main card — Bulle Apple ───────────────────────────────────────────────────
 
 export function TshirtOrderCard({ order, isNew, onDelete }: { order: Order; isNew?: boolean; onDelete?: () => void }) {
-  const items      = Array.isArray(order.items) ? order.items : [];
-  const totalQty   = items.reduce((s, i) => s + (i.quantity ?? 0), 0);
-  const currency   = (order.currency as string) ?? "EUR";
+  const items    = Array.isArray(order.items) ? order.items : [];
+  const currency = (order.currency as string) ?? "EUR";
   const origin     = useOrigin();
   const activeUser = useActiveUser(); // utilisateur connecté (session 07h/13h)
 
   // ── Données Olda Studio (extra data) ──────────────────────────────────────
-  const extra     = readExtra(order);
-  const reference = extra.reference || order.orderNumber;
-  const deadline  = deadlineLabel(extra.deadline ?? order.notes);
+  const extra = readExtra(order);
+
+  // Séparation prénom / nom — convention "Prénom NOM" (1er mot = prénom)
+  const nameParts = (order.customerName ?? "").trim().split(/\s+/);
+  const prenom    = nameParts[0] ?? "";
+  const nom       = nameParts.slice(1).join(" ") || prenom;
 
   // DTF Arrière : coteLogoAr > logoArriere (code) > détection legacy depuis items
   const dtfItem  = items.find((i) => /arrière|arriere|back|dtf/i.test(i.name ?? "") || /arrière|arriere|back|dtf/i.test(i.sku ?? ""));
@@ -426,9 +428,6 @@ export function TshirtOrderCard({ order, isNew, onDelete }: { order: Order; isNe
   const [modalOpen, setModalOpen] = useState(false);
 
   const pendingCount = todos.filter((t) => !t.done).length;
-
-  const createdAt     = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt as string);
-  const formattedDate = format(createdAt, "d MMM yyyy", { locale: fr });
 
   const qrValue = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
 
@@ -474,67 +473,90 @@ export function TshirtOrderCard({ order, isNew, onDelete }: { order: Order; isNe
           </button>
         )}
 
-        {/* ── Info + QR row ── */}
-        <div className="px-3 pt-3 pb-2.5 flex gap-3 items-start">
+        {/* ══ Layout horizontal : QR gauche · Infos droite ══════════════════ */}
+        <div
+          className="flex items-stretch cursor-pointer select-none"
+          onClick={() => setModalOpen(true)}
+        >
+          {/* ─ Colonne gauche : QR Code uniquement ─ */}
+          {origin && (
+            <div className="shrink-0 flex items-center justify-center p-3 border-r border-gray-100">
+              <div className="rounded-xl bg-white border border-gray-200 shadow-sm p-[5px]">
+                <QRCodeSVG value={qrValue} size={76} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+              </div>
+            </div>
+          )}
 
-          {/* ─ Gauche : 6 lignes ─ */}
-          <div className="flex-1 flex flex-col gap-[4px] min-w-0">
+          {/* ─ Colonne droite : Identité · Production · Footer ─ */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between px-3 py-3 gap-3">
 
-            {/* L1 — Date · label */}
-            <p className="text-[11px] text-gray-400 truncate leading-tight">
-              {formattedDate}
-              <span className="font-bold text-gray-600"> — Bon de Commande</span>
-            </p>
-
-            {/* L2 — Référence + pastille paiement */}
-            <div className="flex items-center gap-1.5">
-              <PaymentDot status={order.paymentStatus} />
-              <p className="text-[15px] font-bold text-gray-900 truncate leading-snug">
-                <span className="text-gray-400 font-medium text-[12px]">Ref : </span>
-                {reference}
+            {/* ── Bloc Identité ── */}
+            <div className="flex flex-col gap-[3px]">
+              {/* NOM — majuscules, semibold */}
+              <p
+                className="truncate leading-tight"
+                style={{ fontSize: 15, fontWeight: 600, letterSpacing: "0.02em", color: "#1d1d1f", textTransform: "uppercase" }}
+              >
+                {nom}
+              </p>
+              {/* Prénom — regular */}
+              <p
+                className="truncate leading-tight"
+                style={{ fontSize: 14, fontWeight: 400, color: "#3a3a3c" }}
+              >
+                {prenom}
+              </p>
+              {/* Téléphone — gris Apple secondaire */}
+              <p
+                className="truncate"
+                style={{ fontSize: 12, color: "#8e8e93" }}
+              >
+                {order.customerPhone ?? "—"}
               </p>
             </div>
 
-            {/* L3 — Nom client */}
-            <p className="text-[13px] font-semibold text-gray-800 truncate">
-              {order.customerName}
-            </p>
-
-            {/* L4 — Téléphone */}
-            <p className="text-[12px] text-gray-500 truncate">
-              <span className="font-medium text-gray-400">Tel : </span>
-              {order.customerPhone ?? "—"}
-            </p>
-
-            {/* L5 — Deadline + jours restants */}
-            <p className={cn(
-              "text-[12px] font-medium flex items-center gap-1 truncate",
-              deadline?.includes("retard") ? "text-red-500" : deadline ? "text-amber-600" : "text-gray-300"
-            )}>
-              <span className="font-medium text-gray-400">Deadline :</span>
-              {deadline
-                ? <><AlertCircle className="h-2.5 w-2.5 shrink-0" />{deadline}</>
-                : " —"}
-            </p>
-
-            {/* L6 — DTF Arrière / Taille */}
-            <p className="text-[11px] text-gray-400 truncate">
-              <span className="font-medium">DTF AR : </span>
-              {dtfLabel ?? "—"}
-            </p>
-          </div>
-
-          {/* ─ Droite : QR Code — encode l'ID commande ─ */}
-          {origin && (
-            <div className="shrink-0 rounded-xl bg-white border border-gray-200 shadow-sm flex items-center justify-center h-[68px] w-[68px] p-[4px] sm:h-[88px] sm:w-[88px] sm:p-[6px]">
-              <span className="sm:hidden">
-                <QRCodeSVG value={qrValue} size={58} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
-              </span>
-              <span className="hidden sm:block">
-                <QRCodeSVG value={qrValue} size={74} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
-              </span>
+            {/* ── Bloc Production — DTF AR (le plus important) ── */}
+            <div>
+              <p
+                className="truncate mb-0.5"
+                style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#aeaeb2" }}
+              >
+                DTF AR
+              </p>
+              <p
+                className="truncate"
+                style={{ fontSize: 18, fontWeight: 700, color: "#333333", lineHeight: 1.15 }}
+              >
+                {dtfLabel ?? "—"}
+              </p>
             </div>
-          )}
+
+            {/* ── Bloc Footer : commentaire + prix ── */}
+            <div className="flex items-end justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                {order.notes && (
+                  <p
+                    className="truncate"
+                    style={{ fontSize: 11, fontStyle: "italic", color: "#8e8e93" }}
+                  >
+                    {order.notes}
+                  </p>
+                )}
+              </div>
+              {/* Prix — couleur conditionnelle paiement */}
+              <p
+                className="shrink-0 tabular-nums"
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: order.paymentStatus === "PAID" ? "#28cd41" : "#ff3b30",
+                }}
+              >
+                {fmtPrice(order.total, currency)}
+              </p>
+            </div>
+
+          </div>
         </div>
 
         {/* ── Tâches (stop propagation — ne déclenche pas le modal) ── */}
@@ -610,16 +632,6 @@ export function TshirtOrderCard({ order, isNew, onDelete }: { order: Order; isNe
           )}
         </div>
 
-        {/* ── Footer : total ── */}
-        <div
-          className="flex items-center justify-between border-t border-gray-100 px-3 min-h-[44px]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="text-[11px] text-gray-400">{totalQty} art.</span>
-          <span className="text-[13px] font-bold tabular-nums text-gray-900">
-            {fmtPrice(order.total, currency)}
-          </span>
-        </div>
       </div>
 
       {/* ── Modal fiche de commande ── */}

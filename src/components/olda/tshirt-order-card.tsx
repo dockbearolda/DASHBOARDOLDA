@@ -589,17 +589,17 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
             compact ? "px-2.5 py-2 gap-1" : "px-3 py-2.5 gap-1.5",
           )}>
 
-            {/* Données principales — sans labels, juste valeurs */}
-            <div className="flex flex-col gap-0.5 min-w-0">
+            {/* Données principales — sans labels, une par ligne */}
+            <div className="flex flex-col gap-1 min-w-0">
               {/* Nom (uppercase) */}
               {nom && (
-                <p className="truncate leading-tight" style={{ fontSize: compact ? 13.5 : 15, fontWeight: 600, letterSpacing: "0.02em", color: "#1d1d1f", textTransform: "uppercase" }}>
+                <p className="truncate leading-tight" style={{ fontSize: compact ? 14 : 16, fontWeight: 600, letterSpacing: "0.02em", color: "#1d1d1f", textTransform: "uppercase" }}>
                   {nom}
                 </p>
               )}
               {/* Prénom */}
               {prenom && prenom !== nom && (
-                <p className="truncate leading-tight" style={{ fontSize: compact ? 12.5 : 14, fontWeight: 400, color: "#3a3a3c" }}>
+                <p className="truncate leading-tight" style={{ fontSize: compact ? 12 : 13, fontWeight: 400, color: "#3a3a3c" }}>
                   {prenom}
                 </p>
               )}
@@ -611,13 +611,13 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
               )}
               {/* Date limite */}
               {extra.deadline && deadlineLabel(extra.deadline) && (
-                <p className={cn("truncate", deadlineLabel(extra.deadline)?.includes("retard") ? "text-red-500" : "text-gray-700")} style={{ fontSize: compact ? 11 : 12 }}>
+                <p className={cn("truncate text-xs", deadlineLabel(extra.deadline)?.includes("retard") ? "text-red-500" : "text-gray-600")} style={{ fontSize: compact ? 10 : 11 }}>
                   {deadlineLabel(extra.deadline)}
                 </p>
               )}
               {/* Taille DTF AR */}
               {dtfSize && (
-                <p className="truncate font-mono" style={{ fontSize: compact ? 11 : 12, fontWeight: 600, color: "#555" }}>
+                <p className="truncate font-mono" style={{ fontSize: compact ? 11 : 12, fontWeight: 600, color: "#666" }}>
                   {dtfSize}
                 </p>
               )}
@@ -637,17 +637,11 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
 
         {/* ══ FOOTER: Collection, Référence, Taille, Note + Paiement ═════════ */}
         <div className="flex flex-col gap-0 border-t border-gray-200">
-          {/* Ligne 1: Collection, Référence, Taille */}
+          {/* Ligne 1: Référence, Taille */}
           <div className={cn(
             "flex items-center justify-between overflow-hidden border-b border-gray-200",
             compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
           )}>
-            {/* Collection */}
-            {order.category && (
-              <span style={{ fontSize: compact ? 10 : 11, color: "#8e8e93" }}>
-                {order.category}
-              </span>
-            )}
             {/* Référence */}
             <span style={{ fontSize: compact ? 9 : 10, fontFamily: "monospace", color: "#aeaeb2", fontWeight: 500 }}>
               {reference}

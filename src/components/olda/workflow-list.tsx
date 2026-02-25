@@ -166,16 +166,16 @@ function WorkflowItemRow({
             </span>
           )}
 
-          {/* Quick delete button (visible on hover) */}
+          {/* Trash icon - visible on hover */}
           {!isEditing && (
             <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              whileHover={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0 }}
+              whileHover={{ opacity: 1 }}
               onClick={(e) => {
                 e.stopPropagation();
                 handleDelete();
               }}
-              className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+              className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
             >
               <Trash2 className="h-4 w-4" />
             </motion.button>

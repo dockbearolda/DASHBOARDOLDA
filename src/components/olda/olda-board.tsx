@@ -20,6 +20,20 @@ import { TshirtOrderCard } from "./tshirt-order-card";
 import { DTFProductionTable } from "./dtf-production-table";
 import { PRTRequestPanel } from "./prt-request-panel";
 import { WorkflowListsGrid } from "./workflow-list";
+import { PRTManager } from "./prt-manager";
+
+interface PRTItem {
+  id: string;
+  clientName: string;
+  dimensions: string;
+  design: string;
+  color: string;
+  quantity: number;
+  done: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -421,6 +435,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [notesReady, setNotesReady]     = useState(false);
   const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'prt' | 'production_dtf' | 'workflow'>('flux');
   const [workflowItems, setWorkflowItems] = useState<WorkflowItem[]>([]);
+  const [prtItems, setPrtItems] = useState<PRTItem[]>([]);
 
   // ── Session temporelle ────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
@@ -597,6 +612,17 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
+  // ── PRT items ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/prt-requests")
+      .then((r) => r.json())
+      .then((data) => {
+        setPrtItems(data.items ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
   // ── Connexion utilisateur ──────────────────────────────────────────────────
   const handleLogin = useCallback((name: string) => {
     const s = saveSession(name);
@@ -674,7 +700,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+          <div className="flex flex-col gap-6">
+            <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+            {/* ── PRTManager pour Loïc uniquement ── */}
+            {session.name === 'loic' && (
+              <PRTManager items={prtItems} onItemsChange={setPrtItems} />
+            )}
+          </div>
         </div>
 
         {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}

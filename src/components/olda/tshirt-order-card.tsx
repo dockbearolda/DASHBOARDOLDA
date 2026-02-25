@@ -11,7 +11,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { X, Upload, AlertCircle, Package, Printer, Pencil } from "lucide-react";
+import { X, Upload, AlertCircle, Package, Printer, Pencil, ChevronDown } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -472,6 +472,7 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
   const [modalOpen, setModalOpen] = useState(false);
   const [editOpen,  setEditOpen]  = useState(false);
   const [showOrderId, setShowOrderId] = useState(false);
+  const [accordeonOpen, setAccordeonOpen] = useState(false);
 
   const qrValue = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
 
@@ -516,8 +517,16 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
             : "border-gray-200/80"
         )}
       >
-        {/* ── Boutons d'action — Éditer (bleu) + Supprimer (rouge) ── */}
+        {/* ── Boutons d'action — Imprimer + Éditer (bleu) + Supprimer (rouge) ── */}
         <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150">
+          {/* Imprimer */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setModalOpen(true); }}
+            title="Imprimer la fiche"
+            className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-gray-200 shadow-sm hover:bg-blue-50 hover:border-blue-300 transition-colors"
+          >
+            <Printer className="h-2.5 w-2.5 text-gray-400" />
+          </button>
           {/* Éditer */}
           <button
             onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
@@ -544,10 +553,9 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
         {/* ══ HEADER: QR gauche + Données brutes droite ══════════════════════ */}
         <div
           className={cn(
-            "flex items-stretch cursor-pointer select-none w-full border-b border-gray-200",
+            "flex items-stretch cursor-default select-none w-full border-b border-gray-200",
             compact ? "h-[84px]" : "h-[96px]",
           )}
-          onClick={() => setModalOpen(true)}
         >
           {/* ─ QR Code gauche — bords arrondis 8px, ID masqué ─ */}
           {origin && (
@@ -635,56 +643,69 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
           </div>
         </div>
 
-        {/* ══ FOOTER: Collection, Référence, Taille, Note + Paiement ═════════ */}
-        <div className="flex flex-col gap-0 border-t border-gray-200">
-          {/* Ligne 1: Référence, Taille */}
-          <div className={cn(
-            "flex items-center justify-between overflow-hidden border-b border-gray-200",
-            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
-          )}>
-            {/* Référence */}
-            <span style={{ fontSize: compact ? 9 : 10, fontFamily: "monospace", color: "#aeaeb2", fontWeight: 500 }}>
-              {reference}
-            </span>
-            {/* Taille */}
-            {dtfSize && (
-              <span style={{ fontSize: compact ? 10 : 11, color: "#555", fontWeight: 600 }}>
-                {dtfSize}
-              </span>
-            )}
-          </div>
+        {/* ══ Chevron accordéon — centré ═════════════════════════════════════ */}
+        <button
+          onClick={() => setAccordeonOpen(!accordeonOpen)}
+          className="w-full flex items-center justify-center py-1.5 border-t border-gray-100 hover:bg-gray-50 transition-colors"
+        >
+          <ChevronDown
+            className="h-3.5 w-3.5 text-gray-400 transition-transform duration-300"
+            style={{ transform: accordeonOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+          />
+        </button>
 
-          {/* Ligne 2: Note (si existe) */}
-          {order.notes?.trim() && (
-            <div className={cn(
-              "border-b border-gray-200 overflow-hidden",
-              compact ? "px-2.5 py-1.5" : "px-3 py-2"
-            )}>
-              <p style={{ fontSize: compact ? 10 : 11, color: "#666", fontStyle: "italic" }} className="truncate" title={order.notes}>
+        {/* ══ Section accordéon CSS natif ═════════════════════════════════════ */}
+        <div
+          style={{
+            maxHeight: accordeonOpen ? "400px" : "0px",
+            overflow: "hidden",
+            transition: "max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+        >
+          <div className={cn("flex flex-col gap-0 border-t border-gray-100", compact ? "px-2.5 pb-2" : "px-3 pb-3")}>
+
+            {/* Statut paiement */}
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-1.5">
+                <PaymentDot status={order.paymentStatus} />
+                <span style={{ fontSize: compact ? 10 : 11, color: "#8e8e93" }}>
+                  {order.paymentStatus === "PAID" ? "Payé" : "Non payé"}
+                </span>
+              </div>
+            </div>
+
+            {/* Référence */}
+            <p className="font-mono truncate pt-1.5" style={{ fontSize: compact ? 9 : 10, color: "#aeaeb2" }}>
+              {reference}
+            </p>
+
+            {/* Collection */}
+            {extra.collection && (
+              <p className="truncate" style={{ fontSize: compact ? 10 : 11, color: "#8e8e93" }}>
+                {extra.collection}
+              </p>
+            )}
+
+            {/* Taille produit */}
+            {extra.taille && (
+              <p className="truncate" style={{ fontSize: compact ? 10 : 11, color: "#555", fontWeight: 600 }}>
+                {extra.taille}
+              </p>
+            )}
+
+            {/* Note */}
+            {order.notes?.trim() && (
+              <p className="truncate italic" style={{ fontSize: compact ? 10 : 11, color: "#666" }} title={order.notes}>
                 {order.notes}
               </p>
-            </div>
-          )}
+            )}
 
-          {/* Ligne 3: Statut paiement + Prix */}
-          <div className={cn(
-            "flex items-center justify-between",
-            compact ? "px-2.5 py-1.5" : "px-3 py-2"
-          )}>
-            <div className="flex items-center gap-1.5">
-              <PaymentDot status={order.paymentStatus} />
-              <span style={{ fontSize: compact ? 10 : 11, color: "#8e8e93" }}>
-                {order.paymentStatus === "PAID" ? "Payé" : "Non payé"}
-              </span>
-            </div>
-            <span style={{
-              fontSize: compact ? 13 : 14,
-              fontWeight: 700,
-              color: "#1d1d1f",
-              fontFamily: "monospace"
-            }} className="tabular-nums">
-              {fmtPrice(order.total, currency)}
-            </span>
+            {/* ID — visible au clic sur QR */}
+            {showOrderId && (
+              <p className="font-mono truncate" style={{ fontSize: 9, color: "#aeaeb2" }}>
+                {order.id}
+              </p>
+            )}
           </div>
         </div>
 

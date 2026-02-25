@@ -18,6 +18,7 @@ import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
 import { TshirtOrderCard } from "./tshirt-order-card";
 import { DTFProductionTable } from "./dtf-production-table";
+import { PRTRequestPanel } from "./prt-request-panel";
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -674,11 +675,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           />
         </div>
 
-        {/* ══ VUE PRT — Placeholder ══════════════════════════════════════════ */}
+        {/* ══ VUE PRT — Demandes vers Loïc ═══════════════════════════════════ */}
         <div className={cn(viewTab !== 'prt' && 'hidden')}>
-          <div className="flex items-center justify-center h-32 text-[13px] text-gray-300">
-            Commandes PRT à produire
-          </div>
+          <PRTRequestPanel activeUser={session.name} />
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}

@@ -15,6 +15,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TodoItem } from "./person-note-modal";
@@ -45,6 +46,79 @@ function apiSave(key: string, todos: TodoItem[]) {
     headers: { "Content-Type": "application/json" },
     body:    JSON.stringify({ todos }),
   }).catch(() => {});
+}
+
+// ── SwipeableTodoRow — Apple-style swipe-to-dismiss ──────────────────────────
+
+function SwipeableTodoRow({
+  isEditing,
+  onDismiss,
+  children,
+}: {
+  isEditing: boolean;
+  onDismiss: () => void;
+  children: React.ReactNode;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const x = useMotionValue(0);
+
+  // Opacité progressive (fade to 20% at threshold)
+  const opacity = useTransform(x, [-150, 0, 150], [0.2, 1, 0.2]);
+
+  // Fond rouge derrière (progresse jusqu'à 18% opacity)
+  const bgOpacity = useTransform(
+    x,
+    [-150, -30, 0, 30, 150],
+    [0.18, 0.08, 0, 0.08, 0.18]
+  );
+
+  const handleDragEnd = (_: any, info: any) => {
+    const containerWidth = containerRef.current?.offsetWidth ?? 200;
+    const threshold = containerWidth * 0.5;
+    const offset = info.offset.x;
+
+    if (Math.abs(offset) > threshold) {
+      // Threshold atteint → suppression avec animation de sortie
+      navigator.vibrate?.(40); // Haptic si supporté
+      animate(x, offset > 0 ? 600 : -600, { duration: 0.2 });
+      setTimeout(onDismiss, 180);
+    } else {
+      // Ressort élastique de retour à zéro
+      animate(x, 0, {
+        type: "spring",
+        stiffness: 400,
+        damping: 30,
+      });
+    }
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative overflow-hidden rounded-md"
+    >
+      {/* Fond rouge derrière la ligne */}
+      <motion.div
+        className="absolute inset-0 rounded-md bg-red-500"
+        style={{ opacity: bgOpacity }}
+      />
+
+      {/* Ligne swipeable */}
+      <motion.div
+        style={{
+          x,
+          opacity,
+          position: "relative",
+        }}
+        drag={isEditing ? false : "x"}
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.3}
+        onDragEnd={handleDragEnd}
+      >
+        {children}
+      </motion.div>
+    </div>
+  );
 }
 
 // ── ReminderCard ───────────────────────────────────────────────────────────────
@@ -219,16 +293,20 @@ function ReminderCard({
         )}
 
         {todos.map((todo) => (
-          <div
+          <SwipeableTodoRow
             key={todo.id}
-            className={cn(
-              "flex items-center gap-2 w-full rounded-md -mx-1 px-1 py-[3px]",
-              "transition-colors",
-              editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:bg-gray-50",
-            )}
-            draggable={editingId !== todo.id}
-            onDragStart={(e) => handleDragStart(e, todo)}
+            isEditing={editingId === todo.id}
+            onDismiss={() => onUpdate(todos.filter(t => t.id !== todo.id))}
           >
+            <div
+              className={cn(
+                "flex items-center gap-2 w-full rounded-md -mx-1 px-1 py-[3px]",
+                "transition-colors",
+                editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:bg-gray-50",
+              )}
+              draggable={editingId !== todo.id}
+              onDragStart={(e) => handleDragStart(e, todo)}
+            >
             {/* Cercle toggle ✓ */}
             <button
               onClick={(e) => { e.stopPropagation(); toggle(todo.id); }}
@@ -265,7 +343,8 @@ function ReminderCard({
                 {todo.text}
               </span>
             )}
-          </div>
+            </div>
+          </SwipeableTodoRow>
         ))}
 
         {/* Input ajout rapide */}

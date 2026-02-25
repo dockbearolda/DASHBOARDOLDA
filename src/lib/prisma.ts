@@ -1,37 +1,24 @@
 import { PrismaClient } from "@/generated/prisma/client";
 
 function createPrismaClient() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    // Build time without DATABASE_URL
+  // For build-time when DATABASE_URL is not available, return a placeholder
+  if (!process.env.DATABASE_URL) {
     console.warn("DATABASE_URL not set — Prisma will not connect to a database");
-    // @ts-ignore
-    return new PrismaClient();
+    return new (PrismaClient as any)({ datasourceUrl: "postgresql://localhost/placeholder" });
   }
 
-  // SQLite (local development)
-  if (databaseUrl.startsWith("file:")) {
-    // @ts-ignore
-    return new PrismaClient();
+  // Use PostgreSQL with PrismaPg adapter for production and development
+  try {
+    const { PrismaPg } = require("@prisma/adapter-pg");
+    const { Pool } = require("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const adapter = new PrismaPg(pool);
+    return new PrismaClient({ adapter } as any);
+  } catch (error) {
+    // Fallback if adapter not available
+    console.warn("PostgreSQL adapter not available, using default connection");
+    return new (PrismaClient as any)({});
   }
-
-  // PostgreSQL (production)
-  if (databaseUrl.startsWith("postgres")) {
-    try {
-      const { PrismaPg } = require("@prisma/adapter-pg");
-      const { Pool } = require("pg");
-      const pool = new Pool({ connectionString: databaseUrl });
-      const adapter = new PrismaPg(pool);
-      return new PrismaClient({ adapter } as any);
-    } catch (error) {
-      console.warn("PostgreSQL adapter not available, using default connection");
-      // @ts-ignore
-      return new PrismaClient();
-    }
-  }
-
-  return new PrismaClient();
 }
 
 const globalForPrisma = globalThis as unknown as {

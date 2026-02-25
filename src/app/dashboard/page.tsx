@@ -65,9 +65,9 @@ async function getDashboardData() {
     updatedAt: o.updatedAt instanceof Date ? (o.updatedAt as Date).toISOString() : String(o.updatedAt),
   }));
 
-  const totalRevenue = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
-  const todayRevenue = todayRows.reduce((s, o) => s + (Number(o.total) || 0), 0);
-  const yesterdayRevenue = yesterdayRows.reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const totalRevenue = orders.reduce((s: number, o: typeof orders[0]) => s + (Number(o.total) || 0), 0);
+  const todayRevenue = todayRows.reduce((s: number, o: typeof todayRows[0]) => s + (Number(o.total) || 0), 0);
+  const yesterdayRevenue = yesterdayRows.reduce((s: number, o: typeof yesterdayRows[0]) => s + (Number(o.total) || 0), 0);
 
   const revenueTrend =
     yesterdayRevenue > 0

@@ -99,7 +99,6 @@ model PRTRequest {
   clientName    String
   dimensions    String   // e.g. "30x40cm"
   design        String   // image URL or design name
-  designFileLink String? // Dropbox link to design file
   color         String   // e.g. "Blanc" or hex code
   quantity      Int      @default(1)
   done          Boolean  @default(false)

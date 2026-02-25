@@ -12,14 +12,12 @@ import { useState, useCallback, useMemo } from "react";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { Trash2, Plus, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DropboxFilePicker } from "./dropbox-file-picker";
 
 interface PRTItem {
   id: string;
   clientName: string;
   dimensions: string;
   design: string;
-  designFileLink?: string;
   color: string;
   quantity: number;
   done: boolean;
@@ -302,69 +300,32 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
                     />
 
                     {/* Design (1fr) */}
-                    <div className={cn(CELL_CLASS, "flex items-center justify-between gap-2")}>
-                      <input
-                        type="text"
-                        value={item.design}
-                        onChange={(e) => {
-                          const updated = items.map((i) =>
-                            i.id === item.id ? { ...i, design: e.target.value } : i
-                          );
-                          onItemsChange?.(updated);
-                        }}
-                        onBlur={async () => {
-                          try {
-                            await fetch(`/api/prt-requests/${item.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ design: item.design }),
-                            });
-                          } catch (err) {
-                            console.error("Failed to update:", err);
-                          }
-                        }}
-                        className="flex-1 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
-                        placeholder="Design"
-                      />
-                      <DropboxFilePicker
-                        fileLink={item.designFileLink}
-                        dropboxPath={`/prt-designs/${item.id}`}
-                        onFileSelect={async (link, fileName) => {
-                          const updated = items.map((i) =>
-                            i.id === item.id
-                              ? { ...i, designFileLink: link }
-                              : i
-                          );
-                          onItemsChange?.(updated);
-                          try {
-                            await fetch(`/api/prt-requests/${item.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ designFileLink: link }),
-                            });
-                          } catch (err) {
-                            console.error("Failed to update file link:", err);
-                          }
-                        }}
-                        onClear={async () => {
-                          const updated = items.map((i) =>
-                            i.id === item.id
-                              ? { ...i, designFileLink: undefined }
-                              : i
-                          );
-                          onItemsChange?.(updated);
-                          try {
-                            await fetch(`/api/prt-requests/${item.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ designFileLink: null }),
-                            });
-                          } catch (err) {
-                            console.error("Failed to clear file link:", err);
-                          }
-                        }}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={item.design}
+                      onChange={(e) => {
+                        const updated = items.map((i) =>
+                          i.id === item.id ? { ...i, design: e.target.value } : i
+                        );
+                        onItemsChange?.(updated);
+                      }}
+                      onBlur={async () => {
+                        try {
+                          await fetch(`/api/prt-requests/${item.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ design: item.design }),
+                          });
+                        } catch (err) {
+                          console.error("Failed to update:", err);
+                        }
+                      }}
+                      className={cn(
+                        CELL_CLASS,
+                        "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
+                      )}
+                      placeholder="Design"
+                    />
 
                     {/* Color (1fr) */}
                     <input

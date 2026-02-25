@@ -208,7 +208,7 @@ function OrderFicheModal({
               )}>
                 {deadlineTxt
                   ? <><AlertCircle className="h-2.5 w-2.5 shrink-0" />{deadlineTxt}</>
-                  : <span className="text-gray-300">Deadline : —</span>
+                  : <span className="text-gray-300">Limit : —</span>
                 }
               </p>
               <p className="text-[12px] text-gray-500 truncate">
@@ -467,8 +467,9 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete }: {
   const { localImages, addImage } = useLocalImages(order.id);
   const displayImages = serverImages.length > 0 ? serverImages : localImages;
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editOpen,  setEditOpen]  = useState(false);
+  const [modalOpen, setModalOpen]       = useState(false);
+  const [editOpen,  setEditOpen]        = useState(false);
+  const [noteExpanded, setNoteExpanded] = useState(false);
 
   const qrValue = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
 
@@ -487,6 +488,15 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete }: {
     });
   };
 
+  // Couleur de bordure subtile selon la catégorie
+  const categoryColor = (() => {
+    const cat = (order.category ?? "").toLowerCase();
+    if (cat.includes("mug") || cat.includes("tasse")) return "border-cyan-100";
+    if (cat.includes("polo") || cat.includes("sweat")) return "border-purple-100";
+    if (cat.includes("sac") || cat.includes("accessoire")) return "border-orange-100";
+    return "border-gray-200/80";
+  })();
+
   return (
     <>
       {/* ── Card shell — Bulle Apple 24px ── */}
@@ -495,9 +505,10 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete }: {
           "relative group/card rounded-[24px] bg-white border overflow-hidden",
           "transition-all duration-200 select-none [touch-action:manipulation]",
           "shadow-[0_1px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)] hover:border-gray-300",
+          "h-[120px] flex flex-col",
           isNew
             ? "border-blue-400/60 ring-2 ring-blue-400/30 animate-fade-up"
-            : "border-gray-200/80"
+            : categoryColor
         )}
       >
         {/* ── Boutons d'action — Éditer (bleu) + Supprimer (rouge) ── */}
@@ -529,7 +540,7 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete }: {
 
         {/* ══ Layout horizontal : QR gauche · Infos droite ═══════════════════ */}
         <div
-          className="flex items-stretch cursor-pointer select-none"
+          className="flex items-stretch cursor-pointer select-none flex-1 min-h-0"
           onClick={() => setModalOpen(true)}
         >
           {/* ─ Colonne gauche : QR Code uniquement ─ */}
@@ -542,7 +553,7 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete }: {
           )}
 
           {/* ─ Colonne droite : Identité · Production · Prix ─ */}
-          <div className="flex-1 min-w-0 flex flex-col justify-between px-3 py-3 gap-2.5">
+          <div className="flex-1 min-w-0 flex flex-col justify-between px-3 py-3 gap-2.5 overflow-hidden">
 
             {/* Bloc Identité */}
             <div className="flex flex-col gap-[3px]">
@@ -586,18 +597,33 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete }: {
           </div>
         </div>
 
-        {/* ── Section Note — affichée uniquement si order.notes existe ── */}
-        {order.notes && (
+        {/* ── Section Note — affichée uniquement si order.notes existe et non-vide ── */}
+        {order.notes?.trim() && (
           <div
-            className="border-t border-gray-100 px-3 py-2.5"
+            className="border-t border-gray-100 px-3 py-2 shrink-0 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#aeaeb2", marginBottom: 3 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#aeaeb2", marginBottom: 2 }}>
               Note
             </p>
-            <p style={{ fontSize: 12, color: "#8e8e93", fontStyle: "italic", lineHeight: 1.45 }}>
-              {order.notes}
-            </p>
+            <div className="flex items-start gap-1.5">
+              <p className="flex-1 text-[11px] text-gray-600 leading-tight" style={{
+                display: noteExpanded ? "block" : "-webkit-box",
+                WebkitLineClamp: noteExpanded ? undefined : 1,
+                WebkitBoxOrient: "vertical",
+                overflow: noteExpanded ? "visible" : "hidden"
+              }}>
+                {order.notes}
+              </p>
+              {!noteExpanded && order.notes.length > 40 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setNoteExpanded(true); }}
+                  className="shrink-0 text-[10px] font-semibold text-blue-500 hover:text-blue-600 transition-colors"
+                >
+                  …
+                </button>
+              )}
+            </div>
           </div>
         )}
 

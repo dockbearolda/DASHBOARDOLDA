@@ -107,6 +107,8 @@ export interface OldaExtraData {
   // ── Prix (en centimes) ──
   prix?: {
     total?: number;            // Montant total en centimes
+    tshirt?: number;           // Prix T-shirt nu en centimes
+    personnalisation?: number; // Prix personnalisation DTF/Pressage en centimes
   };
 
   // ── Marqueur d'origine ──
@@ -138,6 +140,8 @@ export interface OldaCommandePayload {
   };
   prix?: {
     total?: number;          // En centimes
+    tshirt?: number;         // Prix T-shirt nu en centimes
+    personnalisation?: number; // Prix personnalisation en centimes
   };
   paiement?: {
     statut?: "OUI" | "NON";  // OUI = PAID, NON = PENDING

@@ -1,12 +1,16 @@
 "use client";
 
 /**
- * OrderCard (Refonte Apple Premium + Accordéon)
- * ─ Bulle fermée (Apple design: 18px coins, #FFFFFF, #E5E5E5 bordure, SF Pro)
- * ─ Accordéon pour détails secondaires
- * ─ Mode print optimisé (A4, images agrandies, UI masquée)
- * ─ Aucun label (juste valeurs: "XL" pas "Taille : XL")
- * ─ Valeurs vides = rien affiché
+ * OrderCard (Vue Principale – Design Apple)
+ * ─ Layout horizontal : QR Code (gauche, 100px) + Données alignées (droite)
+ * ─ QR Code dans conteneur carré borduré (~100px, padding, bordure fine)
+ * ─ Identité : NOM UPPERCASE font-bold + Prénom font-medium + Téléphone discret
+ * ─ Logistique : Badge limite de rendu (coloré selon urgence) + Référence commande
+ * ─ Visuels : miniatures Avant/Arrière avec badges + indicateur "DOS VIERGE"
+ * ─ Note client : italique avec icône 📝 — toujours visible
+ * ─ Facturation : T-shirt + Personnalisation + TOTAL coloré (vert payé / rouge impayé)
+ * ─ Accordéon pour détails de production secondaires (PRT, collection, taille)
+ * ─ Mode print optimisé A4
  */
 
 import { useState, useEffect } from "react";
@@ -17,9 +21,8 @@ import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { OldaExtraData } from "@/types/order";
 
-// ── Hooks utilitaires ──────────────────────────────────────────────────────
+// ── Hooks utilitaires ──────────────────────────────────────────────────────────
 
-/** Retourne l'URL d'origine du dashboard (client-side only) */
 function useOrigin() {
   const [o, setO] = useState("");
   useEffect(() => {
@@ -28,7 +31,6 @@ function useOrigin() {
   return o;
 }
 
-/** Lit les images locales depuis localStorage */
 function useLocalImages(orderId: string) {
   const key = `olda-images-${orderId}`;
   const [imgs, setImgs] = useState<string[]>([]);
@@ -36,9 +38,7 @@ function useLocalImages(orderId: string) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(key);
-      if (stored) {
-        setImgs(JSON.parse(stored) as string[]);
-      }
+      if (stored) setImgs(JSON.parse(stored) as string[]);
     } catch {
       // ignore
     }
@@ -59,13 +59,11 @@ function useLocalImages(orderId: string) {
   return { localImages: imgs, addImage };
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Convertit centimes → "15,00 €" */
 function fmtPrice(centimes: number | undefined): string {
   if (!centimes) return "0,00 €";
-  const euros = centimes / 100;
-  return euros.toLocaleString("fr-FR", {
+  return (centimes / 100).toLocaleString("fr-FR", {
     style: "currency",
     currency: "EUR",
     minimumFractionDigits: 2,
@@ -73,30 +71,120 @@ function fmtPrice(centimes: number | undefined): string {
   });
 }
 
-/** Détecte si c'est un code DTF (pas une URL) */
 function isDtfCode(s: string | undefined | null): boolean {
   if (!s) return false;
   return !s.startsWith("http") && !s.startsWith("data:");
 }
 
-/** Génère le label "limit" : "Dans 3j · 15 jan" | "Aujourd'hui !" | "⚠️ En retard" */
-function limitLabel(limit: string | undefined | null): string | null {
+type DeadlineState = "overdue" | "today" | "tomorrow" | "soon" | "normal";
+
+function getDeadlineInfo(
+  limit: string | undefined | null
+): { label: string; state: DeadlineState } | null {
   if (!limit) return null;
   try {
     const d = new Date(limit);
-    if (isNaN(d.getTime())) return limit; // texte brut non parseable
+    if (isNaN(d.getTime())) return { label: limit, state: "normal" };
 
     const diff = differenceInCalendarDays(d, new Date());
-    if (diff < 0) return `⚠️ En retard (${Math.abs(diff)}j)`;
-    if (diff === 0) return "Aujourd'hui !";
-    if (diff === 1) return "Demain";
-    return `Dans ${diff}j · ${format(d, "d MMM", { locale: fr })}`;
+    if (diff < 0)
+      return { label: `En retard (${Math.abs(diff)}j)`, state: "overdue" };
+    if (diff === 0) return { label: "Aujourd'hui !", state: "today" };
+    if (diff === 1) return { label: "Demain", state: "tomorrow" };
+    if (diff <= 3)
+      return {
+        label: `Dans ${diff}j · ${format(d, "d MMM", { locale: fr })}`,
+        state: "soon",
+      };
+    return {
+      label: `Dans ${diff}j · ${format(d, "d MMM", { locale: fr })}`,
+      state: "normal",
+    };
   } catch {
-    return limit;
+    return { label: limit, state: "normal" };
   }
 }
 
-// ── Composant Principal ────────────────────────────────────────────────────
+// ── Sous-composants ────────────────────────────────────────────────────────────
+
+function DeadlineBadge({
+  label,
+  state,
+}: {
+  label: string;
+  state: DeadlineState;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium leading-none",
+        state === "overdue" &&
+          "bg-red-50 text-red-600 border border-red-200",
+        state === "today" &&
+          "bg-orange-50 text-orange-600 border border-orange-200",
+        state === "tomorrow" &&
+          "bg-amber-50 text-amber-600 border border-amber-200",
+        state === "soon" &&
+          "bg-blue-50 text-blue-600 border border-blue-200",
+        state === "normal" &&
+          "bg-gray-50 text-gray-500 border border-gray-200"
+      )}
+    >
+      {state === "overdue" && <span>⚠️</span>}
+      {state === "today" && <span className="block w-1.5 h-1.5 rounded-full bg-orange-500" />}
+      {label}
+    </span>
+  );
+}
+
+function VisualThumbnail({
+  src,
+  label,
+  isDtf,
+}: {
+  src: string;
+  label: string;
+  isDtf: boolean;
+}) {
+  return (
+    <div className="relative pt-3">
+      <span className="absolute top-0 left-1 z-10 bg-[#1d1d1f]/75 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider leading-none">
+        {label}
+      </span>
+      {isDtf ? (
+        <div className="w-16 h-16 rounded-xl border border-[#E5E5E5] bg-gray-50 flex items-center justify-center p-1.5 text-[8px] font-mono text-gray-600 text-center overflow-hidden leading-tight">
+          {src}
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={label}
+          className="w-16 h-16 rounded-xl border border-[#E5E5E5] object-cover"
+        />
+      )}
+    </div>
+  );
+}
+
+function EmptyBackIndicator() {
+  return (
+    <div className="relative pt-3">
+      <span className="absolute top-0 left-1 z-10 bg-[#1d1d1f]/75 text-white text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider leading-none">
+        Arrière
+      </span>
+      <div className="w-16 h-16 rounded-xl border border-dashed border-gray-300 bg-gray-50/60 flex flex-col items-center justify-center gap-0.5">
+        <span className="text-gray-300 text-[9px] font-semibold uppercase tracking-wider leading-tight">
+          Dos
+        </span>
+        <span className="text-gray-300 text-[9px] font-semibold uppercase tracking-wider leading-tight">
+          vierge
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Props ──────────────────────────────────────────────────────────────────────
 
 export interface OrderCardProps {
   data: OldaExtraData;
@@ -105,56 +193,67 @@ export interface OrderCardProps {
   onEdit?: () => void;
 }
 
-export function OrderCard({
-  data,
-  orderId = "unknown",
-}: OrderCardProps) {
+// ── Composant Principal ────────────────────────────────────────────────────────
+
+export function OrderCard({ data, orderId = "unknown" }: OrderCardProps) {
   const origin = useOrigin();
   const { localImages } = useLocalImages(orderId);
-
-  // ── État d'accordéon ──
   const [isOpen, setIsOpen] = useState(false);
 
-  // ── Extraire et formater les données ──
+  // ── Extraction des données ──
   const commande = data.commande || "";
   const prenom = data.prenom || "";
   const nom = data.nom || "";
   const telephone = data.telephone || "";
-  const limitTxt = limitLabel(data.limit);
+  const deadline = getDeadlineInfo(data.limit);
+  const reference = data.reference;
 
-  // Images: priorité images locales, puis fiche.visuelAvant/Arrière
+  // Visuels : priorité images locales, puis fiche
   const visuelAvant = localImages[0] || data.fiche?.visuelAvant;
   const visuelArriere = localImages[1] || data.fiche?.visuelArriere;
 
-  // Infos immédiates (ligne discrète)
+  // Infos produit (accordéon)
   const typeProduit = data.fiche?.typeProduit;
   const couleur = data.fiche?.couleur;
   const tailleDTF = data.fiche?.tailleDTFAr;
 
-  // Détails accordéon
+  // Détails secondaires (accordéon)
   const collection = data.collection;
-  const reference = data.reference;
   const taille = data.taille;
   const note = data.note;
-
-  // Impression
   const refPrt = data.prt?.refPrt;
   const taillePrt = data.prt?.taillePrt;
   const quantite = data.prt?.quantite;
 
-  // Prix
-  const prix = data.prix?.total;
+  // Paiement & prix
+  const isPaid =
+    data.paiement?.statut === "OUI" || data.paiement?.statut === "PAID";
+  const prix = data.prix;
+  const hasBilling =
+    prix?.tshirt !== undefined ||
+    prix?.personnalisation !== undefined ||
+    prix?.total !== undefined;
 
-  // QR code
-  const qrValue = origin && commande
-    ? `${origin}/dashboard/orders/${orderId}`
-    : commande || "olda";
+  // QR Code URL
+  const qrValue =
+    origin && commande
+      ? `${origin}/dashboard/orders/${orderId}`
+      : commande || "olda";
 
-  // ── Rendu ──────────────────────────────────────────────────────────────
+  const hasAccordionContent = !!(
+    collection ||
+    taille ||
+    typeProduit ||
+    couleur ||
+    tailleDTF ||
+    refPrt
+  );
+
+  // ── Rendu ──────────────────────────────────────────────────────────────────
 
   return (
     <>
-      {/* Styles de print */}
+      {/* ── Styles d'impression ── */}
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -179,14 +278,15 @@ export function OrderCard({
         }
       `}</style>
 
-      {/* ══ MODE PRINT (seul ce bloc s'affiche à l'impression) ═════════════ */}
+      {/* ══ MODE PRINT ══════════════════════════════════════════════════════════ */}
       <div className="olda-card-print hidden print:block">
         <div className="text-center space-y-4">
           <div>
-            <h1 className="text-2xl font-bold">{prenom} {nom}</h1>
+            <h1 className="text-2xl font-bold">
+              {prenom} {nom}
+            </h1>
             {telephone && <p className="text-sm text-gray-600">{telephone}</p>}
           </div>
-
           {visuelAvant && (
             <div>
               <p className="text-xs font-semibold text-gray-400 mb-2">AVANT</p>
@@ -199,7 +299,6 @@ export function OrderCard({
               )}
             </div>
           )}
-
           {visuelArriere && (
             <div>
               <p className="text-xs font-semibold text-gray-400 mb-2">ARRIÈRE</p>
@@ -215,110 +314,163 @@ export function OrderCard({
         </div>
       </div>
 
-      {/* ══ MODE ÉCRAN (bulle + accordéon) ═════════════════════════════════ */}
+      {/* ══ MODE ÉCRAN ══════════════════════════════════════════════════════════ */}
       <div className="print:hidden">
-        {/* BULLE FERMÉE */}
+
+        {/* ── Carte principale ── */}
         <div
           className={cn(
-            "rounded-[18px] border border-[#E5E5E5] bg-white p-4",
-            "shadow-[0_1px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)]",
-            "transition-all duration-200",
-            "font-[-apple-system, BlinkMacSystemFont, 'SF Pro Display', Inter, sans-serif]"
+            "rounded-2xl border border-[#E5E5E5] bg-white",
+            "shadow-sm hover:shadow-md",
+            "transition-shadow duration-200",
+            "p-4"
           )}
         >
-          {/* Header: QR + Identité */}
+          {/* Layout flex horizontal : QR Code | Données */}
           <div className="flex gap-4 items-start">
-            {/* QR Code — 64×64px */}
+
+            {/* ▌BLOC GAUCHE : QR Code ▌ */}
             {commande && (
               <div className="shrink-0">
-                <QRCodeSVG
-                  value={qrValue}
-                  size={64}
-                  bgColor="#ffffff"
-                  fgColor="#1d1d1f"
-                  level="M"
-                />
+                <div className="w-[108px] h-[108px] border border-[#E5E5E5] rounded-xl p-1.5 flex items-center justify-center bg-white">
+                  <QRCodeSVG
+                    value={qrValue}
+                    size={92}
+                    bgColor="#ffffff"
+                    fgColor="#1d1d1f"
+                    level="M"
+                  />
+                </div>
               </div>
             )}
 
-            {/* Identité (PRENOM NOM en bold UPPERCASE) */}
-            <div className="flex-1">
-              {(prenom || nom) && (
-                <p className="text-base font-bold uppercase leading-tight">
-                  {prenom} {nom}
-                </p>
+            {/* ▌BLOC DROITE : Données alignées ▌ */}
+            <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+
+              {/* 1. Identité & Contact */}
+              <div>
+                {(nom || prenom) && (
+                  <>
+                    <p className="text-sm font-bold uppercase tracking-wide leading-tight text-[#1d1d1f] truncate">
+                      {nom}
+                    </p>
+                    {prenom && (
+                      <p className="text-sm font-medium text-[#1d1d1f]/75 leading-tight truncate">
+                        {prenom}
+                      </p>
+                    )}
+                  </>
+                )}
+                {telephone && (
+                  <p className="text-xs text-gray-400 font-mono mt-0.5">
+                    {telephone}
+                  </p>
+                )}
+              </div>
+
+              {/* 2. Logistique : Deadline + Référence */}
+              {(deadline || reference) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {deadline && (
+                    <DeadlineBadge
+                      label={deadline.label}
+                      state={deadline.state}
+                    />
+                  )}
+                  {reference && (
+                    <span className="text-[11px] text-gray-400 font-mono">
+                      {reference}
+                    </span>
+                  )}
+                </div>
               )}
-              {telephone && (
-                <p className="text-sm text-gray-500 mt-1">{telephone}</p>
+
+              {/* 3. Visuels : miniatures Avant / Arrière */}
+              {visuelAvant && (
+                <div className="flex items-start gap-2.5">
+                  <VisualThumbnail
+                    src={visuelAvant}
+                    label="Avant"
+                    isDtf={isDtfCode(visuelAvant)}
+                  />
+                  {visuelArriere ? (
+                    <VisualThumbnail
+                      src={visuelArriere}
+                      label="Arrière"
+                      isDtf={isDtfCode(visuelArriere)}
+                    />
+                  ) : (
+                    <EmptyBackIndicator />
+                  )}
+                </div>
               )}
-              {limitTxt && (
-                <p className="text-sm text-gray-500 mt-0.5">{limitTxt}</p>
+              {!visuelAvant && visuelArriere && (
+                <div className="flex items-start gap-2.5">
+                  <VisualThumbnail
+                    src={visuelArriere}
+                    label="Arrière"
+                    isDtf={isDtfCode(visuelArriere)}
+                  />
+                </div>
+              )}
+
+              {/* 4. Note client */}
+              {note && (
+                <div className="flex items-start gap-1.5">
+                  <span className="text-xs mt-px select-none">📝</span>
+                  <p className="text-xs italic text-gray-500 leading-snug break-words min-w-0">
+                    {note}
+                  </p>
+                </div>
+              )}
+
+              {/* 5. Facturation */}
+              {hasBilling && (
+                <div className="border-t border-[#F0F0F0] pt-2 space-y-1">
+                  {prix?.tshirt !== undefined && (
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>T-shirt</span>
+                      <span className="font-mono">{fmtPrice(prix.tshirt)}</span>
+                    </div>
+                  )}
+                  {prix?.personnalisation !== undefined && (
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>Personnalisation</span>
+                      <span className="font-mono">
+                        {fmtPrice(prix.personnalisation)}
+                      </span>
+                    </div>
+                  )}
+                  {prix?.total !== undefined && (
+                    <div
+                      className={cn(
+                        "flex items-center justify-between text-sm font-bold",
+                        isPaid ? "text-green-600" : "text-red-500"
+                      )}
+                    >
+                      <span>Total</span>
+                      <span className="font-mono">{fmtPrice(prix.total)}</span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
 
-          {/* Visuels: Avant/Arrière côte à côte */}
-          {(visuelAvant || visuelArriere) && (
-            <div className="flex gap-3 mt-4">
-              {visuelAvant && (
-                <div className="flex-1">
-                  {isDtfCode(visuelAvant) ? (
-                    <div className="w-24 h-24 rounded-[12px] border border-[#E5E5E5] bg-gray-50 flex items-center justify-center p-2 text-xs font-mono text-gray-600 text-center overflow-hidden">
-                      {visuelAvant}
-                    </div>
-                  ) : (
-                    <img
-                      src={visuelAvant}
-                      alt="Avant"
-                      className="w-24 h-24 rounded-[12px] border border-[#E5E5E5] object-cover"
-                    />
-                  )}
-                </div>
-              )}
-              {visuelArriere && (
-                <div className="flex-1">
-                  {isDtfCode(visuelArriere) ? (
-                    <div className="w-24 h-24 rounded-[12px] border border-[#E5E5E5] bg-gray-50 flex items-center justify-center p-2 text-xs font-mono text-gray-600 text-center overflow-hidden">
-                      {visuelArriere}
-                    </div>
-                  ) : (
-                    <img
-                      src={visuelArriere}
-                      alt="Arrière"
-                      className="w-24 h-24 rounded-[12px] border border-[#E5E5E5] object-cover"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Infos Immédiates (ligne discrète: type · couleur · taille) */}
-          {(typeProduit || couleur || tailleDTF) && (
-            <p className="text-xs text-gray-500 mt-3">
-              {[typeProduit, couleur, tailleDTF].filter(Boolean).join(" · ")}
-            </p>
-          )}
-
-          {/* Footer: Prix */}
-          {prix !== undefined && (
-            <div className="flex justify-end mt-4">
-              <p className="text-lg font-bold">{fmtPrice(prix)}</p>
-            </div>
-          )}
-
-          {/* Chevron pour accordéon */}
-          {(collection || reference || taille || note || refPrt) && (
+          {/* Bouton accordéon */}
+          {hasAccordionContent && (
             <div className="flex justify-center mt-3">
               <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center justify-center h-6 w-6 rounded-full hover:bg-gray-100 transition-colors"
-                aria-label="Toggle accordion"
+                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors py-0.5"
+                aria-expanded={isOpen}
+                aria-label="Voir les détails de production"
               >
+                <span>{isOpen ? "Réduire" : "Détails production"}</span>
                 <ChevronDown
-                  size={18}
+                  size={13}
                   className={cn(
-                    "text-gray-400 transition-transform duration-200",
+                    "transition-transform duration-200",
                     isOpen && "rotate-180"
                   )}
                 />
@@ -327,45 +479,57 @@ export function OrderCard({
           )}
         </div>
 
-        {/* ACCORDÉON (détails déployés) */}
+        {/* ── Accordéon : détails secondaires ── */}
         {isOpen && (
           <div
             className={cn(
-              "rounded-b-[18px] border border-t-0 border-[#E5E5E5] bg-gray-50 p-4",
-              "space-y-3 text-sm"
+              "rounded-b-2xl border border-t-0 border-[#E5E5E5] bg-[#FAFAFA]",
+              "px-4 pb-4 pt-3 space-y-2"
             )}
           >
             {collection && (
-              <div>
-                <p className="text-gray-600">{collection}</p>
-              </div>
+              <p className="text-xs text-gray-500">
+                <span className="font-medium text-gray-400">Collection :</span>{" "}
+                {collection}
+              </p>
             )}
-
-            {reference && (
-              <div>
-                <p className="text-gray-600">{reference}</p>
-              </div>
-            )}
-
             {taille && (
-              <div>
-                <p className="text-gray-600">{taille}</p>
-              </div>
+              <p className="text-xs text-gray-500">
+                <span className="font-medium text-gray-400">Taille :</span>{" "}
+                {taille}
+              </p>
             )}
-
-            {note && (
-              <div>
-                <p className="text-gray-600 break-words">{note}</p>
-              </div>
+            {(typeProduit || couleur || tailleDTF) && (
+              <p className="text-xs text-gray-500">
+                {[typeProduit, couleur, tailleDTF].filter(Boolean).join(" · ")}
+              </p>
             )}
 
             {/* Bloc PRT */}
             {(refPrt || taillePrt || quantite !== undefined) && (
-              <div className="rounded-lg border border-[#E5E5E5] bg-white p-3">
+              <div className="rounded-xl border border-[#E5E5E5] bg-white p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+                  Impression
+                </p>
                 <div className="space-y-1 text-xs text-gray-500">
-                  {refPrt && <p>Ref: {refPrt}</p>}
-                  {taillePrt && <p>Taille: {taillePrt}</p>}
-                  {quantite !== undefined && <p>Qté: {quantite}</p>}
+                  {refPrt && (
+                    <p>
+                      <span className="font-medium text-gray-400">Réf :</span>{" "}
+                      {refPrt}
+                    </p>
+                  )}
+                  {taillePrt && (
+                    <p>
+                      <span className="font-medium text-gray-400">Taille :</span>{" "}
+                      {taillePrt}
+                    </p>
+                  )}
+                  {quantite !== undefined && (
+                    <p>
+                      <span className="font-medium text-gray-400">Qté :</span>{" "}
+                      {quantite}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

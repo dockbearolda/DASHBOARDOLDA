@@ -234,6 +234,11 @@ function PrintModal({
             <p style={{ fontSize: 18, fontWeight: 700, color: "#1d1d1f", marginTop: 2 }}>
               {extra.reference || order.orderNumber}
             </p>
+            {extra.fiche?.tailleDTFAr && (
+              <p style={{ fontSize: 13, color: "#8e8e93", marginTop: 2 }}>
+                {extra.fiche.tailleDTFAr}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button

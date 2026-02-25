@@ -9,7 +9,7 @@ import { useState, useCallback, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type DTFStatus = "en_cours" | "termine" | "erreur";
+export type DTFStatus = "a_produire" | "en_cours" | "termine" | "erreur";
 
 export interface DTFProductionRow {
   id: string;
@@ -23,7 +23,8 @@ function newId(): string {
 }
 
 const statusConfig: Record<DTFStatus, { label: string; color: string; bgLight: string }> = {
-  en_cours: { label: "En cours", color: "#ff9500", bgLight: "#fff3e0" },
+  a_produire: { label: "À produire", color: "#ff9500", bgLight: "#fff3e0" },
+  en_cours: { label: "En cours", color: "#0066ff", bgLight: "#e3f2fd" },
   termine: { label: "Terminé", color: "#28cd41", bgLight: "#e8f5e9" },
   erreur: { label: "Erreur", color: "#ff3b30", bgLight: "#ffebee" },
 };

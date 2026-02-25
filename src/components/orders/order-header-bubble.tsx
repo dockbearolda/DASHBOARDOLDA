@@ -1,6 +1,6 @@
 'use client';
 
-import { QRCode } from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -54,12 +54,11 @@ export function OrderHeaderBubble({ order }: OrderHeaderBubbleProps) {
     <div className="flex items-center gap-4 p-4 bg-white rounded-lg border border-gray-200">
       {/* QR Code - Left */}
       <div className="flex-shrink-0">
-        <QRCode
+        <QRCodeSVG
           value={order.commande}
           size={100}
           level="H"
           includeMargin={true}
-          renderAs="svg"
         />
       </div>
 

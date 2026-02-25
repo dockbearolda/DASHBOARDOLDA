@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import type { Order, OrderStatus } from "@/types/order";
+import type { Order, OrderStatus, WorkflowItem } from "@/types/order";
 import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteData, TodoItem } from "./person-note-modal";
@@ -19,6 +19,7 @@ import { RemindersGrid } from "./reminders-grid";
 import { TshirtOrderCard } from "./tshirt-order-card";
 import { DTFProductionTable } from "./dtf-production-table";
 import { PRTRequestPanel } from "./prt-request-panel";
+import { WorkflowListsGrid } from "./workflow-list";
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -418,7 +419,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'prt' | 'production_dtf'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'prt' | 'production_dtf' | 'workflow'>('flux');
+  const [workflowItems, setWorkflowItems] = useState<WorkflowItem[]>([]);
 
   // ── Session temporelle ────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
@@ -584,6 +586,17 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
+  // ── Workflow items ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/workflow-items")
+      .then((r) => r.json())
+      .then((data) => {
+        setWorkflowItems(data.items ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
   // ── Connexion utilisateur ──────────────────────────────────────────────────
   const handleLogin = useCallback((name: string) => {
     const s = saveSession(name);
@@ -634,7 +647,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 flex items-center gap-3 border-b border-gray-100">
         {/* Tabs — alignés à gauche */}
         <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80">
-          {(['flux', 'commandes', 'prt', 'production_dtf'] as const).map((v) => (
+          {(['flux', 'commandes', 'prt', 'production_dtf', 'workflow'] as const).map((v) => (
             <button
               key={v}
               onClick={() => setViewTab(v)}
@@ -646,7 +659,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                   : "text-gray-500 hover:text-gray-700"
               )}
             >
-              {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'prt' ? 'PRT' : 'Production'}
+              {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'prt' ? 'PRT' : v === 'production_dtf' ? 'Production' : 'Workflow'}
             </button>
           ))}
         </div>
@@ -683,6 +696,14 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
         <div className={cn(viewTab !== 'production_dtf' && 'hidden', 'h-full')}>
           <DTFProductionTable activeUser={session.name} />
+        </div>
+
+        {/* ══ VUE WORKFLOW — 4 listes de flux ══════════════════════════════════ */}
+        <div className={cn(viewTab !== 'workflow' && 'hidden')}>
+          <WorkflowListsGrid
+            items={workflowItems}
+            onItemsChange={setWorkflowItems}
+          />
         </div>
 
       </div>

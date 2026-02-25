@@ -168,3 +168,16 @@ export interface WebhookOrderPayload {
     imageUrl?: string;
   }[];
 }
+
+// ── Workflow Items ────────────────────────────────────────────────────────────
+
+export type WorkflowListType = "ACHAT" | "STANDARD" | "ATELIER" | "DTF";
+
+export interface WorkflowItem {
+  id: string;
+  listType: WorkflowListType;
+  title: string;
+  position: number;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}

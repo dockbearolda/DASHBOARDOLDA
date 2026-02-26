@@ -31,10 +31,11 @@ export async function POST(req: NextRequest) {
       color,
     } = body;
 
-    const lastItem = await prisma.planningItem.findFirst({
-      orderBy: { position: "desc" },
+    // Nouveau item avant tous les existants → apparaît en haut du tableau
+    const firstItem = await prisma.planningItem.findFirst({
+      orderBy: { position: "asc" },
     });
-    const position = (lastItem?.position ?? -1) + 1;
+    const position = (firstItem?.position ?? 1) - 1;
 
     const item = await prisma.planningItem.create({
       data: {

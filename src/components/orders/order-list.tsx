@@ -230,7 +230,7 @@ export function OrderList({ initialOrders, disableNavigation = false, refreshInt
                   </p>
                   {disableNavigation && order.items.length > 0 && (
                     <p className="text-xs text-muted-foreground mt-1 truncate">
-                      {order.items.map((it) => `${it.name} ×${it.quantity}`).join(", ")}
+                      {order.items.map((it, idx) => it.famille ?? it.reference ?? `Article ${idx + 1}`).join(", ")}
                     </p>
                   )}
                 </div>

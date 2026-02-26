@@ -19,35 +19,33 @@ import {
 import { toast } from "sonner";
 
 const EXAMPLE_PAYLOAD = {
-  orderNumber: "ORD-2024-001",
-  customerName: "Marie Dupont",
-  customerEmail: "marie.dupont@example.com",
-  customerPhone: "+33 6 12 34 56 78",
-  status: "COMMANDE_A_TRAITER",
-  paymentStatus: "PAID",
-  total: 149.99,
-  subtotal: 129.99,
-  shipping: 9.90,
-  tax: 10.10,
-  currency: "EUR",
-  shippingAddress: {
-    street: "15 Rue de la Paix",
-    city: "Paris",
-    postalCode: "75001",
-    country: "France",
-  },
-  items: [
+  commande: "CMD-2025-001",
+  nom: "DUPONT",
+  prenom: "Marie",
+  telephone: "+33 6 12 34 56 78",
+  limit: "2025-03-15T10:00:00Z",
+  paiement: { statut: "OUI" },
+  prix: { total: 149.99 },
+  articles: [
     {
-      name: "Bougie Signature Ambre",
-      sku: "BSIG-AMB-001",
-      quantity: 2,
-      price: 49.99,
-    },
-    {
-      name: "Diffuseur Luxe Bois",
-      sku: "DLUX-BOIS-01",
-      quantity: 1,
-      price: 30.01,
+      reference: "H-001",
+      taille: "L",
+      note: "Pas de logo sur la manche",
+      collection: "Homme Été",
+      fiche: {
+        visuelAvant:  "bea-16-av-AV",
+        visuelArriere: "bea-16-av-AR",
+        tailleDTFAr:  "A4",
+        typeProduit:  "T-Shirt",
+        couleur:      "Blanc",
+        positionLogo: "Poitrine gauche",
+      },
+      prt: {
+        refPrt:    "PRT-001",
+        taillePrt: "A4",
+        quantite:  1,
+      },
+      prix: { tshirt: 29.99, personnalisation: 120.00 },
     },
   ],
 };
@@ -191,19 +189,21 @@ export default function WebhookPage() {
           <CardContent>
             <div className="space-y-2 text-sm">
               {[
-                { field: "orderNumber", type: "string", required: true, desc: "Numéro unique de commande" },
-                { field: "customerName", type: "string", required: true, desc: "Nom du client" },
-                { field: "customerEmail", type: "string", required: true, desc: "Email du client" },
-                { field: "customerPhone", type: "string", required: false, desc: "Téléphone (optionnel)" },
-                { field: "status", type: "enum", required: false, desc: "COMMANDE_A_TRAITER | COMMANDE_EN_ATTENTE | COMMANDE_A_PREPARER | … (défaut: COMMANDE_A_TRAITER)" },
-                { field: "paymentStatus", type: "enum", required: false, desc: "PENDING | PAID | FAILED | REFUNDED" },
-                { field: "total", type: "number", required: true, desc: "Montant total TTC" },
-                { field: "subtotal", type: "number", required: true, desc: "Sous-total HT" },
-                { field: "shipping", type: "number", required: false, desc: "Frais de livraison (défaut: 0)" },
-                { field: "tax", type: "number", required: false, desc: "TVA (défaut: 0)" },
-                { field: "currency", type: "string", required: false, desc: "Devise ISO 4217 (défaut: EUR)" },
-                { field: "shippingAddress", type: "object", required: false, desc: "Adresse de livraison" },
-                { field: "items", type: "array", required: true, desc: "Liste des articles commandés" },
+                { field: "commande",  type: "string", required: true,  desc: "Numéro unique de commande (ex: CMD-2025-001)" },
+                { field: "nom",      type: "string", required: true,  desc: "Nom de famille du client" },
+                { field: "prenom",   type: "string", required: false, desc: "Prénom du client" },
+                { field: "telephone",type: "string", required: false, desc: "Téléphone du client" },
+                { field: "limit",    type: "string", required: false, desc: "Date limite ISO 8601 (ex: 2025-03-15T10:00:00Z)" },
+                { field: "paiement.statut", type: "enum", required: false, desc: "OUI | NON | PAID | PENDING" },
+                { field: "prix.total", type: "number", required: false, desc: "Montant total (en euros)" },
+                { field: "articles", type: "array",  required: false, desc: "Liste des articles (si absent, champs racine utilisés)" },
+                { field: "articles[].fiche.typeProduit", type: "string", required: false, desc: "Famille produit (T-Shirt, Sweat…)" },
+                { field: "articles[].fiche.couleur",     type: "string", required: false, desc: "Couleur du vêtement" },
+                { field: "articles[].fiche.tailleDTFAr", type: "string", required: false, desc: "Taille du film DTF (A4, A3+5cm…)" },
+                { field: "articles[].fiche.visuelAvant", type: "string", required: false, desc: "URL ou code DTF face avant" },
+                { field: "articles[].fiche.visuelArriere", type: "string", required: false, desc: "URL ou code DTF face arrière" },
+                { field: "articles[].note",              type: "string", required: false, desc: "Note client pour cet article" },
+                { field: "articles[].prt.refPrt",        type: "string", required: false, desc: "Référence impression PRT" },
               ].map((f) => (
                 <div key={f.field} className="flex items-start gap-3 py-2">
                   <code className="text-xs font-mono text-foreground w-40 shrink-0">

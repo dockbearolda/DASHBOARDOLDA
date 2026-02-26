@@ -1,22 +1,38 @@
 "use client";
 
-import { useState } from "react";
-import { motion } from "framer-motion";
+/**
+ * OrderDetail — Fiche de commande Apple-style dark
+ *
+ * Structure (de haut en bas) :
+ *  1. Header       — récap, ID commande, date, QR + menu gear
+ *  2. Visuels      — Face Avant / Dos (DTF codes ou images)
+ *  3. CLIENT       — Nom, Téléphone, Limit (deadline)
+ *  4. PRODUIT      — Collection, Référence, Coloris, Taille, DTF arrière
+ *  5. LOGOS        — Logo avant, Couleur AV, Logo arrière, Couleur AR
+ *  6. NOTES        — Texte libre
+ *  7. PAIEMENT     — Détail items, Total, Statut paiement
+ *  8. Action bar   — Retour  |  Envoyer à l'Atelier (+ Modifier / Supprimer)
+ */
+
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowLeft,
-  Mail,
-  Phone,
-  MapPin,
-  Package,
-  CreditCard,
-  ExternalLink,
-  Edit2,
+  Settings2,
+  Pencil,
+  Trash2,
+  Send,
   Check,
-  X,
+  Loader2,
 } from "lucide-react";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -24,189 +40,378 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { OrderStatusBadge, PaymentStatusBadge } from "./status-badge";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { Order, OrderStatus, PaymentStatus } from "@/types/order";
-import { OrderTasks } from "./order-tasks";
-import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import type { Order, OrderItem, OldaArticle, OrderStatus, PaymentStatus } from "@/types/order";
 
-interface OrderDetailProps {
-  order: Order;
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Convertit order.items (colonnes DB) en OldaArticle[] pour le rendu */
+function normalizeArticles(order: Order): OldaArticle[] {
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (items.length === 0) return [];
+  return items.map((item: OrderItem) => ({
+    reference:  item.reference  ?? undefined,
+    taille:     item.taille     ?? undefined,
+    note:       item.noteClient ?? undefined,
+    collection: item.collection ?? undefined,
+    fiche: {
+      visuelAvant:   item.imageAvant   ?? undefined,
+      visuelArriere: item.imageArriere ?? undefined,
+      tailleDTFAr:   item.tailleDTF    ?? undefined,
+      typeProduit:   item.famille      ?? undefined,
+      couleur:       item.couleur      ?? undefined,
+    },
+    prt: (item.prtRef || item.prtTaille || item.prtQuantite != null) ? {
+      refPrt:    item.prtRef    ?? undefined,
+      taillePrt: item.prtTaille ?? undefined,
+      quantite:  item.prtQuantite ?? undefined,
+    } : undefined,
+  }));
 }
 
-export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
-  const router = useRouter();
-  const [order, setOrder] = useState(initialOrder);
-  const [editingStatus, setEditingStatus] = useState(false);
-  const [editingPayment, setEditingPayment] = useState(false);
-  const [newStatus, setNewStatus] = useState<OrderStatus>(order.status);
-  const [newPayment, setNewPayment] = useState<PaymentStatus>(order.paymentStatus);
+function fmtPrice(n: number, currency = "EUR") {
+  return Number(n).toLocaleString("fr-FR", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  });
+}
+
+function fmtDate(d: string | Date) {
+  return format(new Date(d), "dd/MM/yyyy", { locale: fr });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Status dot (dark-theme)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const STATUS_DOT: Record<OrderStatus, { label: string; color: string }> = {
+  COMMANDE_A_TRAITER:    { label: "À traiter",            color: "bg-red-500" },
+  COMMANDE_EN_ATTENTE:   { label: "En attente",            color: "bg-amber-400" },
+  COMMANDE_A_PREPARER:   { label: "À préparer",            color: "bg-blue-500" },
+  MAQUETTE_A_FAIRE:      { label: "Maquette à faire",      color: "bg-purple-500" },
+  PRT_A_FAIRE:           { label: "PRT à faire",           color: "bg-amber-500" },
+  EN_ATTENTE_VALIDATION: { label: "Validation en attente", color: "bg-sky-400" },
+  EN_COURS_IMPRESSION:   { label: "En impression",         color: "bg-blue-400" },
+  PRESSAGE_A_FAIRE:      { label: "Pressage à faire",      color: "bg-violet-500" },
+  CLIENT_A_CONTACTER:    { label: "Client à contacter",    color: "bg-red-400" },
+  CLIENT_PREVENU:        { label: "Client prévenu",        color: "bg-green-500" },
+  ARCHIVES:              { label: "Archivé",               color: "bg-zinc-500" },
+};
+
+const PAYMENT_DOT: Record<PaymentStatus, { label: string; color: string }> = {
+  PENDING:  { label: "En attente", color: "bg-amber-400" },
+  PAID:     { label: "Payé",       color: "bg-green-500" },
+  FAILED:   { label: "Échoué",     color: "bg-red-500" },
+  REFUNDED: { label: "Remboursé",  color: "bg-zinc-500" },
+};
+
+function StatusDot({ label, color }: { label: string; color: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${color}`} />
+      <span className="text-white text-[12px] font-medium">{label}</span>
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Color swatch
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COLOR_SWATCHES: Record<string, string> = {
+  noir:     "#1d1d1f",
+  blanc:    "#f5f5f7",
+  rouge:    "#ff3b30",
+  bleu:     "#0071e3",
+  vert:     "#34c759",
+  jaune:    "#ffd60a",
+  rose:     "#ff6b8e",
+  orange:   "#ff9f0a",
+  violet:   "#bf5af2",
+  gris:     "#8e8e93",
+  argent:   "#b0b0b5",
+  or:       "#d4a017",
+  beige:    "#e8d5b7",
+  marron:   "#8b4513",
+  kaki:     "#78866b",
+  turquoise:"#32ade6",
+};
+
+function ColorDot({ color }: { color?: string }) {
+  if (!color) return null;
+  const key = color.toLowerCase().trim();
+  const fill = COLOR_SWATCHES[key] ?? "#8e8e93";
+  const needsBorder = fill === "#f5f5f7" || fill === "#ffffff";
+  return (
+    <span
+      className={cn(
+        "inline-block h-3 w-3 rounded-full shrink-0",
+        needsBorder && "border border-zinc-600"
+      )}
+      style={{ background: fill }}
+      title={color}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Primitives de mise en page (dark)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-5 pt-4 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400 select-none">
+      {children}
+    </p>
+  );
+}
+
+function Divider() {
+  return <div className="mx-5 border-t border-zinc-800" />;
+}
+
+interface DataRowProps {
+  label: string;
+  value?: React.ReactNode;
+  mono?: boolean;
+  last?: boolean;
+}
+
+function DataRow({ label, value, mono = false, last = false }: DataRowProps) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4 px-5 py-[11px]">
+        <span className="text-[13px] font-medium text-zinc-400 shrink-0">{label}</span>
+        <span
+          className={cn(
+            "text-[13px] font-semibold text-white text-right truncate max-w-[60%]",
+            mono && "font-mono"
+          )}
+        >
+          {value ?? <span className="text-zinc-600 font-normal">—</span>}
+        </span>
+      </div>
+      {!last && <Divider />}
+    </>
+  );
+}
+
+function SectionCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("rounded-[18px] bg-zinc-900 overflow-hidden", className)}>
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Carte visuel (DTF code ou image) — dark
+// ─────────────────────────────────────────────────────────────────────────────
+
+function VisuelCard({ label, src }: { label: string; src?: string | null }) {
+  const isUrl = src && (src.startsWith("http") || src.startsWith("data:"));
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 text-center">
+        {label}
+      </p>
+      <div className="aspect-square rounded-[14px] bg-zinc-800 border border-zinc-700 flex items-center justify-center overflow-hidden">
+        {isUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src!} alt={label} className="w-full h-full object-contain" />
+        ) : src ? (
+          <span className="text-[12px] font-mono font-semibold text-zinc-300 px-3 text-center break-all leading-snug">
+            {src}
+          </span>
+        ) : (
+          <span className="text-[11px] text-zinc-600">Pas d&apos;image</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal d'édition
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EditFields {
+  customerName: string;
+  customerPhone: string;
+  limit: string;
+  collection: string;
+  reference: string;
+  couleur: string;
+  taille: string;
+  tailleDTFAr: string;
+  visuelAvant: string;
+  visuelArriere: string;
+  notes: string;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+}
+
+function EditModal({
+  order,
+  open,
+  onClose,
+  onSaved,
+}: {
+  order: Order;
+  open: boolean;
+  onClose: () => void;
+  onSaved: (updated: Order) => void;
+}) {
+  const firstItem = Array.isArray(order.items) ? order.items[0] : null;
+
+  const [fields, setFields] = useState<EditFields>({
+    customerName:  order.customerName,
+    customerPhone: order.customerPhone ?? "",
+    limit:         order.deadline ? String(order.deadline).slice(0, 10) : "",
+    collection:    firstItem?.collection  ?? "",
+    reference:     firstItem?.reference   ?? "",
+    couleur:       firstItem?.couleur     ?? "",
+    taille:        firstItem?.taille      ?? "",
+    tailleDTFAr:   firstItem?.tailleDTF   ?? "",
+    visuelAvant:   firstItem?.imageAvant  ?? "",
+    visuelArriere: firstItem?.imageArriere ?? "",
+    notes:         order.notes ?? "",
+    status:        order.status,
+    paymentStatus: order.paymentStatus,
+  });
   const [saving, setSaving] = useState(false);
 
-  const saveStatus = async () => {
+  const set = (k: keyof EditFields) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setFields((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSave = async () => {
     setSaving(true);
     try {
       const res = await fetch(`/api/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus, paymentStatus: newPayment }),
+        body: JSON.stringify({
+          status:               fields.status,
+          paymentStatus:        fields.paymentStatus,
+          notes:                fields.notes || null,
+          customerName:         fields.customerName || null,
+          customerPhone:        fields.customerPhone || null,
+          firstItemTailleDTF:   fields.tailleDTFAr || null,
+        }),
       });
       const data = await res.json();
-      setOrder(data.order);
-      setEditingStatus(false);
-      setEditingPayment(false);
-      toast.success("Statut mis à jour avec succès");
-    } catch {
-      toast.error("Erreur lors de la mise à jour");
+      if (!res.ok) throw new Error(data.error ?? "Erreur");
+      onSaved(data.order as Order);
+      toast.success("Commande mise à jour");
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur lors de la sauvegarde");
     } finally {
       setSaving(false);
     }
   };
 
-  const shippingAddr = order.shippingAddress as Record<string, string> | null;
+  const fieldClass = "h-8 text-sm rounded-lg";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.back()}
-          className="rounded-xl"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-semibold font-mono">
-              #{order.orderNumber}
-            </h1>
-            <OrderStatusBadge status={order.status} />
-            <PaymentStatusBadge status={order.paymentStatus} />
-          </div>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {formatDate(order.createdAt)}
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold tabular-nums">
-            {formatCurrency(order.total, order.currency)}
-          </p>
-        </div>
-      </div>
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg max-h-[88svh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">Modifier la commande</DialogTitle>
+        </DialogHeader>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Left column */}
-        <div className="md:col-span-2 space-y-6">
-          {/* Items */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                Articles commandés ({order.items.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {order.items.map((item, i) => (
-                <div key={item.id}>
-                  {i > 0 && <Separator className="my-3" />}
-                  <div className="flex items-center gap-3">
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="h-12 w-12 rounded-xl object-cover border border-border"
-                      />
-                    ) : (
-                      <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
-                        <Package className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.name}</p>
-                      {item.sku && (
-                        <p className="text-xs text-muted-foreground font-mono">
-                          SKU: {item.sku}
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">
-                        {formatCurrency(item.price * item.quantity, order.currency)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.quantity} × {formatCurrency(item.price, order.currency)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+        <div className="space-y-5 py-1">
 
-              <Separator />
+          {/* CLIENT */}
+          <fieldset className="space-y-2">
+            <legend className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Client
+            </legend>
+            <label className="block space-y-1">
+              <span className="text-[12px] text-gray-500 font-medium">Nom</span>
+              <Input className={fieldClass} value={fields.customerName} onChange={set("customerName")} placeholder="Prénom Nom" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-[12px] text-gray-500 font-medium">Téléphone</span>
+              <Input className={fieldClass} value={fields.customerPhone} onChange={set("customerPhone")} placeholder="0XXXXXXXXX" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-[12px] text-gray-500 font-medium">Limit</span>
+              <Input className={fieldClass} value={fields.limit} onChange={set("limit")} placeholder="2026-03-15 ou texte libre" />
+            </label>
+          </fieldset>
 
-              {/* Totals */}
-              <div className="space-y-1.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Sous-total</span>
-                  <span>{formatCurrency(order.subtotal, order.currency)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Livraison</span>
-                  <span>
-                    {order.shipping === 0
-                      ? "Gratuit"
-                      : formatCurrency(order.shipping, order.currency)}
-                  </span>
-                </div>
-                {order.tax > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">TVA</span>
-                    <span>{formatCurrency(order.tax, order.currency)}</span>
-                  </div>
-                )}
-                <Separator />
-                <div className="flex justify-between font-semibold">
-                  <span>Total</span>
-                  <span>{formatCurrency(order.total, order.currency)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="border-t border-gray-100" />
 
-          {/* Tasks / Instructions */}
-          <OrderTasks orderId={order.id} initialNotes={order.notes} />
-        </div>
+          {/* PRODUIT */}
+          <fieldset className="space-y-2">
+            <legend className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Produit
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Collection</span>
+                <Input className={fieldClass} value={fields.collection} onChange={set("collection")} placeholder="Homme" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Référence</span>
+                <Input className={fieldClass} value={fields.reference} onChange={set("reference")} placeholder="H-001" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Coloris</span>
+                <Input className={fieldClass} value={fields.couleur} onChange={set("couleur")} placeholder="Noir" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Taille</span>
+                <Input className={fieldClass} value={fields.taille} onChange={set("taille")} placeholder="M" />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-[12px] text-gray-500 font-medium">Taille DTF arrière</span>
+              <Input className={fieldClass} value={fields.tailleDTFAr} onChange={set("tailleDTFAr")} placeholder="270 mm" />
+            </label>
+          </fieldset>
 
-        {/* Right column */}
-        <div className="space-y-6">
-          {/* Status management */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Edit2 className="h-4 w-4" />
-                Gérer les statuts
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Statut commande
-                </label>
-                <Select
-                  value={newStatus}
-                  onValueChange={(v) => {
-                    setNewStatus(v as OrderStatus);
-                    setEditingStatus(true);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
+          <div className="border-t border-gray-100" />
+
+          {/* VISUELS DTF */}
+          <fieldset className="space-y-2">
+            <legend className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Visuels DTF
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Avant</span>
+                <Input className={fieldClass} value={fields.visuelAvant} onChange={set("visuelAvant")} placeholder="bea-16-ar-AV" />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Arrière</span>
+                <Input className={fieldClass} value={fields.visuelArriere} onChange={set("visuelArriere")} placeholder="bea-16-ar-AR" />
+              </label>
+            </div>
+          </fieldset>
+
+          <div className="border-t border-gray-100" />
+
+          {/* STATUTS */}
+          <fieldset className="space-y-2">
+            <legend className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Statuts
+            </legend>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Commande</span>
+                <Select value={fields.status} onValueChange={(v) => setFields((f) => ({ ...f, status: v as OrderStatus }))}>
+                  <SelectTrigger className="h-8 text-sm rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -215,28 +420,19 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                     <SelectItem value="COMMANDE_A_PREPARER">À préparer</SelectItem>
                     <SelectItem value="MAQUETTE_A_FAIRE">Maquette à faire</SelectItem>
                     <SelectItem value="PRT_A_FAIRE">PRT à faire</SelectItem>
-                    <SelectItem value="EN_ATTENTE_VALIDATION">Validation en attente</SelectItem>
+                    <SelectItem value="EN_ATTENTE_VALIDATION">Validation</SelectItem>
                     <SelectItem value="EN_COURS_IMPRESSION">En impression</SelectItem>
-                    <SelectItem value="PRESSAGE_A_FAIRE">Pressage à faire</SelectItem>
-                    <SelectItem value="CLIENT_A_CONTACTER">Client à contacter</SelectItem>
+                    <SelectItem value="PRESSAGE_A_FAIRE">Pressage</SelectItem>
+                    <SelectItem value="CLIENT_A_CONTACTER">À contacter</SelectItem>
                     <SelectItem value="CLIENT_PREVENU">Client prévenu</SelectItem>
                     <SelectItem value="ARCHIVES">Archivé</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Statut paiement
-                </label>
-                <Select
-                  value={newPayment}
-                  onValueChange={(v) => {
-                    setNewPayment(v as PaymentStatus);
-                    setEditingPayment(true);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[12px] text-gray-500 font-medium">Paiement</span>
+                <Select value={fields.paymentStatus} onValueChange={(v) => setFields((f) => ({ ...f, paymentStatus: v as PaymentStatus }))}>
+                  <SelectTrigger className="h-8 text-sm rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -246,105 +442,477 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                     <SelectItem value="REFUNDED">Remboursé</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </label>
+            </div>
+          </fieldset>
 
-              {(editingStatus || editingPayment) && (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={saveStatus}
-                    disabled={saving}
-                    className="flex-1"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Enregistrer
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setNewStatus(order.status);
-                      setNewPayment(order.paymentStatus);
-                      setEditingStatus(false);
-                      setEditingPayment(false);
-                    }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+          <div className="border-t border-gray-100" />
+
+          {/* NOTES */}
+          <fieldset>
+            <legend className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+              Notes
+            </legend>
+            <textarea
+              value={fields.notes}
+              onChange={set("notes")}
+              rows={3}
+              placeholder="Note libre…"
+              className={cn(
+                "w-full rounded-xl border border-input bg-background/60 px-3 py-2 text-sm",
+                "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2",
+                "focus-visible:ring-ring resize-none transition-all"
               )}
-            </CardContent>
-          </Card>
+            />
+          </fieldset>
+        </div>
 
-          {/* Customer info */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Client</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold">{order.customerName}</p>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="h-3.5 w-3.5 shrink-0" />
-                <a
-                  href={`mailto:${order.customerEmail}`}
-                  className="hover:text-foreground truncate"
-                >
-                  {order.customerEmail}
-                </a>
-              </div>
-              {order.customerPhone && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Phone className="h-3.5 w-3.5 shrink-0" />
-                  <a
-                    href={`tel:${order.customerPhone}`}
-                    className="hover:text-foreground"
-                  >
-                    {order.customerPhone}
-                  </a>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
+            Annuler
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Enregistrer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-          {/* Shipping address */}
-          {shippingAddr && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  Adresse de livraison
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <address className="text-sm text-muted-foreground not-italic space-y-1">
-                  {shippingAddr.street && <p>{shippingAddr.street}</p>}
-                  {(shippingAddr.postalCode || shippingAddr.city) && (
-                    <p>
-                      {shippingAddr.postalCode} {shippingAddr.city}
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal de confirmation de suppression
+// ─────────────────────────────────────────────────────────────────────────────
+
+function DeleteModal({
+  open,
+  orderNumber,
+  onClose,
+  onConfirm,
+  deleting,
+}: {
+  open: boolean;
+  orderNumber: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  deleting: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">Supprimer la commande ?</DialogTitle>
+        </DialogHeader>
+        <p className="text-[13px] text-gray-500 leading-relaxed">
+          La commande <span className="font-semibold text-gray-800">{orderNumber}</span> sera
+          définitivement supprimée. Cette action est irréversible.
+        </p>
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={deleting}>
+            Annuler
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm} disabled={deleting}>
+            {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Supprimer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Menu gear (dropdown discret — dark)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function GearMenu({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "h-8 w-8 flex items-center justify-center rounded-full transition-colors",
+          open
+            ? "bg-zinc-700 text-white"
+            : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
+        )}
+        aria-label="Options"
+      >
+        <Settings2 className="h-3.5 w-3.5" />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.92, y: -4 }}
+            transition={{ duration: 0.12 }}
+            className={cn(
+              "absolute right-0 top-10 z-30 min-w-[148px] rounded-[14px] bg-zinc-900",
+              "border border-zinc-700 shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
+              "py-1 overflow-hidden"
+            )}
+          >
+            <button
+              onClick={() => { setOpen(false); onEdit(); }}
+              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[13px] font-medium text-zinc-100 hover:bg-zinc-800 transition-colors"
+            >
+              <Pencil className="h-3.5 w-3.5 text-zinc-400" />
+              Modifier
+            </button>
+            <div className="mx-3 border-t border-zinc-800" />
+            <button
+              onClick={() => { setOpen(false); onDelete(); }}
+              className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[13px] font-medium text-red-400 hover:bg-zinc-800 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Supprimer
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Composant principal
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OrderDetailProps {
+  order: Order;
+}
+
+export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
+  const router = useRouter();
+  const [order, setOrder] = useState<Order>(initialOrder);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const articles = normalizeArticles(order);
+  const createdAt = new Date(order.createdAt as string);
+
+  const orderDot   = STATUS_DOT[order.status]     ?? { label: order.status,        color: "bg-zinc-500" };
+  const paymentDot = PAYMENT_DOT[order.paymentStatus] ?? { label: order.paymentStatus, color: "bg-zinc-500" };
+
+  // ── "Envoyer à l'Atelier" → passe en COMMANDE_A_PREPARER ──────────────────
+  const handleSendToAtelier = async () => {
+    if (order.status === "COMMANDE_A_PREPARER") {
+      toast.info("Commande déjà envoyée à l'atelier");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "COMMANDE_A_PREPARER" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setOrder(data.order as Order);
+      toast.success("Envoyé à l'atelier !");
+    } catch {
+      toast.error("Erreur lors de l'envoi");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ── Suppression ────────────────────────────────────────────────────────────
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      toast.success("Commande supprimée");
+      router.push("/dashboard/olda");
+    } catch {
+      toast.error("Erreur lors de la suppression");
+      setDeleting(false);
+    }
+  };
+
+  // Items avec prix > 0 pour la section paiement
+  const billableItems = (Array.isArray(order.items) ? order.items : []).filter(
+    (i: OrderItem) => (i.prixUnitaire ?? 0) > 0
+  );
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        className="max-w-lg mx-auto pb-32 space-y-3"
+      >
+
+        {/* ══ 1. HEADER ══════════════════════════════════════════════════════ */}
+        <SectionCard>
+          <div className="px-5 pt-4 pb-4 flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 mb-1">
+                Récapitulatif de commande
+              </p>
+              {/* ID Commande */}
+              <p className="text-[17px] font-bold text-white leading-snug break-all">
+                {order.orderNumber}
+              </p>
+              {/* Date */}
+              <p className="text-[12px] text-zinc-400 mt-1">
+                {fmtDate(createdAt)}
+              </p>
+              {/* Statuts */}
+              <div className="flex flex-wrap gap-3 mt-3">
+                <StatusDot label={orderDot.label}   color={orderDot.color} />
+                <StatusDot label={paymentDot.label} color={paymentDot.color} />
+              </div>
+            </div>
+
+            {/* Droite : gear menu + QR */}
+            <div className="flex items-start gap-2 shrink-0">
+              <GearMenu
+                onEdit={() => setEditOpen(true)}
+                onDelete={() => setDeleteOpen(true)}
+              />
+              <div className="rounded-[10px] border border-zinc-700 p-[5px] bg-zinc-800">
+                <QRCodeSVG
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/dashboard/orders/${order.id}`}
+                  size={72}
+                  bgColor="transparent"
+                  fgColor="#e4e4e7"
+                  level="M"
+                />
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+
+        {/* ══ 2. VISUELS TECHNIQUES ══════════════════════════════════════════ */}
+        {articles.some(a => a.fiche?.visuelAvant || a.fiche?.visuelArriere) && (
+          <SectionCard>
+            <SectionLabel>Visuels techniques</SectionLabel>
+            {articles.map((article, i) => {
+              const srcAv  = article.fiche?.visuelAvant   ?? null;
+              const srcArr = article.fiche?.visuelArriere ?? null;
+              if (!srcAv && !srcArr) return null;
+              return (
+                <div key={i}>
+                  {articles.length > 1 && (
+                    <p className="px-5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-500">
+                      {article.reference || `Article ${i + 1}`}
                     </p>
                   )}
-                  {shippingAddr.country && <p>{shippingAddr.country}</p>}
-                </address>
-              </CardContent>
-            </Card>
+                  <div className="px-4 pb-4 grid grid-cols-2 gap-3">
+                    <VisuelCard label="Face Avant" src={srcAv} />
+                    <VisuelCard label="Dos"        src={srcArr} />
+                  </div>
+                </div>
+              );
+            })}
+          </SectionCard>
+        )}
+
+        {/* ══ 3. CLIENT ══════════════════════════════════════════════════════ */}
+        <SectionCard>
+          <SectionLabel>Client</SectionLabel>
+          <DataRow label="Nom"       value={order.customerName} />
+          <DataRow label="Prénom"    value={order.customerFirstName ?? undefined} />
+          <DataRow label="Téléphone" value={order.customerPhone ?? undefined} />
+          <DataRow label="Deadline"  value={order.deadline ? fmtDate(order.deadline as string) : undefined} last />
+        </SectionCard>
+
+        {/* ══ 4. PRODUIT — un bloc par article ═══════════════════════════════ */}
+        {articles.map((article, i) => (
+          <SectionCard key={i}>
+            <SectionLabel>
+              {articles.length > 1
+                ? `Article ${i + 1}${article.reference ? ` · ${article.reference}` : ""}`
+                : "Produit"}
+            </SectionLabel>
+            <DataRow label="Collection" value={article.collection} />
+            <DataRow label="Référence"  value={article.reference}  mono />
+            <DataRow
+              label="Coloris"
+              value={
+                article.fiche?.couleur ? (
+                  <span className="flex items-center gap-2 justify-end">
+                    {article.fiche.couleur}
+                    <ColorDot color={article.fiche.couleur} />
+                  </span>
+                ) : undefined
+              }
+            />
+            <DataRow label="Taille"        value={article.taille} />
+            <DataRow label="Taille DTF AR" value={article.fiche?.tailleDTFAr} last />
+          </SectionCard>
+        ))}
+
+
+        {/* ══ 5. VISUELS DTF — un bloc par article ════════════════════════════ */}
+        {articles.some(a => a.fiche?.visuelAvant || a.fiche?.visuelArriere) && (
+          <SectionCard>
+            <SectionLabel>Visuels DTF</SectionLabel>
+            {articles.map((article, i) => {
+              if (!article.fiche?.visuelAvant && !article.fiche?.visuelArriere) return null;
+              return (
+                <div key={i}>
+                  {articles.length > 1 && (
+                    <p className="px-5 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-zinc-500">
+                      {article.reference || `Article ${i + 1}`}
+                    </p>
+                  )}
+                  {article.fiche?.visuelAvant && (
+                    <DataRow label="Avant"   value={article.fiche.visuelAvant}   mono />
+                  )}
+                  {article.fiche?.visuelArriere && (
+                    <DataRow label="Arrière" value={article.fiche.visuelArriere} mono last />
+                  )}
+                </div>
+              );
+            })}
+          </SectionCard>
+        )}
+
+        {/* ══ 6. NOTES ═══════════════════════════════════════════════════════ */}
+        {order.notes && (
+          <SectionCard>
+            <SectionLabel>Notes</SectionLabel>
+            <p className="px-5 pb-4 text-[13px] text-zinc-300 leading-relaxed whitespace-pre-wrap">
+              {order.notes}
+            </p>
+          </SectionCard>
+        )}
+
+        {/* ══ 7. PAIEMENT ════════════════════════════════════════════════════ */}
+        <SectionCard>
+          <SectionLabel>Paiement</SectionLabel>
+
+          {/* Détail des articles */}
+          {billableItems.length > 0 ? (
+            billableItems.map((item: OrderItem, idx) => (
+              <DataRow
+                key={item.id}
+                label={item.reference ?? item.famille ?? `Article ${idx + 1}`}
+                value={fmtPrice(item.prixUnitaire, order.currency)}
+                last={idx === billableItems.length - 1}
+              />
+            ))
+          ) : (
+            <>
+              <DataRow
+                label="T-Shirt"
+                value={fmtPrice(order.subtotal, order.currency)}
+              />
+              {order.shipping > 0 && (
+                <DataRow
+                  label="Livraison"
+                  value={fmtPrice(order.shipping, order.currency)}
+                />
+              )}
+            </>
           )}
 
-          {/* Payment info */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <CreditCard className="h-4 w-4" />
-                Paiement
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PaymentStatusBadge status={order.paymentStatus} />
-            </CardContent>
-          </Card>
+          {/* Ligne Total */}
+          <div className="mx-5 border-t border-zinc-800 mt-1" />
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-[14px] font-bold text-white">Total</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[14px] font-bold text-white tabular-nums">
+                {fmtPrice(order.total, order.currency)}
+              </span>
+              <span
+                className={cn(
+                  "text-[12px] font-semibold",
+                  order.paymentStatus === "PAID"     && "text-emerald-400",
+                  order.paymentStatus === "PENDING"  && "text-amber-400",
+                  order.paymentStatus === "FAILED"   && "text-red-400",
+                  order.paymentStatus === "REFUNDED" && "text-zinc-500"
+                )}
+              >
+                {order.paymentStatus === "PAID"     && "Payé"}
+                {order.paymentStatus === "PENDING"  && "En attente"}
+                {order.paymentStatus === "FAILED"   && "Échoué"}
+                {order.paymentStatus === "REFUNDED" && "Remboursé"}
+              </span>
+            </div>
+          </div>
+        </SectionCard>
+
+      </motion.div>
+
+      {/* ══ 8. ACTION BAR (sticky bottom) ═════════════════════════════════════ */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 md:left-64">
+        <div className="max-w-lg mx-auto px-4 py-3 flex gap-3 bg-background/80 backdrop-blur-xl border-t border-border/50 pb-safe-6">
+          {/* Bouton retour */}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => router.back()}
+            className="shrink-0 h-11 w-11 rounded-[14px]"
+            aria-label="Retour"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+
+          {/* Bouton principal */}
+          <Button
+            onClick={handleSendToAtelier}
+            disabled={sending || order.status === "COMMANDE_A_PREPARER"}
+            className={cn(
+              "flex-1 h-11 rounded-[14px] text-[14px] font-semibold gap-2",
+              "bg-white hover:bg-zinc-100 text-zinc-900",
+              "disabled:opacity-60"
+            )}
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {order.status === "COMMANDE_A_PREPARER"
+              ? "Envoyé à l'atelier"
+              : "Envoyer à l'Atelier"}
+          </Button>
         </div>
       </div>
-    </motion.div>
+
+      {/* ══ Modals ═════════════════════════════════════════════════════════════ */}
+      <EditModal
+        order={order}
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSaved={(updated) => setOrder(updated)}
+      />
+
+      <DeleteModal
+        open={deleteOpen}
+        orderNumber={order.orderNumber}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+        deleting={deleting}
+      />
+    </>
   );
 }

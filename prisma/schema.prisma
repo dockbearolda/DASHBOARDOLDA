@@ -8,28 +8,26 @@ datasource db {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
-  customerName    String
-  customerEmail   String
-  customerPhone   String?
-  status          OrderStatus   @default(COMMANDE_A_TRAITER)
-  paymentStatus   PaymentStatus @default(PENDING)
-  total           Float
-  subtotal        Float
-  shipping        Float         @default(0)
-  tax             Float         @default(0)
-  currency        String        @default("EUR")
-  notes           String?
-  category        String        @default("")
-  customerFirstName String?
-  customerAddress   String?
-  deadline          DateTime?
-  shippingAddress Json?
-  billingAddress  Json?
-  items           OrderItem[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  orderNumber       String        @unique
+  customerName      String        // Nom de famille
+  customerFirstName String?       // Prénom
+  customerEmail     String
+  customerPhone     String?
+  customerAddress   String?       // Adresse de livraison
+  status            OrderStatus   @default(COMMANDE_A_TRAITER)
+  paymentStatus     PaymentStatus @default(PENDING)
+  total             Float
+  subtotal          Float
+  shipping          Float         @default(0)
+  tax               Float         @default(0)
+  currency          String        @default("EUR")
+  notes             String?
+  category          String        @default("")
+  deadline          DateTime?     // Date limite de livraison
+  items             OrderItem[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   @@map("orders")
 }
@@ -38,26 +36,31 @@ model OrderItem {
   id           String  @id @default(cuid())
   orderId      String
   order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  name         String  @default("")
-  sku          String?
-  quantity     Int     @default(0)
-  price        Float   @default(0)
-  imageUrl     String?
-  famille      String?
+
+  // ── Produit ──────────────────────────────────────────────────────────────────
+  famille      String?  // Type de produit (T-Shirt, Sweat, etc.)
   couleur      String?
-  tailleDTF    String?
+  tailleDTF    String?  // Taille du film DTF (ex: A4, A3+5cm)
   positionLogo String?
-  noteClient   String?
-  imageAvant   String?
-  imageArriere String?
-  reference    String?
-  taille       String?
+  reference    String?  // Référence produit
+  taille       String?  // Taille vêtement (S, M, L, XL…)
   collection   String?
+
+  // ── Visuels ───────────────────────────────────────────────────────────────────
+  imageAvant   String?  // URL ou code DTF avant
+  imageArriere String?  // URL ou code DTF arrière
+
+  // ── Client ───────────────────────────────────────────────────────────────────
+  noteClient   String?
+  positionNote String?
+
+  // ── Impression PRT ───────────────────────────────────────────────────────────
   prtRef       String?
   prtTaille    String?
   prtQuantite  Int?
+
+  // ── Prix ─────────────────────────────────────────────────────────────────────
   prixUnitaire Float   @default(0)
-  positionNote String?
 
   @@map("order_items")
 }
@@ -93,56 +96,91 @@ model PersonNote {
   @@map("person_notes")
 }
 
-enum WorkflowType {
+model WorkflowItem {
+  id        String         @id @default(cuid())
+  listType  WorkflowListType
+  title     String
+  position  Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@map("workflow_items")
+  @@index([listType])
+}
+
+enum WorkflowListType {
   ACHAT
   STANDARD
   ATELIER
   DTF
 }
 
-model WorkflowItem {
-  id        String       @id @default(cuid())
-  content   String
-  type      WorkflowType
-  position  Int          @default(0)
-  done      Boolean      @default(false)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+model PRTRequest {
+  id            String   @id @default(cuid())
+  clientName    String
+  dimensions    String   // e.g. "30x40cm"
+  design        String   // image URL or design name
+  color         String   // e.g. "Blanc" or hex code
+  quantity      Int      @default(1)
+  done          Boolean  @default(false)
+  position      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  @@map("workflow_items")
+  @@map("prt_requests")
+  @@index([done])
+}
+
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique // e.g. "loic", "charlie", "melina", "amandine"
+  profilePhotoLink String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("user_profiles")
 }
 
 model PlanningItem {
-  id          String    @id @default(cuid())
-  priority    String    @default("MOYENNE")
-  clientName  String    @default("")
-  quantity    Float     @default(1)
-  designation String    @default("")
-  note        String    @default("")
-  unitPrice   Float     @default(0)
+  id          String           @id @default(cuid())
+  priority    PlanningPriority @default(MOYENNE)
+  clientName  String           @default("")
+  quantity    Float            @default(1)
+  designation String           @default("")
+  note        String           @default("")
+  unitPrice   Float            @default(0)
   deadline    DateTime?
-  status      String    @default("A_DEVISER")
-  responsible String    @default("")
-  color       String    @default("")
-  position    Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status      PlanningStatus   @default(A_DEVISER)
+  responsible String           @default("")
+  color       String           @default("")
+  position    Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   @@map("planning_items")
 }
 
-model PRTRequest {
-  id             String   @id @default(cuid())
-  clientName     String   @default("")
-  dimensions     String   @default("")
-  design         String   @default("")
-  designFileLink String?
-  color          String   @default("")
-  quantity       Int      @default(1)
-  done           Boolean  @default(false)
-  position       Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+enum PlanningPriority {
+  BASSE
+  MOYENNE
+  HAUTE
+}
 
-  @@map("prt_requests")
+enum PlanningStatus {
+  A_DEVISER
+  ATTENTE_VALIDATION
+  MAQUETTE_A_FAIRE
+  ATTENTE_MARCHANDISE
+  A_PREPARER
+  A_PRODUIRE
+  EN_PRODUCTION
+  A_MONTER_NETTOYER
+  MANQUE_INFORMATION
+  TERMINE
+  PREVENIR_CLIENT
+  CLIENT_PREVENU
+  RELANCE_CLIENT
+  PRODUIT_RECUPERE
+  A_FACTURER
+  FACTURE_FAITE
 }

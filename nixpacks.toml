@@ -11,7 +11,7 @@ cmds = [
 ]
 
 [start]
-cmd = "npx prisma migrate deploy && npm start"
+cmd = "npm start"
 
 [variables]
 NEXT_TELEMETRY_DISABLED = "1"

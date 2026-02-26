@@ -1,16 +1,24 @@
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
 
 function createPrismaClient() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    // Return a no-op client during build time when DATABASE_URL is not set
+  // For build-time when DATABASE_URL is not available, return a placeholder
+  if (!process.env.DATABASE_URL) {
     console.warn("DATABASE_URL not set — Prisma will not connect to a database");
+    return new (PrismaClient as any)({ datasourceUrl: "postgresql://localhost/placeholder" });
   }
-  const pool = new Pool({ connectionString: databaseUrl });
-  const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter });
+
+  // Use PostgreSQL with PrismaPg adapter for production and development
+  try {
+    const { PrismaPg } = require("@prisma/adapter-pg");
+    const { Pool } = require("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const adapter = new PrismaPg(pool);
+    return new PrismaClient({ adapter } as any);
+  } catch (error) {
+    // Fallback if adapter not available
+    console.warn("PostgreSQL adapter not available, using default connection");
+    return new (PrismaClient as any)({});
+  }
 }
 
 const globalForPrisma = globalThis as unknown as {

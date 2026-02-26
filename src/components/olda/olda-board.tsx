@@ -7,17 +7,193 @@
  *   ┌─ sticky header ─ RemindersGrid (4 person cards) ───────────────┐
  *   ├─ hero (title + live indicator) ────────────────────────────────┤
  *   ├─ tabs: Tshirt | Tasse (soon) | Accessoire (soon) ──────────────┤
- *   └─ workspace: single kanban grid, ALL columns use TshirtOrderCard ┘
+ *   └─ workspace: single kanban grid, ALL columns use OrderCard ─────────┘
  */
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import type { Order, OrderStatus } from "@/types/order";
+import type { Order, OrderStatus, WorkflowItem } from "@/types/order";
 import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
-import { TshirtOrderCard } from "./tshirt-order-card";
-import { useSocket } from "@/hooks/useSocket";
+import { OrderCard } from "./order-card";
+import { DTFProductionTable } from "./dtf-production-table";
+import { WorkflowListsGrid } from "./workflow-list";
+import { PRTManager } from "./prt-manager";
+import { PlanningTable, type PlanningItem } from "./planning-table";
+
+interface PRTItem {
+  id: string;
+  clientName: string;
+  dimensions: string;
+  design: string;
+  color: string;
+  quantity: number;
+  done: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+//  SYSTÈME DE SESSION TEMPORELLE  (Morning & Afternoon Reset)
+//
+//  La session est enregistrée dans localStorage avec l'heure de connexion.
+//  Deux créneaux de travail :
+//    · Nuit   : 00h00–06h59  →  expire à 07h00 le même matin
+//    · Matin  : 07h00–12h59  →  expire à 13h00 le même jour
+//    · Après  : 13h00–23h59  →  expire à 07h00 le lendemain
+//
+//  Le champ session.name est la clé utilisée par /api/notes/${name}
+//  pour l'attribution des tâches — ne pas le modifier sans mettre à
+//  jour les routes notes en conséquence.
+// ════════════════════════════════════════════════════════════════════
+
+const SESSION_KEY = "olda_session";
+
+interface OldaSession {
+  /** Clé de la personne active : "loic" | "charlie" | "melina" | "amandine" */
+  name: string;
+  /** ISO 8601 — timestamp exact de connexion */
+  loginAt: string;
+}
+
+/** Retourne le timestamp d'expiration selon le créneau de connexion. */
+function getExpiryTs(loginAt: Date): number {
+  const h = loginAt.getHours();
+  const d = new Date(loginAt);
+  if (h < 7) {
+    d.setHours(7, 0, 0, 0);          // nuit → expire à 07h00 ce matin
+  } else if (h < 13) {
+    d.setHours(13, 0, 0, 0);         // matin → expire à 13h00
+  } else {
+    d.setDate(d.getDate() + 1);
+    d.setHours(7, 0, 0, 0);          // après-midi → expire à 07h00 demain
+  }
+  return d.getTime();
+}
+
+function readSession(): OldaSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as OldaSession) : null;
+  } catch { return null; }
+}
+
+function isSessionExpired(s: OldaSession): boolean {
+  return Date.now() >= getExpiryTs(new Date(s.loginAt));
+}
+
+function saveSession(name: string): OldaSession {
+  const s: OldaSession = { name, loginAt: new Date().toISOString() };
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { /* quota */ }
+  return s;
+}
+
+function clearSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
+}
+
+// Noms affichés dans l'écran de connexion (ordre = ordre PEOPLE)
+const PERSON_DISPLAY: [string, string][] = [
+  ["loic",     "Loïc"],
+  ["charlie",  "Charlie"],
+  ["melina",   "Mélina"],
+  ["amandine", "Amandine"],
+];
+
+// ── Écran de connexion glassmorphism ──────────────────────────────────────────
+
+function LoginScreen({ onLogin, wasExpired }: { onLogin: (name: string) => void; wasExpired: boolean }) {
+  const now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-5"
+      style={{
+        background: "linear-gradient(160deg, #f5f5f7 0%, #eaeaf0 60%, #dfe3ea 100%)",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 320,
+          background: "rgba(255,255,255,0.72)",
+          backdropFilter: "blur(40px)",
+          WebkitBackdropFilter: "blur(40px)",
+          border: "1px solid rgba(255,255,255,0.85)",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.9) inset",
+          borderRadius: 32,
+          padding: "36px 28px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 24,
+        }}
+      >
+        {/* Logo mark */}
+        <div style={{
+          width: 52, height: 52, borderRadius: 15, flexShrink: 0,
+          background: "linear-gradient(145deg, #2c2c2e, #1d1d1f)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 8px 20px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.06) inset",
+          fontSize: 22, color: "#fff",
+        }}>
+          ✦
+        </div>
+
+        {/* Titre */}
+        <div style={{ textAlign: "center" }}>
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em", color: "#8e8e93", marginBottom: 8 }}>
+            OLDA Studio
+          </p>
+          <p style={{ fontSize: 17, fontWeight: 600, color: "#1d1d1f", lineHeight: 1.4, marginBottom: 4 }}>
+            {wasExpired ? "Nouvelle session de travail." : "Bonjour !"}
+          </p>
+          <p style={{ fontSize: 15, color: "#6e6e73" }}>
+            Quel est votre nom ?
+          </p>
+        </div>
+
+        {/* Grille 2×2 de noms */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
+          {PERSON_DISPLAY.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => onLogin(key)}
+              style={{
+                padding: "14px 8px",
+                borderRadius: 16,
+                border: "1.5px solid rgba(0,0,0,0.07)",
+                background: "rgba(255,255,255,0.9)",
+                fontSize: 15, fontWeight: 600, color: "#1d1d1f",
+                cursor: "pointer", fontFamily: "inherit",
+                transition: "transform 0.12s ease, box-shadow 0.12s ease",
+                WebkitTapHighlightColor: "transparent",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = "scale(1.04)";
+                e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Heure discrète */}
+        <p style={{ fontSize: 12, color: "#aeaeb2" }}>{now}</p>
+      </div>
+    </div>
+  );
+}
 
 // ── Product type detection ─────────────────────────────────────────────────────
 
@@ -31,17 +207,10 @@ function detectProductType(order: Order): ProductType {
   // Explicit tshirt check (covers "t-shirt", "tshirt", "t_shirt" after normalise)
   if (cat === "tshirt") return "tshirt";
 
-  // Safely parse items — Prisma $queryRaw with json_agg may return a raw JSON
-  // string instead of a parsed array in some configurations.
-  let items: Order["items"] = [];
-  if (Array.isArray(order.items)) {
-    items = order.items;
-  } else if (typeof order.items === "string") {
-    try { items = JSON.parse(order.items as unknown as string); } catch { items = []; }
-  }
-
-  const names = items.map((i) => (i.name ?? "").toLowerCase()).join(" ");
-  if (/mug|tasse/.test(names)) return "mug";
+  // Détection via la famille (typeProduit) des articles
+  const items: Order["items"] = Array.isArray(order.items) ? order.items : [];
+  const familles = items.map((i) => (i.famille ?? "").toLowerCase()).join(" ");
+  if (/mug|tasse/.test(familles)) return "mug";
 
   // Default → tshirt. Every non-mug order on this board is a t-shirt order.
   // (When category is empty and item names are generic, we must not lose orders
@@ -73,34 +242,48 @@ const PEOPLE = [
   { key: "amandine", icon: Phone  },
 ] as const;
 
-// ── Category tabs ──────────────────────────────────────────────────────────────
-
-type BoardTab = "tshirt" | "mug" | "other";
-
-const TABS: { key: BoardTab; label: string; enabled: boolean }[] = [
-  { key: "tshirt", label: "Commande Tshirt",    enabled: true  },
-  { key: "mug",    label: "Commande Tasse",      enabled: false },
-  { key: "other",  label: "Commande accessoire", enabled: false },
-];
 
 // ── Kanban column ──────────────────────────────────────────────────────────────
-// All columns use TshirtOrderCard (full card with QR, L1-L6, todos).
+// All columns use OrderCard (QR, customer info, items accordion).
 
 function KanbanColumn({
   col,
   orders,
   newOrderIds,
+  onDropOrder,
+  onDeleteOrder,
 }: {
   col: KanbanCol;
   orders: Order[];
   newOrderIds?: Set<string>;
+  onDropOrder?: (orderId: string, newStatus: OrderStatus) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }) {
-  return (
-    // Mobile: full viewport width with snap point so user swipes column-by-column
-    // md+: fixed 272 px column in a free-scrolling horizontal list
-    <div className="snap-start shrink-0 w-[88vw] sm:w-[80vw] md:w-[272px] flex flex-col gap-2">
+  const [isDragOver, setIsDragOver] = useState(false);
+  // ── Auto-scaling : mode compact si colonne dense ───────────────────────────
+  const compact = orders.length > 5;
 
-      {/* Status bubble / column header */}
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const orderId = e.dataTransfer.getData("orderId");
+    if (orderId && onDropOrder) {
+      onDropOrder(orderId, col.status);
+    }
+  };
+
+  return (
+    <div className="snap-start shrink-0 w-[88vw] sm:w-[80vw] md:w-[272px] flex flex-col gap-2">
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm px-3 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", col.dot)} />
@@ -113,15 +296,37 @@ function KanbanColumn({
         </span>
       </div>
 
-      {/* Cards */}
-      <div className="flex flex-col gap-2">
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={cn(
+          "flex flex-col p-2 rounded-xl transition-all",
+          compact ? "gap-1.5" : "gap-3",
+          isDragOver ? "bg-blue-50 border-2 border-blue-300 shadow-md" : "",
+        )}
+      >
         {orders.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-200 h-14 flex items-center justify-center">
             <span className="text-[12px] text-gray-300">vide</span>
           </div>
         ) : (
           orders.map((o) => (
-            <TshirtOrderCard key={o.id} order={o} isNew={newOrderIds?.has(o.id)} />
+            <div
+              key={o.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("orderId", o.id);
+              }}
+              className="w-full cursor-grab active:cursor-grabbing"
+            >
+              <OrderCard
+                order={o}
+                isNew={newOrderIds?.has(o.id)}
+                onDelete={onDeleteOrder ? () => onDeleteOrder(o.id) : undefined}
+              />
+            </div>
           ))
         )}
       </div>
@@ -135,32 +340,33 @@ function KanbanBoard({
   columns,
   orders,
   newOrderIds,
+  onUpdateOrder,
+  onDeleteOrder,
 }: {
   columns: KanbanCol[];
   orders: Order[];
   newOrderIds?: Set<string>;
+  onUpdateOrder?: (orderId: string, newStatus: OrderStatus) => void;
+  onDeleteOrder?: (orderId: string) => void;
 }) {
   const ordersByStatus = useMemo(() => {
     const map: Record<string, Order[]> = {};
     for (const col of columns) map[col.status] = [];
     for (const order of orders) {
       if (map[order.status] !== undefined) map[order.status].push(order);
-      else map[columns[0].status].push(order); // fallback → first column
+      else map[columns[0].status].push(order);
     }
     return map;
   }, [columns, orders]);
 
+  const handleDropOrder = (orderId: string, newStatus: OrderStatus) => {
+    if (onUpdateOrder) {
+      onUpdateOrder(orderId, newStatus);
+    }
+    updateOrderStatus(orderId, newStatus);
+  };
+
   return (
-    /*
-     * Two-layer scroll — iOS Safari:
-     *   outer: block + overflow-x-auto = reliable scroll container.
-     *   inner: flex + w-max = explicit intrinsic width (WebKit needs this).
-     * CRITICAL: scroll-snap-type goes on the SCROLL CONTAINER (outer), not
-     * the flex child. Placing snap-x on a non-scroll element is undefined
-     * behaviour in WebKit and causes the scrollport to collapse to zero.
-     * overflow-x-clip on OldaBoard root prevents page bleed without creating
-     * a competing scroll context (unlike overflow-x-hidden).
-     */
     <div className={cn(
       "w-full overflow-x-auto no-scrollbar pb-safe-6",
       "snap-x snap-mandatory md:snap-none",
@@ -172,6 +378,8 @@ function KanbanBoard({
             col={col}
             orders={ordersByStatus[col.status] ?? []}
             newOrderIds={newOrderIds}
+            onDropOrder={handleDropOrder}
+            onDeleteOrder={onDeleteOrder}
           />
         ))}
       </div>
@@ -195,6 +403,20 @@ function LiveIndicator({ connected }: { connected: boolean }) {
   );
 }
 
+// ── Drag & Drop: Update order status ───────────────────────────────────────────
+
+async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
+  try {
+    await fetch(`/api/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+  } catch (err) {
+    console.error("Failed to update order status:", err);
+  }
+}
+
 // ── Main export ────────────────────────────────────────────────────────────────
 
 export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
@@ -203,7 +425,16 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [activeTab, setActiveTab]       = useState<BoardTab>("tshirt");
+  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning'>('flux');
+  const [workflowItems, setWorkflowItems] = useState<WorkflowItem[]>([]);
+  const [prtItems, setPrtItems] = useState<PRTItem[]>([]);
+  const [allPrtItems, setAllPrtItems] = useState<PRTItem[]>([]);
+  const [planningItems, setPlanningItems] = useState<PlanningItem[]>([]);
+
+  // ── Session temporelle ────────────────────────────────────────────────────
+  const [session, setSession]               = useState<OldaSession | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [wasExpired, setWasExpired]         = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -249,13 +480,52 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
   }, []);
 
+  // Lecture localStorage au montage (côté client uniquement)
+  useEffect(() => {
+    const s = readSession();
+    if (s && !isSessionExpired(s)) {
+      setSession(s);
+    } else if (s) {
+      // Session présente mais expirée → force re-connexion
+      clearSession();
+      setWasExpired(true);
+    }
+    setSessionChecked(true);
+  }, []); // exécuté une seule fois au montage
+
   useEffect(() => { refreshOrders(); }, [refreshOrders]);
 
+  // Vérification session + rechargement commandes au retour de mise en veille
   useEffect(() => {
-    const onVisible = () => { if (document.visibilityState === "visible") refreshOrders(); };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        // Priorité : vérifie l'expiration temporelle avant tout refresh
+        const s = readSession();
+        if (!s || isSessionExpired(s)) {
+          clearSession();
+          setWasExpired(true);
+          setSession(null);
+          return; // ne pas rafraîchir si session invalide
+        }
+        refreshOrders();
+      }
+    };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refreshOrders]);
+
+  // Vérification périodique (60 s) — si l'onglet reste ouvert à cheval sur 07h00 ou 13h00
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const s = readSession();
+      if (s && isSessionExpired(s)) {
+        clearSession();
+        setWasExpired(true);
+        setSession(null);
+      }
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []); // pas de dépendances — stable pour toute la durée du composant
 
   // ── SSE subscription ───────────────────────────────────────────────────────
 
@@ -305,52 +575,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     };
   }, [markNew, refreshOrders, startPolling, stopPolling]);
 
-  // ── Socket.io subscription ────────────────────────────────────────────────
-
-  useSocket({
-    "order:new": (data: unknown) => {
-      if (!mountedRef.current) return;
-      try {
-        const order = data as Order;
-        setOrders((prev) => {
-          if (prev.find((o) => o.id === order.id)) return prev;
-          markNew([order.id]);
-          return [order, ...prev];
-        });
-      } catch { /* malformed */ }
-    },
-    "order:updated": (data: unknown) => {
-      if (!mountedRef.current) return;
-      try {
-        const order = data as Order;
-        setOrders((prev) =>
-          prev.map((o) => (o.id === order.id ? order : o))
-        );
-      } catch { /* malformed */ }
-    },
-    "order:deleted": (data: unknown) => {
-      if (!mountedRef.current) return;
-      try {
-        const { id } = data as { id: string };
-        setOrders((prev) => prev.filter((o) => o.id !== id));
-      } catch { /* malformed */ }
-    },
-    "note:changed": (data: unknown) => {
-      if (!mountedRef.current) return;
-      try {
-        const note = data as { person: string; content: string; todos: unknown };
-        setNotes((prev) => ({
-          ...prev,
-          [note.person]: {
-            person: note.person,
-            content: note.content ?? "",
-            todos: Array.isArray(note.todos) ? (note.todos as TodoItem[]) : [],
-          },
-        }));
-      } catch { /* malformed */ }
-    },
-  });
-
   // ── Person notes ───────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -371,95 +595,155 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
+  // ── Workflow items ──────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/workflow-items")
+      .then((r) => r.json())
+      .then((data) => {
+        setWorkflowItems(data.items ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── PRT items ────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/prt-requests")
+      .then((r) => r.json())
+      .then((data) => {
+        const items = data.items ?? [];
+        setPrtItems(items);
+        setAllPrtItems(items);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── Planning items ────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    fetch("/api/planning")
+      .then((r) => r.json())
+      .then((data) => {
+        setPlanningItems(data.items ?? []);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── Connexion utilisateur ──────────────────────────────────────────────────
+  const handleLogin = useCallback((name: string) => {
+    const s = saveSession(name);
+    setSession(s);
+    setWasExpired(false);
+  }, []);
+
+  // ── Suppression d'une commande (optimistic) ───────────────────────────────
+  const handleDeleteOrder = useCallback(async (orderId: string) => {
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    try {
+      await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
+    } catch {
+      refreshOrders();
+    }
+  }, [refreshOrders]);
+
   // ── Categorise orders ──────────────────────────────────────────────────────
 
-  const { tshirt, mug, other } = useMemo(() => {
-    const tshirt: Order[] = [], mug: Order[] = [], other: Order[] = [];
-    for (const o of orders) {
-      const t = detectProductType(o);
-      if      (t === "tshirt") tshirt.push(o);
-      else if (t === "mug")    mug.push(o);
-      else                     other.push(o);
-    }
-    return { tshirt, mug, other };
-  }, [orders]);
+  const tshirt = useMemo(
+    () => orders.filter((o) => detectProductType(o) === "tshirt"),
+    [orders]
+  );
 
   const notesMap = Object.fromEntries(PEOPLE.map((p) => [p.key, notes[p.key]?.todos ?? []]));
 
-  // Select orders for active tab
-  const activeOrders = activeTab === "tshirt" ? tshirt : activeTab === "mug" ? mug : other;
+  // Handle order status update (optimistic UI)
+  const handleUpdateOrder = useCallback((orderId: string, newStatus: OrderStatus) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
+    );
+  }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // Attend la lecture localStorage pour éviter un flash de l'écran de connexion
+  if (!sessionChecked) return null;
+  // Session absente ou expirée → écran glassmorphism
+  if (!session) return <LoginScreen onLogin={handleLogin} wasExpired={wasExpired} />;
+
   return (
-    <div className="flex flex-col bg-white min-h-screen w-full overflow-x-clip">
+    <div
+      className="flex flex-col h-svh w-full overflow-hidden bg-white"
+      style={{ fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
+    >
 
-      {/* ══ ZONE 1 — Sticky header: 4 person reminder cards ══════════════════ */}
-      {/* pt-safe: pushes content below iOS notch / Dynamic Island               */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm pt-safe">
-        <div className="px-4 sm:px-6 py-3">
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} />
-        </div>
-      </div>
-
-      {/* ══ ZONE 2 — Scrollable workspace ════════════════════════════════════ */}
-      <div className="px-4 sm:px-6 py-5 md:py-6 space-y-5">
-
-        {/* ── Hero ── */}
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-[13px] md:text-[14px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
-              Atelier
-            </p>
-            <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-gray-900">
-              Dashboard OLDA
-            </h1>
-            <p className="text-[13px] sm:text-[15px] text-gray-500 mt-0.5">
-              Vue d&apos;ensemble · production
-            </p>
-          </div>
-          <div className="shrink-0 pb-1">
-            <LiveIndicator connected={sseConnected} />
-          </div>
-        </div>
-
-        {/* ── Navigation tabs — min-h-[44px] = Apple HIG 44 pt touch target ── */}
-        {/* overflow-x-auto: prevents long labels from overflowing into Kanban */}
-        <div className="border-b border-gray-200 flex gap-0 overflow-x-auto no-scrollbar">
-          {TABS.map((tab) => (
+      {/* ── Header : tabs à gauche · indicateur live à droite ─────────────── */}
+      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 flex items-center gap-3 border-b border-gray-100">
+        {/* Tabs — alignés à gauche */}
+        <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 overflow-x-auto">
+          {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning'] as const).map((v) => (
             <button
-              key={tab.key}
-              disabled={!tab.enabled}
-              onClick={() => tab.enabled && setActiveTab(tab.key)}
+              key={v}
+              onClick={() => setViewTab(v)}
               className={cn(
-                // [touch-action:manipulation] removes iOS 300 ms tap delay
-                "relative shrink-0 px-4 min-h-[44px] flex items-center",
-                "text-[14px] font-medium transition-colors whitespace-nowrap pb-[2px]",
+                "px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
                 "[touch-action:manipulation]",
-                tab.key === activeTab
-                  ? "text-blue-600 cursor-pointer"
-                  : tab.enabled
-                  ? "text-gray-500 hover:text-gray-700 cursor-pointer"
-                  : "text-gray-300 cursor-not-allowed"
+                viewTab === v
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
               )}
             >
-              {tab.label}
-              {!tab.enabled && (
-                <span className="ml-1.5 text-[11px] text-gray-300 font-normal">bientôt</span>
-              )}
-              {tab.key === activeTab && (
-                <span className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-full" />
-              )}
+              {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : 'Planning'}
             </button>
           ))}
         </div>
+        {/* Indicateur live — repoussé à droite */}
+        <div className="ml-auto">
+          <LiveIndicator connected={sseConnected} />
+        </div>
+      </div>
 
-        {/* ── ZONE 3 — Kanban workspace (single board, updates with tab) ── */}
-        <KanbanBoard
-          columns={TSHIRT_COLUMNS}
-          orders={activeOrders}
-          newOrderIds={newOrderIds}
-        />
+      {/* ── Contenu principal ───────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
+
+        {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
+        <div className={cn(viewTab !== 'flux' && 'hidden')}>
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+        </div>
+
+        {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}
+        <div className={cn(viewTab !== 'commandes' && 'hidden')}>
+          <KanbanBoard
+            columns={TSHIRT_COLUMNS}
+            orders={tshirt}
+            newOrderIds={newOrderIds}
+            onUpdateOrder={handleUpdateOrder}
+            onDeleteOrder={handleDeleteOrder}
+          />
+        </div>
+
+        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
+        <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
+          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
+        </div>
+
+        {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
+        <div className={cn(viewTab !== 'production_dtf' && 'hidden', 'h-full')}>
+          <DTFProductionTable activeUser={session.name} />
+        </div>
+
+        {/* ══ VUE WORKFLOW — 4 listes de flux ══════════════════════════════════ */}
+        <div className={cn(viewTab !== 'workflow' && 'hidden')}>
+          <WorkflowListsGrid
+            items={workflowItems}
+            onItemsChange={setWorkflowItems}
+          />
+        </div>
+
+        {/* ══ VUE PLANNING — Tableau d'entreprise partagé ════════════════════ */}
+        <div className={cn(viewTab !== 'planning' && 'hidden', 'h-full')}>
+          <PlanningTable items={planningItems} onItemsChange={setPlanningItems} />
+        </div>
+
       </div>
 
       {/* ── New-order toast ── */}

@@ -32,14 +32,29 @@ model Order {
 }
 
 model OrderItem {
-  id       String  @id @default(cuid())
-  orderId  String
-  order    Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  name     String
-  sku      String?
-  quantity Int
-  price    Float
-  imageUrl String?
+  id           String  @id @default(cuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name         String  @default("")
+  sku          String?
+  quantity     Int     @default(0)
+  price        Float   @default(0)
+  imageUrl     String?
+  famille      String?
+  couleur      String?
+  tailleDTF    String?
+  positionLogo String?
+  noteClient   String?
+  imageAvant   String?
+  imageArriere String?
+  reference    String?
+  taille       String?
+  collection   String?
+  prtRef       String?
+  prtTaille    String?
+  prtQuantite  Int?
+  prixUnitaire Float   @default(0)
+  positionNote String?
 
   @@map("order_items")
 }

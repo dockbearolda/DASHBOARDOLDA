@@ -21,6 +21,21 @@ export interface OrderItem {
   quantity: number;
   price: number;
   imageUrl?: string | null;
+  famille?: string | null;
+  couleur?: string | null;
+  tailleDTF?: string | null;
+  positionLogo?: string | null;
+  noteClient?: string | null;
+  imageAvant?: string | null;
+  imageArriere?: string | null;
+  reference?: string | null;
+  taille?: string | null;
+  collection?: string | null;
+  prtRef?: string | null;
+  prtTaille?: string | null;
+  prtQuantite?: number | null;
+  prixUnitaire?: number;
+  positionNote?: string | null;
 }
 
 export interface Address {

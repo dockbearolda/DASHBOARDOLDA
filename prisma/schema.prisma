@@ -8,38 +8,58 @@ datasource db {
 }
 
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
-  customerName    String
-  customerEmail   String
-  customerPhone   String?
-  status          OrderStatus   @default(COMMANDE_A_TRAITER)
-  paymentStatus   PaymentStatus @default(PENDING)
-  total           Float
-  subtotal        Float
-  shipping        Float         @default(0)
-  tax             Float         @default(0)
-  currency        String        @default("EUR")
-  notes           String?
-  category        String        @default("")
-  shippingAddress Json?
-  billingAddress  Json?
-  items           OrderItem[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  orderNumber       String        @unique
+  customerName      String        // Nom de famille
+  customerFirstName String?       // Prénom
+  customerEmail     String
+  customerPhone     String?
+  status            OrderStatus   @default(COMMANDE_A_TRAITER)
+  paymentStatus     PaymentStatus @default(PENDING)
+  total             Float
+  subtotal          Float
+  shipping          Float         @default(0)
+  tax               Float         @default(0)
+  currency          String        @default("EUR")
+  notes             String?
+  category          String        @default("")
+  deadline          DateTime?     // Date limite de livraison
+  items             OrderItem[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   @@map("orders")
 }
 
 model OrderItem {
-  id       String  @id @default(cuid())
-  orderId  String
-  order    Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  name     String
-  sku      String?
-  quantity Int
-  price    Float
-  imageUrl String?
+  id           String  @id @default(cuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // ── Produit ──────────────────────────────────────────────────────────────────
+  famille      String?  // Type de produit (T-Shirt, Sweat, etc.)
+  couleur      String?
+  tailleDTF    String?  // Taille du film DTF (ex: A4, A3+5cm)
+  positionLogo String?
+  reference    String?  // Référence produit
+  taille       String?  // Taille vêtement (S, M, L, XL…)
+  collection   String?
+
+  // ── Visuels ───────────────────────────────────────────────────────────────────
+  imageAvant   String?  // URL ou code DTF avant
+  imageArriere String?  // URL ou code DTF arrière
+
+  // ── Client ───────────────────────────────────────────────────────────────────
+  noteClient   String?
+  positionNote String?
+
+  // ── Impression PRT ───────────────────────────────────────────────────────────
+  prtRef       String?
+  prtTaille    String?
+  prtQuantite  Int?
+
+  // ── Prix ─────────────────────────────────────────────────────────────────────
+  prixUnitaire Float   @default(0)
 
   @@map("order_items")
 }

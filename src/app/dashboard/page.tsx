@@ -22,7 +22,7 @@ import { Order } from "@/types/order";
 import { subDays, startOfDay, format } from "date-fns";
 import { fr } from "date-fns/locale";
 
-type OrderItem = { name: string; quantity: number; price: number };
+type OrderItem = { famille?: string | null; prixUnitaire?: number | null };
 type RawOrder = Record<string, unknown> & {
   total: unknown;
   status: unknown;
@@ -77,16 +77,18 @@ async function getDashboardData() {
   const avgOrderValue = orders.length > 0 ? paidRevenue / orders.length : 0;
   const uniqueCustomers = new Set(orders.map((o: typeof orders[0]) => String(o.customerEmail))).size;
 
-  // Top 5 products by revenue
+  // Top 5 produits par CA (basé sur famille + prixUnitaire)
   const topProducts = orders
     .flatMap((o: typeof orders[0]) => (o.items as OrderItem[]) ?? [])
     .reduce((acc: { name: string; count: number; revenue: number }[], item: OrderItem) => {
-      const existing = acc.find((p) => p.name === item.name);
+      const name = item.famille ?? "T-Shirt";
+      const price = Number(item.prixUnitaire) || 0;
+      const existing = acc.find((p) => p.name === name);
       if (existing) {
-        existing.count += item.quantity;
-        existing.revenue += item.price * item.quantity;
+        existing.count += 1;
+        existing.revenue += price;
       } else {
-        acc.push({ name: item.name, count: item.quantity, revenue: item.price * item.quantity });
+        acc.push({ name, count: 1, revenue: price });
       }
       return acc;
     }, [])

@@ -206,17 +206,10 @@ function detectProductType(order: Order): ProductType {
   // Explicit tshirt check (covers "t-shirt", "tshirt", "t_shirt" after normalise)
   if (cat === "tshirt") return "tshirt";
 
-  // Safely parse items — Prisma $queryRaw with json_agg may return a raw JSON
-  // string instead of a parsed array in some configurations.
-  let items: Order["items"] = [];
-  if (Array.isArray(order.items)) {
-    items = order.items;
-  } else if (typeof order.items === "string") {
-    try { items = JSON.parse(order.items as unknown as string); } catch { items = []; }
-  }
-
-  const names = items.map((i) => (i.name ?? "").toLowerCase()).join(" ");
-  if (/mug|tasse/.test(names)) return "mug";
+  // Détection via la famille (typeProduit) des articles
+  const items: Order["items"] = Array.isArray(order.items) ? order.items : [];
+  const familles = items.map((i) => (i.famille ?? "").toLowerCase()).join(" ");
+  if (/mug|tasse/.test(familles)) return "mug";
 
   // Default → tshirt. Every non-mug order on this board is a t-shirt order.
   // (When category is empty and item names are generic, we must not lose orders

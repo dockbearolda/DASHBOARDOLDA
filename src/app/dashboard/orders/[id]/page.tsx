@@ -8,49 +8,17 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-type PrismaOrderFull = {
-  id: string;
-  orderNumber: string;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string | null;
-  status: string;
-  paymentStatus: string;
-  total: number;
-  subtotal: number;
-  shipping: number;
-  tax: number;
-  currency: string;
-  notes: string | null;
-  shippingAddress: unknown;
-  billingAddress: unknown;
-  createdAt: Date;
-  updatedAt: Date;
-  items: {
-    id: string;
-    orderId: string;
-    name: string;
-    sku: string | null;
-    quantity: number;
-    price: number;
-    imageUrl: string | null;
-  }[];
-};
-
 async function getOrder(id: string) {
   const raw = await prisma.order.findUnique({
     where: { id },
     include: { items: true },
   });
   if (!raw) return null;
-  const order = raw as unknown as PrismaOrderFull;
   return {
-    ...order,
-    shippingAddress: order.shippingAddress as Record<string, string> | null,
-    billingAddress: order.billingAddress as Record<string, string> | null,
-    createdAt: order.createdAt.toISOString(),
-    updatedAt: order.updatedAt.toISOString(),
-    items: order.items.map((item) => ({ ...item })),
+    ...raw,
+    createdAt: raw.createdAt.toISOString(),
+    updatedAt: raw.updatedAt.toISOString(),
+    deadline:  raw.deadline?.toISOString() ?? null,
   };
 }
 

@@ -13,28 +13,43 @@ export type OrderStatus =
 
 export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED";
 
+// ── Article enrichi (correspond à order_items en DB) ─────────────────────────
 export interface OrderItem {
   id: string;
   orderId: string;
-  name: string;
-  sku?: string | null;
-  quantity: number;
-  price: number;
-  imageUrl?: string | null;
+
+  // Produit
+  famille?: string | null;      // Type produit (T-Shirt, Sweat, etc.)
+  couleur?: string | null;
+  tailleDTF?: string | null;    // Taille film DTF (A4, A3+5cm…)
+  positionLogo?: string | null;
+  reference?: string | null;
+  taille?: string | null;       // Taille vêtement (S, M, L, XL…)
+  collection?: string | null;
+
+  // Visuels
+  imageAvant?: string | null;   // URL ou code DTF avant
+  imageArriere?: string | null; // URL ou code DTF arrière
+
+  // Client
+  noteClient?: string | null;
+  positionNote?: string | null;
+
+  // Impression PRT
+  prtRef?: string | null;
+  prtTaille?: string | null;
+  prtQuantite?: number | null;
+
+  // Prix
+  prixUnitaire: number;
 }
 
-export interface Address {
-  street?: string;
-  city?: string;
-  postalCode?: string;
-  country?: string;
-  state?: string;
-}
-
+// ── Commande + Client ─────────────────────────────────────────────────────────
 export interface Order {
   id: string;
   orderNumber: string;
-  customerName: string;
+  customerName: string;         // Nom de famille
+  customerFirstName?: string | null; // Prénom
   customerEmail: string;
   customerPhone?: string | null;
   status: OrderStatus;
@@ -46,9 +61,7 @@ export interface Order {
   currency: string;
   notes?: string | null;
   category?: string | null;
-  /** Peut contenir une Address OU des OldaExtraData selon l'origine de la commande */
-  shippingAddress?: Record<string, unknown> | null;
-  billingAddress?: Address | null;
+  deadline?: string | Date | null; // Date limite de livraison
   items: OrderItem[];
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -64,108 +77,21 @@ export interface OrderStats {
   todayRevenue: number;
 }
 
-// ── Nouveau format JSON envoyé par Olda Studio ────────────────────────────────
+// ── Format JSON envoyé par Olda Studio (validation Zod côté API) ──────────────
+// Ces types sont utilisés uniquement dans la couche API pour valider l'input.
 
-/** Un article individuel dans une commande multi-articles (panier) */
-export interface OldaArticle {
-  reference?: string;          // Référence produit (ex: "PACK-NOIR-L")
-  taille?: string;             // Taille du vêtement
-  note?: string;               // Note spécifique à cet article
-  collection?: string;
-
-  // ── Fiche visuel + spécifications ──
-  fiche?: {
-    visuelAvant?: string;      // Image ou code DTF avant
-    visuelArriere?: string;    // Image ou code DTF arrière
-    tailleDTFAr?: string;      // Taille DTF (ex: "A4", "A3 +5cm")
-    typeProduit?: string;      // Type de produit (T-shirt, etc.)
-    couleur?: string;          // Couleur
-  };
-
-  // ── Impression (PRT) ──
-  prt?: {
-    refPrt?: string;
-    taillePrt?: string;
-    quantite?: number;
-  };
-
-  // ── Prix de cet article (en centimes) ──
-  prix?: {
-    tshirt?: number;           // Prix T-shirt nu
-    personnalisation?: number; // Prix personnalisation DTF/Pressage
-  };
-}
-
-/** Champs extra stockés dans shippingAddress (JSONB) pour les commandes Olda Studio */
-export interface OldaExtraData {
-  // ── Identité commande ──
-  commande?: string;           // Order ID unique
-  nom?: string;                // Full name (last name or full)
-  prenom?: string;             // First name
-  telephone?: string;
-
-  // ── Deadline → limit (renamed) ──
-  limit?: string;              // Date limite (ISO 8601 ou texte lisible)
-
-  // ── Références & détails ──
-  collection?: string;
-  reference?: string;          // Référence produit (ex: "PACK-NOIR-L")
-  taille?: string;             // Taille générale
-  note?: string;               // Notes supplémentaires
-
-  // ── Fiche (visuel + spécifications) ──
-  fiche?: {
-    visuelAvant?: string;      // Image ou code DTF avant
-    visuelArriere?: string;    // Image ou code DTF arrière
-    tailleDTFAr?: string;      // Taille DTF arrière (ex: "A4", "A3 +5cm")
-    typeProduit?: string;      // Type de produit (T-shirt, etc.)
-    couleur?: string;          // Couleur
-  };
-
-  // ── Impression (PRT) ──
-  prt?: {
-    refPrt?: string;           // Référence impression
-    taillePrt?: string;        // Taille impression
-    quantite?: number;         // Quantité
-  };
-
-  // ── Paiement ──
-  paiement?: {
-    statut?: "OUI" | "NON" | "PAID" | "PENDING";  // OUI = PAID, NON = PENDING
-  };
-
-  // ── Prix (en centimes) ──
-  prix?: {
-    total?: number;            // Montant total en centimes
-    tshirt?: number;           // Prix T-shirt nu en centimes
-    personnalisation?: number; // Prix personnalisation DTF/Pressage en centimes
-  };
-
-  // ── Multi-articles (panier) ──
-  /** Présent quand le client a mis plusieurs articles dans son panier */
-  articles?: OldaArticle[];
-
-  // ── Marqueur d'origine ──
-  _source?: "olda_studio";     // Ne pas modifier
-}
-
-/** Payload JSON envoyé directement par Olda Studio vers POST /api/orders */
-export interface OldaCommandePayload {
-  commande: string;          // ID unique de la commande (= orderNumber)
-  nom: string;               // Prénom Nom du client
-  prenom?: string;           // First name (extracted or provided)
-  telephone?: string;
-  collection?: string;
-  reference?: string;        // Référence produit
+export interface OldaArticleInput {
+  reference?: string;
   taille?: string;
   note?: string;
-  limit?: string;            // Date limite (renamed from deadline)
+  collection?: string;
   fiche?: {
     visuelAvant?: string;
     visuelArriere?: string;
-    tailleDTFAr?: string;    // Taille DTF arrière
+    tailleDTFAr?: string;
     typeProduit?: string;
     couleur?: string;
+    positionLogo?: string;
   };
   prt?: {
     refPrt?: string;
@@ -173,42 +99,74 @@ export interface OldaCommandePayload {
     quantite?: number;
   };
   prix?: {
-    total?: number;          // En centimes
-    tshirt?: number;         // Prix T-shirt nu en centimes
-    personnalisation?: number; // Prix personnalisation en centimes
+    tshirt?: number;
+    personnalisation?: number;
+  };
+}
+
+export interface OldaCommandeInput {
+  commande: string;
+  nom: string;
+  prenom?: string;
+  telephone?: string;
+  limit?: string;
+  collection?: string;
+  reference?: string;
+  taille?: string;
+  note?: string;
+  fiche?: {
+    visuelAvant?: string;
+    visuelArriere?: string;
+    tailleDTFAr?: string;
+    typeProduit?: string;
+    couleur?: string;
+    positionLogo?: string;
+  };
+  prt?: {
+    refPrt?: string;
+    taillePrt?: string;
+    quantite?: number;
+  };
+  prix?: {
+    total?: number;
+    tshirt?: number;
+    personnalisation?: number;
   };
   paiement?: {
-    statut?: "OUI" | "NON";  // OUI = PAID, NON = PENDING
+    statut?: "OUI" | "NON" | "PAID" | "PENDING";
   };
-
-  /** Articles du panier — présent quand le client a commandé plusieurs t-shirts */
-  articles?: OldaArticle[];
+  articles?: OldaArticleInput[];
 }
 
-export interface WebhookOrderPayload {
-  orderNumber: string;
-  customerName: string;
-  customerEmail: string;
-  customerPhone?: string;
-  status?: OrderStatus;
-  paymentStatus?: PaymentStatus;
-  total: number;
-  subtotal: number;
-  shipping?: number;
-  tax?: number;
-  currency?: string;
-  notes?: string;
-  category?: string;
-  shippingAddress?: Address;
-  billingAddress?: Address;
-  items: {
-    name: string;
-    sku?: string;
-    quantity: number;
-    price: number;
-    imageUrl?: string;
-  }[];
+// ── Rétrocompatibilité — utilisé dans TshirtOrderCard pour le rendu ───────────
+// Conservé pour la couche UI uniquement (conversion depuis order.items).
+
+export interface OldaArticle {
+  reference?: string;
+  taille?: string;
+  note?: string;
+  collection?: string;
+  fiche?: {
+    visuelAvant?: string;
+    visuelArriere?: string;
+    tailleDTFAr?: string;
+    typeProduit?: string;
+    couleur?: string;
+    positionLogo?: string;
+  };
+  prt?: {
+    refPrt?: string;
+    taillePrt?: string;
+    quantite?: number;
+  };
+  prix?: {
+    tshirt?: number;
+    personnalisation?: number;
+  };
 }
+
+/** @deprecated Utiliser Order.items directement — conservé pour migration */
+export type OldaExtraData = Record<string, unknown>;
 
 // ── Workflow Items ────────────────────────────────────────────────────────────
 

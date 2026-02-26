@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { OldaCommandePayload } from "@/types/order";
+import type { OldaCommandeInput as OldaCommandePayload } from "@/types/order";
 
 /**
  * POST /api/orders/from-external

@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * TshirtOrderCard — Apple Premium · Refonte atelier
+ * TshirtOrderCard — Apple Premium · Architecture panier multi-articles
+ * ─ Lit les données depuis order.items (colonnes dédiées, plus de JSONB)
  * ─ Bulle fermée : QR + identité + visuels DTF + infos production + prix
- * ─ Accordéon : collection, référence, taille, note, bloc PRT
+ * ─ Accordéon : collection, référence, taille, note, bloc PRT par article
  * ─ Print modal : visuels agrandis, masquage total UI dashboard
- * ─ Zéro label, zéro ligne vide
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
@@ -15,7 +15,7 @@ import { X, Upload, Printer, Pencil, ChevronDown } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import type { Order, OrderItem, OldaExtraData, OldaArticle } from "@/types/order";
+import type { Order, OrderItem, OldaArticle } from "@/types/order";
 
 // ── Font stack ────────────────────────────────────────────────────────────────
 const SF = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Helvetica Neue', sans-serif";
@@ -46,28 +46,22 @@ function useOrigin() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
 function fmtPrice(amount: number, currency: string) {
   return Number(amount).toLocaleString("fr-FR", { style: "currency", currency, maximumFractionDigits: 0 });
 }
 
-function deadlineLabel(deadline: string | undefined | null): string | null {
+function deadlineLabel(deadline: string | Date | null | undefined): string | null {
   if (!deadline) return null;
   try {
-    const d = new Date(deadline);
-    if (isNaN(d.getTime())) return deadline;
+    const d = new Date(deadline as string);
+    if (isNaN(d.getTime())) return String(deadline);
     const diff = differenceInCalendarDays(d, new Date());
     if (diff < 0)   return `⚠️ Retard ${Math.abs(diff)}j`;
     if (diff === 0) return "Aujourd'hui";
     if (diff === 1) return "Demain";
     return format(d, "d MMM", { locale: fr });
-  } catch { return deadline; }
-}
-
-function readExtra(order: Order): OldaExtraData {
-  if (!order.shippingAddress) return {};
-  const sa = order.shippingAddress as Record<string, unknown>;
-  if (sa._source === "olda_studio") return sa as unknown as OldaExtraData;
-  return {};
+  } catch { return String(deadline); }
 }
 
 function isDtfCode(s: string | undefined | null): boolean {
@@ -76,31 +70,43 @@ function isDtfCode(s: string | undefined | null): boolean {
 }
 
 /**
- * Normalise les données en un tableau d'articles uniforme.
- * — Nouveau format : extra.articles[]
- * — Ancien format  : extra.fiche / extra.prt / extra.reference (1 seul article)
- * Toujours rétrocompatible.
+ * Convertit order.items (colonnes DB) en tableau d'articles OldaArticle pour le rendu.
+ * Si aucun item, tente un fallback sur les images locales.
  */
-function normalizeArticles(extra: OldaExtraData, fallbackImages: string[]): OldaArticle[] {
-  if (extra.articles && extra.articles.length > 0) return extra.articles;
+function itemsToArticles(items: OrderItem[], fallbackImages: string[]): OldaArticle[] {
+  if (items.length > 0) {
+    return items.map((item) => ({
+      reference:  item.reference  ?? undefined,
+      taille:     item.taille     ?? undefined,
+      note:       item.noteClient ?? undefined,
+      collection: item.collection ?? undefined,
+      fiche: {
+        visuelAvant:  item.imageAvant   ?? undefined,
+        visuelArriere: item.imageArriere ?? undefined,
+        tailleDTFAr:  item.tailleDTF    ?? undefined,
+        typeProduit:  item.famille      ?? undefined,
+        couleur:      item.couleur      ?? undefined,
+        positionLogo: item.positionLogo ?? undefined,
+      },
+      prt: (item.prtRef || item.prtTaille || item.prtQuantite != null) ? {
+        refPrt:    item.prtRef    ?? undefined,
+        taillePrt: item.prtTaille ?? undefined,
+        quantite:  item.prtQuantite ?? undefined,
+      } : undefined,
+    }));
+  }
 
-  const hasSingleData = extra.fiche || extra.reference || extra.taille || extra.prt;
-  if (!hasSingleData && fallbackImages.length === 0) return [];
+  // Fallback : images uploadées localement (ancienne commande sans items)
+  if (fallbackImages.length > 0) {
+    return [{
+      fiche: {
+        visuelAvant:  fallbackImages[0],
+        visuelArriere: fallbackImages[1],
+      },
+    }];
+  }
 
-  return [{
-    reference:  extra.reference,
-    taille:     extra.taille,
-    collection: extra.collection,
-    note:       extra.note,
-    fiche: extra.fiche ?? (fallbackImages.length > 0 ? {
-      visuelAvant:  fallbackImages[0],
-      visuelArriere: fallbackImages[1],
-    } : undefined),
-    prt:  extra.prt,
-    prix: extra.prix
-      ? { tshirt: extra.prix.tshirt, personnalisation: extra.prix.personnalisation }
-      : undefined,
-  }];
+  return [];
 }
 
 // ── Patch payload ─────────────────────────────────────────────────────────────
@@ -108,27 +114,20 @@ export interface OrderPatch {
   customerName?: string;
   customerPhone?: string;
   notes?: string;
-  tailleDTFAr?: string;
+  firstItemTailleDTF?: string;
 }
 
 // ── VisualTile — image ou code DTF ───────────────────────────────────────────
 function VisualTile({ src, label }: { src: string; label: string }) {
   return (
     <div className="flex-1 flex flex-col items-center gap-1 min-w-0">
-      <span style={{
-        fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
-        textTransform: "uppercase", color: "#aeaeb2",
-      }}>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>
         {label}
       </span>
       {isDtfCode(src) ? (
         <div
           className="w-full flex items-center justify-center bg-gray-50 font-mono text-center px-2"
-          style={{
-            height: 72, fontSize: 12, fontWeight: 700, color: "#3a3a3c",
-            borderRadius: 12, border: "1px solid #E5E5E5",
-            overflow: "hidden", textOverflow: "ellipsis",
-          }}
+          style={{ height: 72, fontSize: 12, fontWeight: 700, color: "#3a3a3c", borderRadius: 12, border: "1px solid #E5E5E5", overflow: "hidden" }}
         >
           {src}
         </div>
@@ -149,44 +148,28 @@ function VisualTile({ src, label }: { src: string; label: string }) {
 function PaymentBadge({ status }: { status: string }) {
   const paid = status === "PAID";
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 4,
-      fontSize: 11, fontWeight: 600,
-      color: paid ? "#34C759" : "#FF3B30",
-    }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: "50%",
-        background: paid ? "#34C759" : "#FF3B30",
-        display: "inline-block", flexShrink: 0,
-      }} />
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: paid ? "#34C759" : "#FF3B30" }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: paid ? "#34C759" : "#FF3B30", display: "inline-block", flexShrink: 0 }} />
       {paid ? "Payé" : "Non payé"}
     </span>
   );
 }
 
 // ── PrintModal ────────────────────────────────────────────────────────────────
-function PrintModal({
-  order, extra, images, addImage, origin, onClose,
-}: {
+function PrintModal({ order, articles, images, addImage, origin, onClose }: {
   order: Order;
-  extra: OldaExtraData;
+  articles: OldaArticle[];
   images: string[];
   addImage: (url: string) => void;
   origin: string;
   onClose: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const currency = (order.currency as string) ?? "EUR";
+  const currency = order.currency ?? "EUR";
   const qrValue = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
   const createdAt = order.createdAt instanceof Date ? order.createdAt : new Date(order.createdAt as string);
   const formattedDate = format(createdAt, "d MMMM yyyy", { locale: fr });
-
-  const nameParts = (order.customerName ?? "").trim().split(/\s+/);
-  const prenom = nameParts[0] ?? "";
-  const nom = nameParts.slice(1).join(" ") || prenom;
-
-  const printArticles = normalizeArticles(extra, images);
-  const deadlineTxt = deadlineLabel(extra.limit);
+  const deadlineTxt = deadlineLabel(order.deadline);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -203,46 +186,26 @@ function PrintModal({
     return () => document.removeEventListener("keydown", fn);
   }, [onClose]);
 
+  // Premier article pour infos en-tête
+  const firstArticle = articles[0];
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[4px]"
       onClick={onClose}
     >
-      {/* CSS print : masque tout l'UI, agrandit les visuels */}
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
           .olda-print-sheet, .olda-print-sheet * { visibility: visible !important; }
           .olda-print-sheet {
-            position: fixed !important;
-            inset: 0 !important;
-            padding: 1.5cm 2cm !important;
-            background: white !important;
-            font-family: ${SF.replace(/'/g, '"')} !important;
-            display: block !important;
+            position: fixed !important; inset: 0 !important;
+            padding: 1.5cm 2cm !important; background: white !important;
+            font-family: ${SF.replace(/'/g, '"')} !important; display: block !important;
           }
-          .olda-print-visuals {
-            display: flex !important;
-            gap: 2cm !important;
-            justify-content: center !important;
-            margin: 0.8cm 0 !important;
-          }
-          .olda-print-visuals img,
-          .olda-print-visuals .olda-print-dtf {
-            width: 44% !important;
-            max-height: 10cm !important;
-            object-fit: contain !important;
-            border-radius: 8px !important;
-            border: 1px solid #E5E5E5 !important;
-          }
-          .olda-print-dtf {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            background: #f8f8f8 !important;
-            font-size: 18pt !important;
-            font-weight: 700 !important;
-          }
+          .olda-print-visuals { display: flex !important; gap: 2cm !important; justify-content: center !important; margin: 0.8cm 0 !important; }
+          .olda-print-visuals img, .olda-print-visuals .olda-print-dtf { width: 44% !important; max-height: 10cm !important; object-fit: contain !important; border-radius: 8px !important; border: 1px solid #E5E5E5 !important; }
+          .olda-print-dtf { display: flex !important; align-items: center !important; justify-content: center !important; background: #f8f8f8 !important; font-size: 18pt !important; font-weight: 700 !important; }
         }
       `}</style>
 
@@ -258,32 +221,23 @@ function PrintModal({
               Bon de Commande · {formattedDate}
             </p>
             <p style={{ fontSize: 18, fontWeight: 700, color: "#1d1d1f", marginTop: 2 }}>
-              {extra.reference || order.orderNumber}
+              {firstArticle?.reference || order.orderNumber}
             </p>
-            {extra.fiche?.tailleDTFAr && (
-              <p style={{ fontSize: 13, color: "#8e8e93", marginTop: 2 }}>
-                {extra.fiche.tailleDTFAr}
-              </p>
+            {firstArticle?.fiche?.tailleDTFAr && (
+              <p style={{ fontSize: 13, color: "#8e8e93", marginTop: 2 }}>{firstArticle.fiche.tailleDTFAr}</p>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => window.print()}
-              className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-              title="Imprimer"
-            >
+            <button onClick={() => window.print()} className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Imprimer">
               <Printer className="h-3.5 w-3.5" />
             </button>
-            <button
-              onClick={onClose}
-              className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-            >
+            <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
               <X className="h-3.5 w-3.5 text-gray-600" />
             </button>
           </div>
         </div>
 
-        {/* ══ Fiche imprimable ══════════════════════════════════════════════════ */}
+        {/* ══ Fiche imprimable ═══════════════════════════════════════════════════ */}
         <div className="olda-print-sheet">
           {/* Identité + QR */}
           <div className="px-5 pt-5 flex items-start gap-4">
@@ -293,9 +247,17 @@ function PrintModal({
               </div>
             )}
             <div className="flex-1 min-w-0 space-y-1">
-              {nom && <p style={{ fontSize: 18, fontWeight: 700, color: "#1d1d1f", textTransform: "uppercase", letterSpacing: "0.02em" }}>{nom}</p>}
-              {prenom && prenom !== nom && <p style={{ fontSize: 14, color: "#3a3a3c" }}>{prenom}</p>}
-              {order.customerPhone && <p style={{ fontSize: 13, color: "#8e8e93" }}>{order.customerPhone}</p>}
+              {order.customerName && (
+                <p style={{ fontSize: 18, fontWeight: 700, color: "#1d1d1f", textTransform: "uppercase", letterSpacing: "0.02em" }}>
+                  {order.customerName}
+                </p>
+              )}
+              {order.customerFirstName && (
+                <p style={{ fontSize: 14, color: "#3a3a3c" }}>{order.customerFirstName}</p>
+              )}
+              {order.customerPhone && (
+                <p style={{ fontSize: 13, color: "#8e8e93" }}>{order.customerPhone}</p>
+              )}
               {deadlineTxt && (
                 <p style={{ fontSize: 12, fontWeight: 500, color: deadlineTxt.includes("Retard") ? "#FF3B30" : "#636366" }}>
                   {deadlineTxt}
@@ -312,31 +274,17 @@ function PrintModal({
             </div>
           </div>
 
-          {/* Infos produit */}
-          {(extra.fiche?.typeProduit || extra.fiche?.couleur || extra.fiche?.tailleDTFAr || extra.taille) && (
-            <div className="px-5 pt-3 flex items-center gap-3 flex-wrap">
-              {[extra.fiche?.typeProduit, extra.fiche?.couleur, extra.fiche?.tailleDTFAr, extra.taille]
-                .filter(Boolean)
-                .map((val, i) => (
-                  <span key={i} style={{ fontSize: 13, color: "#3a3a3c", fontWeight: 500 }}>{val}</span>
-                ))}
-            </div>
-          )}
-
-          {/* Séparateur */}
           <div className="mx-5 mt-4 h-px bg-[#E5E5E5]" />
 
-          {/* ── Visuels et infos par article ── */}
-          {printArticles.length > 0 ? (
+          {/* Articles */}
+          {articles.length > 0 ? (
             <div className="flex flex-col gap-4">
-              {printArticles.map((article, i) => {
+              {articles.map((article, i) => {
                 const av  = article.fiche?.visuelAvant  ?? null;
                 const arr = article.fiche?.visuelArriere ?? null;
-                const artPrt = article.prt;
                 return (
                   <div key={i}>
-                    {/* Séparateur + label article si multi */}
-                    {printArticles.length > 1 && (
+                    {articles.length > 1 && (
                       <div className="mx-5 flex items-center gap-3 mt-2">
                         <div className="flex-1 h-px bg-[#E5E5E5]" />
                         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>
@@ -345,8 +293,6 @@ function PrintModal({
                         <div className="flex-1 h-px bg-[#E5E5E5]" />
                       </div>
                     )}
-
-                    {/* Infos produit de l'article */}
                     {(article.fiche?.typeProduit || article.fiche?.couleur || article.fiche?.tailleDTFAr || article.taille) && (
                       <div className="px-5 pt-3 flex items-center gap-3 flex-wrap">
                         {[article.fiche?.typeProduit, article.fiche?.couleur, article.fiche?.tailleDTFAr, article.taille]
@@ -356,52 +302,40 @@ function PrintModal({
                           ))}
                       </div>
                     )}
-
-                    {/* Visuels de l'article */}
                     {(av || arr) ? (
                       <div className="olda-print-visuals px-5 pt-3 flex gap-4">
                         {([{ src: av, label: "Avant" }, { src: arr, label: "Arrière" }] as { src: string | null; label: string }[])
                           .filter(v => v.src)
                           .map(({ src, label }) => (
                             <div key={label} className="flex-1 flex flex-col items-center gap-2">
-                              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>
-                                {label}
-                              </p>
+                              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>{label}</p>
                               {isDtfCode(src!) ? (
-                                <div
-                                  className="olda-print-dtf w-full flex items-center justify-center rounded-2xl border border-[#E5E5E5] bg-gray-50 font-mono text-center px-4"
-                                  style={{ minHeight: 140, fontSize: 17, fontWeight: 700, color: "#3a3a3c" }}
-                                >
+                                <div className="olda-print-dtf w-full flex items-center justify-center rounded-2xl border border-[#E5E5E5] bg-gray-50 font-mono text-center px-4" style={{ minHeight: 140, fontSize: 17, fontWeight: 700, color: "#3a3a3c" }}>
                                   {src}
                                 </div>
                               ) : (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={src!}
-                                  alt={label}
-                                  className="w-full object-contain rounded-2xl border border-[#E5E5E5] bg-white"
-                                  style={{ maxHeight: 200 }}
-                                />
+                                <img src={src!} alt={label} className="w-full object-contain rounded-2xl border border-[#E5E5E5] bg-white" style={{ maxHeight: 200 }} />
                               )}
                             </div>
                           ))}
                       </div>
-                    ) : i === 0 && printArticles.length === 1 ? (
+                    ) : i === 0 && articles.length === 1 ? (
                       <label className="mx-5 mt-4 flex flex-col items-center justify-center gap-2 h-32 rounded-2xl border border-dashed border-[#E5E5E5] cursor-pointer hover:bg-gray-50 transition-colors">
                         <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
                         <Upload className="h-5 w-5 text-gray-400" />
                         <span style={{ fontSize: 13, color: "#8e8e93" }}>Ajouter Avant + Arrière</span>
                       </label>
                     ) : null}
-
-                    {/* Infos secondaires + PRT de l'article */}
                     <div className="px-5 pt-2 flex flex-col gap-1">
                       {article.collection && <p style={{ fontSize: 12, color: "#636366" }}>{article.collection}</p>}
-                      {article.reference && printArticles.length === 1 && <p style={{ fontSize: 11, color: "#aeaeb2", fontFamily: "monospace" }}>{article.reference}</p>}
+                      {article.reference && articles.length === 1 && (
+                        <p style={{ fontSize: 11, color: "#aeaeb2", fontFamily: "monospace" }}>{article.reference}</p>
+                      )}
                       {article.note && <p style={{ fontSize: 12, color: "#636366", fontStyle: "italic" }}>{article.note}</p>}
-                      {artPrt && Object.values(artPrt).some(v => v) && (
+                      {article.prt && Object.values(article.prt).some(v => v) && (
                         <div className="mt-1 rounded-xl bg-gray-50 border border-[#E5E5E5] px-3 py-2 flex items-center gap-3 flex-wrap">
-                          {[artPrt.refPrt, artPrt.taillePrt, artPrt.quantite && `×${artPrt.quantite}`]
+                          {[article.prt.refPrt, article.prt.taillePrt, article.prt.quantite && `×${article.prt.quantite}`]
                             .filter(Boolean)
                             .map((v, j) => (
                               <span key={j} style={{ fontSize: 12, color: "#3a3a3c", fontWeight: 600, fontFamily: "monospace" }}>{v}</span>
@@ -421,14 +355,12 @@ function PrintModal({
             </label>
           )}
 
-          {/* Note commande globale */}
-          {order.notes?.trim() && !printArticles.some(a => a.note) && (
+          {order.notes?.trim() && !articles.some(a => a.note) && (
             <div className="px-5 pt-1 pb-1">
               <p style={{ fontSize: 12, color: "#636366", fontStyle: "italic" }}>{order.notes}</p>
             </div>
           )}
         </div>
-        {/* ══ fin fiche ════════════════════════════════════════════════════════ */}
       </div>
     </div>
   );
@@ -437,17 +369,15 @@ function PrintModal({
 // ── Modal édition ─────────────────────────────────────────────────────────────
 const inputCls = "w-full rounded-xl border border-[#E5E5E5] bg-gray-50 px-3 py-2 text-[14px] text-gray-900 placeholder:text-gray-300 focus:outline-none focus:border-blue-400 focus:bg-white transition-colors";
 
-function EditOrderModal({
-  order, extra, onClose, onSaved,
-}: {
+function EditOrderModal({ order, firstItemTailleDTF, onClose, onSaved }: {
   order: Order;
-  extra: OldaExtraData;
+  firstItemTailleDTF?: string;
   onClose: () => void;
   onSaved: (patch: OrderPatch) => void;
 }) {
   const [name,   setName]   = useState(order.customerName ?? "");
   const [phone,  setPhone]  = useState(order.customerPhone ?? "");
-  const [dtf,    setDtf]    = useState(extra.fiche?.tailleDTFAr ?? "");
+  const [dtf,    setDtf]    = useState(firstItemTailleDTF ?? "");
   const [notes,  setNotes]  = useState(order.notes ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -460,39 +390,25 @@ function EditOrderModal({
   const handleSave = async () => {
     setSaving(true);
     const patch: OrderPatch = {
-      customerName:  name  || undefined,
-      customerPhone: phone || undefined,
+      customerName:      name  || undefined,
+      customerPhone:     phone || undefined,
       notes,
-      tailleDTFAr:   dtf   || undefined,
+      firstItemTailleDTF: dtf || undefined,
     };
     try {
       await fetch(`/api/orders/${order.id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName:  patch.customerName,
-          customerPhone: patch.customerPhone,
-          notes:         patch.notes,
-          ...(patch.tailleDTFAr ? { shippingAddressPatch: { tailleDTFAr: patch.tailleDTFAr } } : {}),
-        }),
+        body: JSON.stringify(patch),
       });
       onSaved(patch);
       onClose();
-    } catch { /* ignore */ } finally {
-      setSaving(false);
-    }
+    } catch { /* ignore */ } finally { setSaving(false); }
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[4px]"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm bg-white rounded-[24px] shadow-[0_24px_64px_rgba(0,0,0,0.15)] border border-[#E5E5E5] overflow-hidden"
-        style={{ fontFamily: SF }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[4px]" onClick={onClose}>
+      <div className="w-full max-w-sm bg-white rounded-[24px] shadow-[0_24px_64px_rgba(0,0,0,0.15)] border border-[#E5E5E5] overflow-hidden" style={{ fontFamily: SF }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-[#E5E5E5]">
           <h2 style={{ fontSize: 17, fontWeight: 600, color: "#1d1d1f" }}>Modifier la commande</h2>
           <button onClick={onClose} className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
@@ -501,15 +417,15 @@ function EditOrderModal({
         </div>
         <div className="px-5 py-4 space-y-3">
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Nom complet</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Prénom Nom" className={inputCls} />
+            <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Nom</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de famille" className={inputCls} />
           </div>
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Téléphone</label>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="06 …" className={inputCls} />
           </div>
           <div>
-            <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Taille DTF AR</label>
+            <label className="block text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-1.5">Taille DTF AR (1er article)</label>
             <input value={dtf} onChange={(e) => setDtf(e.target.value)} placeholder="ex : 300 mm" className={inputCls} />
           </div>
           <div>
@@ -518,9 +434,7 @@ function EditOrderModal({
           </div>
         </div>
         <div className="px-5 pb-5 flex gap-2.5">
-          <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-gray-100 text-[14px] font-semibold text-gray-600 hover:bg-gray-200 transition-colors">
-            Annuler
-          </button>
+          <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-gray-100 text-[14px] font-semibold text-gray-600 hover:bg-gray-200 transition-colors">Annuler</button>
           <button onClick={handleSave} disabled={saving} className="flex-1 h-10 rounded-xl bg-gray-900 text-[14px] font-semibold text-white hover:bg-gray-700 disabled:opacity-50 transition-colors">
             {saving ? "…" : "Enregistrer"}
           </button>
@@ -535,28 +449,15 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
   order: Order;
   isNew?: boolean;
   onDelete?: () => void;
-  /** Mode compact : réduit padding + fonts ~10% quand colonne dense (>5 items) */
   compact?: boolean;
 }) {
   const [order, setOrder] = useState(initialOrder);
-
   const items    = Array.isArray(order.items) ? order.items : [];
-  const currency = (order.currency as string) ?? "EUR";
+  const currency = order.currency ?? "EUR";
   const origin   = useOrigin();
-  const extra    = readExtra(order);
 
-  // Séparation prénom / nom — convention "Prénom NOM"
-  const nameParts = (order.customerName ?? "").trim().split(/\s+/);
-  const prenom    = nameParts[0] ?? "";
-  const nom       = nameParts.slice(1).join(" ") || prenom;
-
-  // Visuels : extra d'abord, fallback images items/locales
-  const serverImages  = items.filter((i: OrderItem) => i.imageUrl && !isDtfCode(i.imageUrl)).map((i: OrderItem) => i.imageUrl as string).slice(0, 2);
   const { localImages, addImage } = useLocalImages(order.id);
-  const displayImages = serverImages.length > 0 ? serverImages : localImages;
-
-  // Articles normalisés (multi-articles ou rétrocompat mono-article)
-  const articles   = normalizeArticles(extra, displayImages);
+  const articles   = itemsToArticles(items, localImages);
   const hasVisuals = articles.some(a => a.fiche?.visuelAvant || a.fiche?.visuelArriere);
 
   const [modalOpen,     setModalOpen]     = useState(false);
@@ -565,7 +466,7 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
   const [accordeonOpen, setAccordeonOpen] = useState(false);
 
   const qrValue    = origin ? `${origin}/dashboard/orders/${order.id}` : order.orderNumber;
-  const deadlineTxt = deadlineLabel(extra.limit);
+  const deadlineTxt = deadlineLabel(order.deadline);
   const qrSize      = compact ? 50 : 60;
 
   const hasAccordeonContent = articles.some(a =>
@@ -576,59 +477,41 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
   const handleSaved = (patch: OrderPatch) => {
     setOrder((prev) => {
       const next = { ...prev };
-      if (patch.customerName  !== undefined) next.customerName  = patch.customerName;
-      if (patch.customerPhone !== undefined) next.customerPhone = patch.customerPhone;
-      if (patch.notes         !== undefined) next.notes         = patch.notes;
-      if (patch.tailleDTFAr) {
-        const sa = (prev.shippingAddress as Record<string, unknown>) ?? {};
-        const prevFiche = (sa.fiche as Record<string, unknown>) ?? {};
-        next.shippingAddress = { ...sa, fiche: { ...prevFiche, tailleDTFAr: patch.tailleDTFAr }, _source: "olda_studio" };
+      if (patch.customerName      !== undefined) next.customerName  = patch.customerName;
+      if (patch.customerPhone     !== undefined) next.customerPhone = patch.customerPhone;
+      if (patch.notes             !== undefined) next.notes         = patch.notes;
+      if (patch.firstItemTailleDTF !== undefined && next.items.length > 0) {
+        next.items = next.items.map((item, i) =>
+          i === 0 ? { ...item, tailleDTF: patch.firstItemTailleDTF ?? null } : item
+        );
       }
       return next;
     });
   };
 
-  // ── Swipe-to-dismiss (Apple-style) ──────────────────────────────────────────
+  // ── Swipe-to-dismiss ──────────────────────────────────────────────────────
   const cardRef = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
-  const opacity = useTransform(x, [-150, 0, 150], [0.3, 1, 0.3]);
-  const bgOpacity = useTransform(
-    x,
-    [-150, -30, 0, 30, 150],
-    [0.15, 0.06, 0, 0.06, 0.15]
-  );
+  const opacity   = useTransform(x, [-150, 0, 150], [0.3, 1, 0.3]);
+  const bgOpacity = useTransform(x, [-150, -30, 0, 30, 150], [0.15, 0.06, 0, 0.06, 0.15]);
 
-  const handleCardDragEnd = (_: any, info: any) => {
+  const handleCardDragEnd = (_: unknown, info: { offset: { x: number } }) => {
     const cardWidth = cardRef.current?.offsetWidth ?? 300;
-    const threshold = cardWidth * 0.5;
     const offset = info.offset.x;
-
-    if (onDelete && Math.abs(offset) > threshold) {
-      // Seuil atteint → suppression
+    if (onDelete && Math.abs(offset) > cardWidth * 0.5) {
       navigator.vibrate?.(40);
       animate(x, offset > 0 ? 800 : -800, { duration: 0.2 });
       setTimeout(onDelete, 180);
     } else {
-      // Ressort de retour
-      animate(x, 0, {
-        type: "spring",
-        stiffness: 400,
-        damping: 30,
-      });
+      animate(x, 0, { type: "spring", stiffness: 400, damping: 30 });
     }
   };
 
   return (
     <>
-      {/* ── Card shell ── */}
       <div className="relative overflow-hidden" style={{ borderRadius: 18 }}>
-        {/* Fond rouge derrière (swipe feedback) */}
-        <motion.div
-          className="absolute inset-0 bg-red-500 rounded-[18px]"
-          style={{ opacity: bgOpacity, zIndex: 0 }}
-        />
+        <motion.div className="absolute inset-0 bg-red-500 rounded-[18px]" style={{ opacity: bgOpacity, zIndex: 0 }} />
 
-        {/* Carte swipeable */}
         <motion.div
           ref={cardRef}
           className={cn(
@@ -645,261 +528,191 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
           dragElastic={0.3}
           onDragEnd={handleCardDragEnd}
         >
-        {/* ── Action buttons — visibles au hover ── */}
-        <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150">
-          <button
-            onClick={(e) => { e.stopPropagation(); setModalOpen(true); }}
-            title="Imprimer"
-            className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-[#E5E5E5] shadow-sm hover:bg-blue-50 hover:border-blue-300 transition-colors"
-          >
-            <Printer className="h-2.5 w-2.5 text-gray-400" />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); setEditOpen(true); }}
-            title="Modifier"
-            className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-[#E5E5E5] shadow-sm hover:bg-blue-50 hover:border-blue-300 transition-colors"
-          >
-            <Pencil className="h-2.5 w-2.5 text-gray-400" />
-          </button>
-          {onDelete && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              title="Supprimer"
-              className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-[#E5E5E5] shadow-sm hover:bg-red-50 hover:border-red-300 transition-colors"
-            >
-              <X className="h-2.5 w-2.5" style={{ color: "#FF3B30" }} />
+          {/* Action buttons */}
+          <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity duration-150">
+            <button onClick={(e) => { e.stopPropagation(); setModalOpen(true); }} title="Imprimer" className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-[#E5E5E5] shadow-sm hover:bg-blue-50 hover:border-blue-300 transition-colors">
+              <Printer className="h-2.5 w-2.5 text-gray-400" />
             </button>
-          )}
-        </div>
+            <button onClick={(e) => { e.stopPropagation(); setEditOpen(true); }} title="Modifier" className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-[#E5E5E5] shadow-sm hover:bg-blue-50 hover:border-blue-300 transition-colors">
+              <Pencil className="h-2.5 w-2.5 text-gray-400" />
+            </button>
+            {onDelete && (
+              <button onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Supprimer" className="h-5 w-5 rounded-full flex items-center justify-center bg-white border border-[#E5E5E5] shadow-sm hover:bg-red-50 hover:border-red-300 transition-colors">
+                <X className="h-2.5 w-2.5" style={{ color: "#FF3B30" }} />
+              </button>
+            )}
+          </div>
 
-        {/* ══ SECTION 1 : Header — QR + Identité ══════════════════════════════ */}
-        <div className={cn("flex items-start gap-3", compact ? "p-2.5" : "p-3")}>
-          {/* QR Code — clic révèle l'ID */}
-          {origin && (
-            <div className="shrink-0 flex flex-col items-center gap-1">
-              <div
-                className="rounded-lg border border-[#E5E5E5] p-[3px] cursor-pointer hover:border-gray-400 transition-colors bg-white"
-                onClick={(e) => { e.stopPropagation(); setShowOrderId(!showOrderId); }}
-                title="Voir l'ID"
-              >
-                <QRCodeSVG value={qrValue} size={qrSize} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
-              </div>
-              {showOrderId && (
-                <p
-                  className="font-mono text-center"
-                  style={{ fontSize: 7, color: "#aeaeb2", maxWidth: qrSize + 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={order.id}
+          {/* ══ SECTION 1 : Header — QR + Identité ══════════════════════════════ */}
+          <div className={cn("flex items-start gap-3", compact ? "p-2.5" : "p-3")}>
+            {origin && (
+              <div className="shrink-0 flex flex-col items-center gap-1">
+                <div
+                  className="rounded-lg border border-[#E5E5E5] p-[3px] cursor-pointer hover:border-gray-400 transition-colors bg-white"
+                  onClick={(e) => { e.stopPropagation(); setShowOrderId(!showOrderId); }}
+                  title="Voir l'ID"
                 >
-                  {order.id}
+                  <QRCodeSVG value={qrValue} size={qrSize} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+                </div>
+                {showOrderId && (
+                  <p className="font-mono text-center" style={{ fontSize: 7, color: "#aeaeb2", maxWidth: qrSize + 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={order.id}>
+                    {order.id}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5 pt-0.5">
+              {order.customerName && (
+                <p className="truncate" style={{ fontSize: compact ? 13 : 15, fontWeight: 700, color: "#1d1d1f", textTransform: "uppercase", letterSpacing: "0.03em", lineHeight: 1.2 }}>
+                  {order.customerName}
+                </p>
+              )}
+              {order.customerFirstName && (
+                <p className="truncate" style={{ fontSize: compact ? 12 : 13, color: "#3a3a3c", lineHeight: 1.2 }}>
+                  {order.customerFirstName}
+                </p>
+              )}
+              {order.customerPhone && (
+                <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#8e8e93" }}>
+                  {order.customerPhone}
+                </p>
+              )}
+              {deadlineTxt && (
+                <p className="truncate" style={{ fontSize: compact ? 10 : 11, fontWeight: 500, color: deadlineTxt.includes("Retard") ? "#FF3B30" : "#636366" }}>
+                  {deadlineTxt}
                 </p>
               )}
             </div>
+          </div>
+
+          {/* ══ SECTION 2 : Visuels DTF — un bloc par article ════════════════════ */}
+          {hasVisuals && (
+            <div className={cn("flex flex-col gap-2.5", compact ? "px-2.5 pb-2" : "px-3 pb-2.5")}>
+              {articles.map((article, i) => {
+                const av  = article.fiche?.visuelAvant  ?? null;
+                const arr = article.fiche?.visuelArriere ?? null;
+                if (!av && !arr) return null;
+                return (
+                  <div key={i}>
+                    {articles.length > 1 && (
+                      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2", marginBottom: 4 }}>
+                        {article.reference || `Article ${i + 1}`}
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      {av  && <VisualTile src={av}  label="Avant"   />}
+                      {arr && <VisualTile src={arr} label="Arrière" />}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
 
-          {/* Identité — zéro label, zéro ligne vide */}
-          <div className="flex-1 min-w-0 flex flex-col gap-0.5 pt-0.5">
-            {nom && (
-              <p className="truncate" style={{ fontSize: compact ? 13 : 15, fontWeight: 700, color: "#1d1d1f", textTransform: "uppercase", letterSpacing: "0.03em", lineHeight: 1.2 }}>
-                {nom}
-              </p>
-            )}
-            {prenom && prenom !== nom && (
-              <p className="truncate" style={{ fontSize: compact ? 12 : 13, color: "#3a3a3c", lineHeight: 1.2 }}>
-                {prenom}
-              </p>
-            )}
-            {order.customerPhone && (
-              <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#8e8e93" }}>
-                {order.customerPhone}
-              </p>
-            )}
-            {deadlineTxt && (
-              <p className="truncate" style={{ fontSize: compact ? 10 : 11, fontWeight: 500, color: deadlineTxt.includes("Retard") ? "#FF3B30" : "#636366" }}>
-                {deadlineTxt}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* ══ SECTION 2 : Visuels DTF — un bloc par article ════════════════════ */}
-        {hasVisuals && (
-          <div className={cn("flex flex-col gap-2.5", compact ? "px-2.5 pb-2" : "px-3 pb-2.5")}>
-            {articles.map((article, i) => {
-              const av  = article.fiche?.visuelAvant  ?? null;
-              const arr = article.fiche?.visuelArriere ?? null;
-              if (!av && !arr) return null;
-              return (
-                <div key={i}>
-                  {articles.length > 1 && (
-                    <p style={{
-                      fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
-                      textTransform: "uppercase", color: "#aeaeb2", marginBottom: 4,
-                    }}>
-                      {article.reference || `Article ${i + 1}`}
-                    </p>
-                  )}
-                  <div className="flex gap-2">
-                    {av  && <VisualTile src={av}  label="Avant"   />}
-                    {arr && <VisualTile src={arr} label="Arrière" />}
+          {/* ══ SECTION 3 : Infos produit ════════════════════════════════════════ */}
+          {articles.some(a => a.fiche?.typeProduit || a.fiche?.couleur || a.fiche?.tailleDTFAr || a.taille) && (
+            <div className={cn("flex flex-col", compact ? "px-2.5 pb-1.5 gap-1" : "px-3 pb-2 gap-1.5")}>
+              {articles.map((article, i) => {
+                const hasInfo = article.fiche?.typeProduit || article.fiche?.couleur || article.fiche?.tailleDTFAr || article.taille;
+                if (!hasInfo) return null;
+                return (
+                  <div key={i} className="flex flex-col gap-0.5">
+                    {articles.length > 1 && !(article.fiche?.visuelAvant || article.fiche?.visuelArriere) && (
+                      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>
+                        {article.reference || `Article ${i + 1}`}
+                      </p>
+                    )}
+                    {article.fiche?.typeProduit && (
+                      <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#3a3a3c", fontWeight: 500 }}>{article.fiche.typeProduit}</p>
+                    )}
+                    {article.fiche?.couleur && (
+                      <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#636366" }}>{article.fiche.couleur}</p>
+                    )}
+                    {article.fiche?.tailleDTFAr && (
+                      <p className="truncate font-mono" style={{ fontSize: compact ? 11 : 12, color: "#636366", fontWeight: 600 }}>{article.fiche.tailleDTFAr}</p>
+                    )}
+                    {article.taille && (
+                      <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#636366" }}>{article.taille}</p>
+                    )}
+                    {articles.length > 1 && i < articles.length - 1 && (
+                      <div style={{ height: 1, background: "#F2F2F7", margin: "4px 0" }} />
+                    )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
 
-        {/* ══ SECTION 3 : Infos produit — typeProduit · couleur · tailleDTF ══════ */}
-        {articles.some(a => a.fiche?.typeProduit || a.fiche?.couleur || a.fiche?.tailleDTFAr || a.taille) && (
-          <div className={cn("flex flex-col", compact ? "px-2.5 pb-1.5 gap-1" : "px-3 pb-2 gap-1.5")}>
-            {articles.map((article, i) => {
-              const hasInfo = article.fiche?.typeProduit || article.fiche?.couleur || article.fiche?.tailleDTFAr || article.taille;
-              if (!hasInfo) return null;
-              return (
-                <div key={i} className="flex flex-col gap-0.5">
-                  {articles.length > 1 && !(article.fiche?.visuelAvant || article.fiche?.visuelArriere) && (
-                    <p style={{
-                      fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
-                      textTransform: "uppercase", color: "#aeaeb2",
-                    }}>
-                      {article.reference || `Article ${i + 1}`}
+          {/* ══ SECTION 4 : Footer — Prix total ══════════════════════════════════ */}
+          {order.total > 0 && (
+            <div className={cn("flex items-center justify-end border-t border-[#E5E5E5]", compact ? "px-2.5 py-1.5" : "px-3 py-2")}>
+              <p className="tabular-nums" style={{ fontSize: compact ? 15 : 17, fontWeight: 700, color: order.paymentStatus === "PAID" ? "#34C759" : "#FF3B30" }}>
+                {fmtPrice(order.total, currency)}
+              </p>
+            </div>
+          )}
+
+          {/* ══ Chevron accordéon ════════════════════════════════════════════════ */}
+          {hasAccordeonContent && (
+            <button
+              onClick={() => setAccordeonOpen(!accordeonOpen)}
+              className="w-full flex items-center justify-center py-1.5 border-t border-[#E5E5E5] hover:bg-gray-50/80 transition-colors"
+            >
+              <ChevronDown className="h-3.5 w-3.5 text-gray-400 transition-transform duration-300" style={{ transform: accordeonOpen ? "rotate(180deg)" : "rotate(0deg)" }} />
+            </button>
+          )}
+
+          {/* ══ Accordéon détaillé ════════════════════════════════════════════════ */}
+          <div style={{ maxHeight: accordeonOpen ? "320px" : "0px", overflow: "hidden", transition: "max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+            <div className={cn("flex flex-col border-t border-[#E5E5E5] divide-y divide-[#F2F2F7]", compact ? "px-2.5 py-2 gap-1" : "px-3 py-2.5 gap-1.5")}>
+              {articles.map((article, i) => (
+                <div key={i} className={cn("flex flex-col gap-1", i > 0 && "pt-1.5")}>
+                  {articles.length > 1 && (
+                    <p style={{ fontSize: compact ? 9 : 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8e8e93" }}>
+                      Article {i + 1}{article.reference ? ` · ${article.reference}` : ""}
                     </p>
                   )}
-                  {article.fiche?.typeProduit && (
-                    <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#3a3a3c", fontWeight: 500 }}>
-                      {article.fiche.typeProduit}
-                    </p>
+                  {article.collection && (
+                    <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#636366" }}>{article.collection}</p>
                   )}
-                  {article.fiche?.couleur && (
-                    <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#636366" }}>
-                      {article.fiche.couleur}
-                    </p>
-                  )}
-                  {article.fiche?.tailleDTFAr && (
-                    <p className="truncate font-mono" style={{ fontSize: compact ? 11 : 12, color: "#636366", fontWeight: 600 }}>
-                      {article.fiche.tailleDTFAr}
-                    </p>
+                  {article.reference && articles.length === 1 && (
+                    <p className="truncate font-mono" style={{ fontSize: compact ? 10 : 11, color: "#aeaeb2" }}>{article.reference}</p>
                   )}
                   {article.taille && (
-                    <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#636366" }}>
-                      {article.taille}
-                    </p>
+                    <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#3a3a3c", fontWeight: 600 }}>{article.taille}</p>
                   )}
-                  {articles.length > 1 && i < articles.length - 1 && (
-                    <div style={{ height: 1, background: "#F2F2F7", margin: "4px 0" }} />
+                  {article.note && (
+                    <p className="truncate italic" style={{ fontSize: compact ? 10 : 11, color: "#636366" }} title={article.note}>{article.note}</p>
+                  )}
+                  {article.prt && Object.values(article.prt).some(v => v) && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      {[article.prt.refPrt, article.prt.taillePrt, article.prt.quantite && `×${article.prt.quantite}`]
+                        .filter(Boolean)
+                        .map((v, j) => (
+                          <span key={j} className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono" style={{ fontSize: compact ? 9 : 10, color: "#3a3a3c", fontWeight: 600 }}>
+                            {v}
+                          </span>
+                        ))}
+                    </div>
                   )}
                 </div>
-              );
-            })}
+              ))}
+              {order.notes?.trim() && !articles.some(a => a.note) && (
+                <p className="truncate italic pt-1.5" style={{ fontSize: compact ? 10 : 11, color: "#636366" }} title={order.notes ?? ""}>
+                  {order.notes}
+                </p>
+              )}
+            </div>
           </div>
-        )}
-
-        {/* ══ SECTION 4 : Footer — Prix total ══════════════════════════════════ */}
-        {order.total > 0 && (
-          <div className={cn("flex items-center justify-end border-t border-[#E5E5E5]", compact ? "px-2.5 py-1.5" : "px-3 py-2")}>
-            <p className="tabular-nums" style={{
-              fontSize: compact ? 15 : 17,
-              fontWeight: 700,
-              color: order.paymentStatus === "PAID" ? "#34C759" : "#FF3B30",
-            }}>
-              {fmtPrice(order.total, currency)}
-            </p>
-          </div>
-        )}
-
-        {/* ══ Chevron accordéon — affiché seulement si contenu disponible ══════ */}
-        {hasAccordeonContent && (
-          <button
-            onClick={() => setAccordeonOpen(!accordeonOpen)}
-            className="w-full flex items-center justify-center py-1.5 border-t border-[#E5E5E5] hover:bg-gray-50/80 transition-colors"
-          >
-            <ChevronDown
-              className="h-3.5 w-3.5 text-gray-400 transition-transform duration-300"
-              style={{ transform: accordeonOpen ? "rotate(180deg)" : "rotate(0deg)" }}
-            />
-          </button>
-        )}
-
-        {/* ══ Accordéon CSS natif ═══════════════════════════════════════════════ */}
-        <div
-          style={{
-            maxHeight: accordeonOpen ? "320px" : "0px",
-            overflow: "hidden",
-            transition: "max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          }}
-        >
-          <div className={cn(
-            "flex flex-col border-t border-[#E5E5E5]",
-            compact ? "px-2.5 py-2 gap-1" : "px-3 py-2.5 gap-1.5",
-          )}>
-            {articles.map((article, i) => (
-              <div key={i} className="flex flex-col gap-1">
-                {/* Label article si multi-articles */}
-                {articles.length > 1 && (
-                  <p style={{
-                    fontSize: compact ? 9 : 10, fontWeight: 700, letterSpacing: "0.1em",
-                    textTransform: "uppercase", color: "#8e8e93",
-                  }}>
-                    Article {i + 1}{article.reference ? ` · ${article.reference}` : ""}
-                  </p>
-                )}
-                {article.collection && (
-                  <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#636366" }}>
-                    {article.collection}
-                  </p>
-                )}
-                {article.reference && articles.length === 1 && (
-                  <p className="truncate font-mono" style={{ fontSize: compact ? 10 : 11, color: "#aeaeb2" }}>
-                    {article.reference}
-                  </p>
-                )}
-                {article.taille && (
-                  <p className="truncate" style={{ fontSize: compact ? 11 : 12, color: "#3a3a3c", fontWeight: 600 }}>
-                    {article.taille}
-                  </p>
-                )}
-                {article.note && (
-                  <p className="truncate italic" style={{ fontSize: compact ? 10 : 11, color: "#636366" }} title={article.note}>
-                    {article.note}
-                  </p>
-                )}
-                {/* Bloc PRT de cet article */}
-                {article.prt && Object.values(article.prt).some(v => v) && (
-                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    {[article.prt.refPrt, article.prt.taillePrt, article.prt.quantite && `×${article.prt.quantite}`]
-                      .filter(Boolean)
-                      .map((v, j) => (
-                        <span
-                          key={j}
-                          className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono"
-                          style={{ fontSize: compact ? 9 : 10, color: "#3a3a3c", fontWeight: 600 }}
-                        >
-                          {v}
-                        </span>
-                      ))}
-                  </div>
-                )}
-                {/* Séparateur entre articles */}
-                {articles.length > 1 && i < articles.length - 1 && (
-                  <div style={{ height: 1, background: "#F2F2F7", margin: "4px 0" }} />
-                )}
-              </div>
-            ))}
-            {/* Note commande globale (si pas de note par article) */}
-            {order.notes?.trim() && !articles.some(a => a.note) && (
-              <p className="truncate italic" style={{ fontSize: compact ? 10 : 11, color: "#636366" }} title={order.notes ?? ""}>
-                {order.notes}
-              </p>
-            )}
-          </div>
-        </div>
         </motion.div>
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {editOpen && (
         <EditOrderModal
           order={order}
-          extra={extra}
+          firstItemTailleDTF={items[0]?.tailleDTF ?? undefined}
           onClose={() => setEditOpen(false)}
           onSaved={handleSaved}
         />
@@ -907,8 +720,8 @@ export function TshirtOrderCard({ order: initialOrder, isNew, onDelete, compact 
       {modalOpen && (
         <PrintModal
           order={order}
-          extra={extra}
-          images={displayImages}
+          articles={articles}
+          images={localImages}
           addImage={addImage}
           origin={origin}
           onClose={() => setModalOpen(false)}

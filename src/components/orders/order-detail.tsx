@@ -47,35 +47,34 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Order, OldaExtraData, OldaArticle, OrderStatus, PaymentStatus } from "@/types/order";
+import type { Order, OrderItem, OldaArticle, OrderStatus, PaymentStatus } from "@/types/order";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function readExtra(order: Order): OldaExtraData {
-  if (!order.shippingAddress) return {};
-  const sa = order.shippingAddress as Record<string, unknown>;
-  if (sa._source === "olda_studio") return sa as unknown as OldaExtraData;
-  return {};
-}
-
-/** Normalise en tableau d'articles (multi-articles ou rétrocompat mono-article) */
-function normalizeArticles(extra: OldaExtraData): OldaArticle[] {
-  if (extra.articles && extra.articles.length > 0) return extra.articles;
-  const hasSingleData = extra.fiche || extra.reference || extra.taille || extra.prt;
-  if (!hasSingleData) return [];
-  return [{
-    reference:  extra.reference,
-    taille:     extra.taille,
-    collection: extra.collection,
-    note:       extra.note,
-    fiche:      extra.fiche,
-    prt:        extra.prt,
-    prix:       extra.prix
-      ? { tshirt: extra.prix.tshirt, personnalisation: extra.prix.personnalisation }
-      : undefined,
-  }];
+/** Convertit order.items (colonnes DB) en OldaArticle[] pour le rendu */
+function normalizeArticles(order: Order): OldaArticle[] {
+  const items = Array.isArray(order.items) ? order.items : [];
+  if (items.length === 0) return [];
+  return items.map((item: OrderItem) => ({
+    reference:  item.reference  ?? undefined,
+    taille:     item.taille     ?? undefined,
+    note:       item.noteClient ?? undefined,
+    collection: item.collection ?? undefined,
+    fiche: {
+      visuelAvant:   item.imageAvant   ?? undefined,
+      visuelArriere: item.imageArriere ?? undefined,
+      tailleDTFAr:   item.tailleDTF    ?? undefined,
+      typeProduit:   item.famille      ?? undefined,
+      couleur:       item.couleur      ?? undefined,
+    },
+    prt: (item.prtRef || item.prtTaille || item.prtQuantite != null) ? {
+      refPrt:    item.prtRef    ?? undefined,
+      taillePrt: item.prtTaille ?? undefined,
+      quantite:  item.prtQuantite ?? undefined,
+    } : undefined,
+  }));
 }
 
 function fmtPrice(n: number, currency = "EUR") {
@@ -263,31 +262,28 @@ interface EditFields {
 
 function EditModal({
   order,
-  extra,
   open,
   onClose,
   onSaved,
 }: {
   order: Order;
-  extra: OldaExtraData;
   open: boolean;
   onClose: () => void;
   onSaved: (updated: Order) => void;
 }) {
-  // Pour les commandes multi-articles, on utilise le premier article comme référence d'édition
-  const firstArticle = extra.articles?.[0];
+  const firstItem = Array.isArray(order.items) ? order.items[0] : null;
 
   const [fields, setFields] = useState<EditFields>({
     customerName:  order.customerName,
     customerPhone: order.customerPhone ?? "",
-    limit:         extra.limit ?? "",
-    collection:    firstArticle?.collection ?? extra.collection ?? "",
-    reference:     firstArticle?.reference  ?? extra.reference  ?? "",
-    couleur:       firstArticle?.fiche?.couleur      ?? extra.fiche?.couleur      ?? "",
-    taille:        firstArticle?.taille              ?? extra.taille              ?? "",
-    tailleDTFAr:   firstArticle?.fiche?.tailleDTFAr  ?? extra.fiche?.tailleDTFAr  ?? "",
-    visuelAvant:   firstArticle?.fiche?.visuelAvant  ?? extra.fiche?.visuelAvant  ?? "",
-    visuelArriere: firstArticle?.fiche?.visuelArriere ?? extra.fiche?.visuelArriere ?? "",
+    limit:         order.deadline ? String(order.deadline).slice(0, 10) : "",
+    collection:    firstItem?.collection  ?? "",
+    reference:     firstItem?.reference   ?? "",
+    couleur:       firstItem?.couleur     ?? "",
+    taille:        firstItem?.taille      ?? "",
+    tailleDTFAr:   firstItem?.tailleDTF   ?? "",
+    visuelAvant:   firstItem?.imageAvant  ?? "",
+    visuelArriere: firstItem?.imageArriere ?? "",
     notes:         order.notes ?? "",
     status:        order.status,
     paymentStatus: order.paymentStatus,
@@ -304,24 +300,12 @@ function EditModal({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          status:        fields.status,
-          paymentStatus: fields.paymentStatus,
-          notes:         fields.notes || null,
-          customerName:  fields.customerName || null,
-          customerPhone: fields.customerPhone || null,
-          shippingAddressPatch: {
-            ...(extra._source ? { _source: extra._source } : {}),
-            limit:      fields.limit      || undefined,
-            collection: fields.collection || undefined,
-            reference:  fields.reference  || undefined,
-            taille:     fields.taille     || undefined,
-            fiche: {
-              couleur:       fields.couleur       || undefined,
-              tailleDTFAr:   fields.tailleDTFAr   || undefined,
-              visuelAvant:   fields.visuelAvant    || undefined,
-              visuelArriere: fields.visuelArriere  || undefined,
-            },
-          },
+          status:               fields.status,
+          paymentStatus:        fields.paymentStatus,
+          notes:                fields.notes || null,
+          customerName:         fields.customerName || null,
+          customerPhone:        fields.customerPhone || null,
+          firstItemTailleDTF:   fields.tailleDTFAr || null,
         }),
       });
       const data = await res.json();
@@ -626,9 +610,8 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
   const [deleting, setDeleting] = useState(false);
   const [sending, setSending] = useState(false);
 
-  const extra    = readExtra(order);
-  const articles = normalizeArticles(extra);
-  const createdAt = new Date(order.createdAt);
+  const articles = normalizeArticles(order);
+  const createdAt = new Date(order.createdAt as string);
 
   const orderDot   = STATUS_DOT[order.status]     ?? { label: order.status,        color: "bg-zinc-500" };
   const paymentDot = PAYMENT_DOT[order.paymentStatus] ?? { label: order.paymentStatus, color: "bg-zinc-500" };
@@ -672,7 +655,9 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
   };
 
   // Items avec prix > 0 pour la section paiement
-  const billableItems = order.items.filter((i) => i.price > 0);
+  const billableItems = (Array.isArray(order.items) ? order.items : []).filter(
+    (i: OrderItem) => (i.prixUnitaire ?? 0) > 0
+  );
 
   return (
     <>
@@ -725,21 +710,12 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
         </SectionCard>
 
         {/* ══ 2. VISUELS TECHNIQUES ══════════════════════════════════════════ */}
-        {(articles.some(a => a.fiche?.visuelAvant || a.fiche?.visuelArriere) ||
-          order.items.some((i) => i.imageUrl)) && (
+        {articles.some(a => a.fiche?.visuelAvant || a.fiche?.visuelArriere) && (
           <SectionCard>
             <SectionLabel>Visuels techniques</SectionLabel>
             {articles.map((article, i) => {
-              // Cherche les items correspondant à cet article (format multi : "REF – Avant")
-              const refPattern = article.reference ? new RegExp(article.reference, "i") : null;
-              const avItem  = order.items.find(it =>
-                /avant|front/i.test(it.name) && (!refPattern || refPattern.test(it.name))
-              );
-              const arrItem = order.items.find(it =>
-                /arri[eè]re|dos|back/i.test(it.name) && (!refPattern || refPattern.test(it.name))
-              );
-              const srcAv  = avItem?.imageUrl  ?? article.fiche?.visuelAvant  ?? null;
-              const srcArr = arrItem?.imageUrl ?? article.fiche?.visuelArriere ?? null;
+              const srcAv  = article.fiche?.visuelAvant   ?? null;
+              const srcArr = article.fiche?.visuelArriere ?? null;
               if (!srcAv && !srcArr) return null;
               return (
                 <div key={i}>
@@ -762,8 +738,9 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
         <SectionCard>
           <SectionLabel>Client</SectionLabel>
           <DataRow label="Nom"       value={order.customerName} />
-          <DataRow label="Téléphone" value={order.customerPhone} />
-          <DataRow label="Limit"     value={extra.limit} last />
+          <DataRow label="Prénom"    value={order.customerFirstName ?? undefined} />
+          <DataRow label="Téléphone" value={order.customerPhone ?? undefined} />
+          <DataRow label="Deadline"  value={order.deadline ? fmtDate(order.deadline as string) : undefined} last />
         </SectionCard>
 
         {/* ══ 4. PRODUIT — un bloc par article ═══════════════════════════════ */}
@@ -774,7 +751,7 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
                 ? `Article ${i + 1}${article.reference ? ` · ${article.reference}` : ""}`
                 : "Produit"}
             </SectionLabel>
-            <DataRow label="Collection" value={article.collection ?? extra.collection} />
+            <DataRow label="Collection" value={article.collection} />
             <DataRow label="Référence"  value={article.reference}  mono />
             <DataRow
               label="Coloris"
@@ -792,15 +769,6 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
           </SectionCard>
         ))}
 
-        {/* Fallback si aucun article (commande sans données produit) */}
-        {articles.length === 0 && (extra.collection || extra.reference || extra.taille) && (
-          <SectionCard>
-            <SectionLabel>Produit</SectionLabel>
-            <DataRow label="Collection"    value={extra.collection} />
-            <DataRow label="Référence"     value={extra.reference} mono />
-            <DataRow label="Taille"        value={extra.taille} last />
-          </SectionCard>
-        )}
 
         {/* ══ 5. VISUELS DTF — un bloc par article ════════════════════════════ */}
         {articles.some(a => a.fiche?.visuelAvant || a.fiche?.visuelArriere) && (
@@ -843,11 +811,11 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
 
           {/* Détail des articles */}
           {billableItems.length > 0 ? (
-            billableItems.map((item, idx) => (
+            billableItems.map((item: OrderItem, idx) => (
               <DataRow
                 key={item.id}
-                label={item.name}
-                value={fmtPrice(item.price * item.quantity, order.currency)}
+                label={item.reference ?? item.famille ?? `Article ${idx + 1}`}
+                value={fmtPrice(item.prixUnitaire, order.currency)}
                 last={idx === billableItems.length - 1}
               />
             ))
@@ -933,7 +901,6 @@ export function OrderDetail({ order: initialOrder }: OrderDetailProps) {
       {/* ══ Modals ═════════════════════════════════════════════════════════════ */}
       <EditModal
         order={order}
-        extra={extra}
         open={editOpen}
         onClose={() => setEditOpen(false)}
         onSaved={(updated) => setOrder(updated)}

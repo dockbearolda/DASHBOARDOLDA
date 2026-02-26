@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { OrderStatus, PaymentStatus, Order, WebhookOrderPayload } from "@/types/order";
+import type { OrderStatus, PaymentStatus, Order } from "@/types/order";
 
 // ── OrderStatus enum values ────────────────────────────────────────────────────
 
@@ -55,46 +55,37 @@ describe("PaymentStatus enum", () => {
 
 // ── Order type shape ───────────────────────────────────────────────────────────
 
-describe("Order type", () => {
+describe("Order type (nouveau schéma panier multi-articles)", () => {
   const sampleOrder: Order = {
     id: "c1234567890abc",
-    orderNumber: "TEST-001",
-    customerName: "Marie Dupont",
-    customerEmail: "marie.dupont@example.com",
+    orderNumber: "CMD-001",
+    customerName: "DUPONT",
+    customerFirstName: "Marie",
+    customerEmail: "olda@studio",
     customerPhone: "+33 6 12 34 56 78",
     status: "COMMANDE_A_TRAITER",
     paymentStatus: "PAID",
     total: 149.99,
-    subtotal: 129.99,
-    shipping: 9.90,
-    tax: 10.10,
+    subtotal: 149.99,
+    shipping: 0,
+    tax: 0,
     currency: "EUR",
     notes: null,
-    shippingAddress: {
-      street: "15 Rue de la Paix",
-      city: "Paris",
-      postalCode: "75001",
-      country: "France",
-    },
-    billingAddress: null,
+    deadline: new Date("2025-03-15").toISOString(),
     items: [
       {
         id: "item1",
         orderId: "c1234567890abc",
-        name: "Bougie Signature Ambre",
-        sku: "BSIG-AMB-001",
-        quantity: 2,
-        price: 49.99,
-        imageUrl: null,
-      },
-      {
-        id: "item2",
-        orderId: "c1234567890abc",
-        name: "Diffuseur Luxe Bois",
-        sku: "DLUX-BOIS-01",
-        quantity: 1,
-        price: 30.01,
-        imageUrl: null,
+        famille: "T-Shirt",
+        couleur: "Blanc",
+        tailleDTF: "A4",
+        reference: "H-001",
+        taille: "L",
+        collection: "Homme Été",
+        imageAvant: "bea-16-av-AV",
+        imageArriere: "bea-16-av-AR",
+        noteClient: "Pas de logo sur la manche",
+        prixUnitaire: 149.99,
       },
     ],
     createdAt: new Date().toISOString(),
@@ -105,17 +96,30 @@ describe("Order type", () => {
     expect(sampleOrder.id).toBeTruthy();
     expect(sampleOrder.orderNumber).toBeTruthy();
     expect(sampleOrder.customerName).toBeTruthy();
-    expect(sampleOrder.customerEmail).toBeTruthy();
     expect(sampleOrder.total).toBeGreaterThan(0);
   });
 
-  it("total equals subtotal + shipping + tax", () => {
-    const computed = sampleOrder.subtotal + sampleOrder.shipping + sampleOrder.tax;
-    expect(Math.round(computed * 100) / 100).toBeCloseTo(sampleOrder.total, 2);
+  it("has customerFirstName (prénom séparé)", () => {
+    expect(sampleOrder.customerFirstName).toBe("Marie");
+  });
+
+  it("has deadline field", () => {
+    expect(sampleOrder.deadline).toBeTruthy();
   });
 
   it("items array is non-empty", () => {
     expect(sampleOrder.items.length).toBeGreaterThan(0);
+  });
+
+  it("items have new rich fields (famille, couleur, tailleDTF…)", () => {
+    const item = sampleOrder.items[0];
+    expect(item.famille).toBe("T-Shirt");
+    expect(item.couleur).toBe("Blanc");
+    expect(item.tailleDTF).toBe("A4");
+    expect(item.imageAvant).toBe("bea-16-av-AV");
+    expect(item.imageArriere).toBe("bea-16-av-AR");
+    expect(item.noteClient).toBe("Pas de logo sur la manche");
+    expect(item.prixUnitaire).toBe(149.99);
   });
 
   it("status is a valid OrderStatus", () => {
@@ -124,69 +128,5 @@ describe("Order type", () => {
 
   it("paymentStatus is a valid PaymentStatus", () => {
     expect(PAYMENT_STATUSES).toContain(sampleOrder.paymentStatus);
-  });
-});
-
-// ── WebhookOrderPayload validation logic ───────────────────────────────────────
-
-describe("WebhookOrderPayload validation", () => {
-  const requiredFields = ["orderNumber", "customerName", "customerEmail", "total", "subtotal", "items"];
-
-  function getMissingFields(payload: Record<string, unknown>): string[] {
-    return requiredFields.filter((f) => !(f in payload));
-  }
-
-  it("valid payload has no missing fields", () => {
-    const payload: WebhookOrderPayload = {
-      orderNumber: "ORD-001",
-      customerName: "Marie Dupont",
-      customerEmail: "marie@example.com",
-      total: 100,
-      subtotal: 90,
-      items: [{ name: "Produit A", quantity: 1, price: 90 }],
-    };
-    expect(getMissingFields(payload as unknown as Record<string, unknown>)).toHaveLength(0);
-  });
-
-  it("detects missing orderNumber", () => {
-    const payload = { customerName: "X", customerEmail: "x@x.com", total: 1, subtotal: 1, items: [] };
-    expect(getMissingFields(payload)).toContain("orderNumber");
-  });
-
-  it("detects missing items", () => {
-    const payload = { orderNumber: "X", customerName: "X", customerEmail: "x@x.com", total: 1, subtotal: 1 };
-    expect(getMissingFields(payload)).toContain("items");
-  });
-
-  it("empty items array should be rejected", () => {
-    const items: WebhookOrderPayload["items"] = [];
-    expect(Array.isArray(items) && items.length === 0).toBe(true);
-  });
-
-  it("defaults status to COMMANDE_A_TRAITER when absent", () => {
-    const payload: WebhookOrderPayload = {
-      orderNumber: "ORD-002",
-      customerName: "Jean Martin",
-      customerEmail: "jean@example.com",
-      total: 50,
-      subtotal: 50,
-      items: [{ name: "Produit B", quantity: 1, price: 50 }],
-    };
-    // Simulate the API default (same logic as route.ts)
-    const status = payload.status ?? "COMMANDE_A_TRAITER";
-    expect(status).toBe("COMMANDE_A_TRAITER");
-  });
-
-  it("defaults paymentStatus to PENDING when absent", () => {
-    const payload: WebhookOrderPayload = {
-      orderNumber: "ORD-003",
-      customerName: "Jean Martin",
-      customerEmail: "jean@example.com",
-      total: 50,
-      subtotal: 50,
-      items: [{ name: "Produit C", quantity: 1, price: 50 }],
-    };
-    const paymentStatus = payload.paymentStatus ?? "PENDING";
-    expect(paymentStatus).toBe("PENDING");
   });
 });

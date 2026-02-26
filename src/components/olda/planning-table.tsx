@@ -1,24 +1,24 @@
 "use client";
 
 /**
- * PlanningTable — Planning d'entreprise complet
- * ─ Stepper 3 niveaux de priorité (Basse / Moyenne / Haute) — sélection directe
- * ─ Quantité : datalist (suggestions) + saisie libre
- * ─ Client : majuscule automatique
- * ─ Désignation : colonne large
- * ─ Note : popover via icône
- * ─ Total : calculé automatiquement (qté × prix unitaire)
- * ─ Date limite : ligne rouge si ≤ 1 jour ou dépassée
- * ─ État : menu déroulant 16 statuts
- * ─ Interne : sélection parmi Loïc, Charlie, Mélina, Amandine, Renaud
- * ─ Drag & drop vertical pour réordonner
- * ─ Optimistic UI : onChange met à jour l'état, onBlur persiste via API
+ * PlanningTable — Planning opérationnel, Apple Design Language
+ *
+ * Architecture :
+ *   • Pastilles priorité douces : Gris (Basse) · Bleu (Moyenne) · Orange (Haute)
+ *   • Note inline visible (zone texte secondaire dans la ligne)
+ *   • Auto-save debounce 400 ms pour les champs texte
+ *   • Sauvegarde immédiate pour les selects, dates et priorité
+ *   • Ligne rouge (bg-red-50) si échéance ≤ 1 jour ou dépassée
+ *   • Drag & drop vertical (framer-motion Reorder)
+ *   • border-slate-100 · hover:bg-slate-50 · Inter
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
-import { Trash2, Plus, StickyNote } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface PlanningItem {
   id: string;
@@ -57,176 +57,180 @@ interface PlanningTableProps {
   onItemsChange?: (items: PlanningItem[]) => void;
 }
 
-// ── Priorité ───────────────────────────────────────────────────────────────────
+// ── Config priorité — pastilles douces (Gris / Bleu / Orange) ─────────────────
 
-const PRIORITY_COLORS: Record<string, { active: string; inactive: string }> = {
-  BASSE:   { active: "bg-green-500 text-white border-green-500",   inactive: "bg-gray-100 text-gray-400 border-gray-200 hover:bg-green-50 hover:text-green-600 hover:border-green-300" },
-  MOYENNE: { active: "bg-orange-400 text-white border-orange-400", inactive: "bg-gray-100 text-gray-400 border-gray-200 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300" },
-  HAUTE:   { active: "bg-red-500 text-white border-red-500",       inactive: "bg-gray-100 text-gray-400 border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-300" },
-};
+const PRIORITY = {
+  BASSE:   {
+    label:    "Basse",
+    active:   "bg-slate-200/90 text-slate-600 border-slate-300/60",
+    inactive: "text-slate-300 hover:bg-slate-100/80 hover:text-slate-500",
+  },
+  MOYENNE: {
+    label:    "Moy.",
+    active:   "bg-blue-100 text-blue-600 border-blue-200/70",
+    inactive: "text-slate-300 hover:bg-blue-50 hover:text-blue-500",
+  },
+  HAUTE:   {
+    label:    "Haute",
+    active:   "bg-orange-100 text-orange-600 border-orange-200/70",
+    inactive: "text-slate-300 hover:bg-orange-50 hover:text-orange-500",
+  },
+} as const;
 
-const PRIORITY_LABELS: Record<string, string> = {
-  BASSE:   "Basse",
-  MOYENNE: "Moy.",
-  HAUTE:   "Haute",
-};
-
-// ── Statuts ────────────────────────────────────────────────────────────────────
+// ── Statuts commande ───────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<PlanningStatus, string> = {
-  A_DEVISER:            "À deviser",
-  ATTENTE_VALIDATION:   "Attente validation",
-  MAQUETTE_A_FAIRE:     "Maquette à faire",
-  ATTENTE_MARCHANDISE:  "Attente marchandise",
-  A_PREPARER:           "À préparer",
-  A_PRODUIRE:           "À produire",
-  EN_PRODUCTION:        "En production",
-  A_MONTER_NETTOYER:    "À monter/nettoyer",
-  MANQUE_INFORMATION:   "Manque info",
-  TERMINE:              "Terminé",
-  PREVENIR_CLIENT:      "Prévenir client",
-  CLIENT_PREVENU:       "Client prévenu",
-  RELANCE_CLIENT:       "Relance client",
-  PRODUIT_RECUPERE:     "Produit récupéré",
-  A_FACTURER:           "À facturer",
-  FACTURE_FAITE:        "Facture faite",
+  A_DEVISER:           "À deviser",
+  ATTENTE_VALIDATION:  "Attente validation",
+  MAQUETTE_A_FAIRE:    "Maquette à faire",
+  ATTENTE_MARCHANDISE: "Attente marchandise",
+  A_PREPARER:          "À préparer",
+  A_PRODUIRE:          "À produire",
+  EN_PRODUCTION:       "En production",
+  A_MONTER_NETTOYER:   "À monter/nettoyer",
+  MANQUE_INFORMATION:  "Manque information",
+  TERMINE:             "Terminé",
+  PREVENIR_CLIENT:     "Prévenir client",
+  CLIENT_PREVENU:      "Client prévenu",
+  RELANCE_CLIENT:      "Relance client",
+  PRODUIT_RECUPERE:    "Produit récupéré",
+  A_FACTURER:          "À facturer",
+  FACTURE_FAITE:       "Facture faite",
 };
 
-// ── Responsables internes ──────────────────────────────────────────────────────
+// ── Équipe interne ─────────────────────────────────────────────────────────────
 
-const RESPONSIBLE_OPTIONS = [
-  { key: "loic",     label: "LÖ", full: "Loïc"     },
-  { key: "charlie",  label: "CH", full: "Charlie"   },
-  { key: "melina",   label: "MÉ", full: "Mélina"    },
-  { key: "amandine", label: "AM", full: "Amandine"  },
-  { key: "renaud",   label: "RE", full: "Renaud"    },
-];
+const TEAM = [
+  { key: "loic",     initials: "LO", name: "Loïc"     },
+  { key: "charlie",  initials: "CH", name: "Charlie"   },
+  { key: "melina",   initials: "ME", name: "Mélina"    },
+  { key: "amandine", initials: "AM", name: "Amandine"  },
+  { key: "renaud",   initials: "RE", name: "Renaud"    },
+] as const;
 
-// ── Suggestions quantités (datalist) ──────────────────────────────────────────
+// ── Suggestions quantités ──────────────────────────────────────────────────────
 
 const QTY_PRESETS = [1, 5, 10, 15, 20, 25, 30, 50, 75, 100, 150, 200, 300, 500];
 
-// ── Grille CSS ─────────────────────────────────────────────────────────────────
-// [Priorité | Client | Qté | Désignation | Note | Prix unit. | Total | Date | État | Interne | ×]
+// ── Grille CSS (11 colonnes) ───────────────────────────────────────────────────
+// Priorité | Client | Qté | Désignation | Note | Prix u. | Total | Échéance | État | Interne | ×
 
-const GRID_COLS =
-  "grid-cols-[148px_155px_88px_1fr_52px_88px_78px_112px_178px_138px_40px]";
-const CELL_CLASS = "px-2 py-2.5 truncate";
+const GRID = "grid-cols-[138px_150px_74px_minmax(140px,1fr)_minmax(130px,0.7fr)_80px_72px_108px_170px_116px_34px]";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function isDeadlineCritical(deadline: string | null): boolean {
+function isUrgent(deadline: string | null): boolean {
   if (!deadline) return false;
-  const d = new Date(deadline);
-  const now = new Date();
-  const diffDays = (d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-  // Rouge si ≤ 1 jour restant OU si la date est dépassée
-  return diffDays <= 1;
+  return (new Date(deadline).getTime() - Date.now()) / 86_400_000 <= 1;
 }
 
-// ── Composant principal ────────────────────────────────────────────────────────
+// Style commun des champs éditables (sans bordure visible au repos)
+const field =
+  "w-full bg-transparent text-[13px] text-slate-900 placeholder:text-slate-300 " +
+  "px-2.5 py-[7px] rounded-lg border border-transparent transition-all duration-150 " +
+  "hover:border-slate-200 focus:outline-none focus:border-blue-300 " +
+  "focus:bg-white focus:ring-2 focus:ring-blue-100/80 focus:shadow-sm";
+
+// ── Composant ──────────────────────────────────────────────────────────────────
 
 export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
-  const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
-  const [isAddingNew,   setIsAddingNew]   = useState(false);
-  const [notePopover,   setNotePopover]   = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [isAdding,    setIsAdding]    = useState(false);
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  const sortedItems = useMemo(
-    () => {
-      if (!Array.isArray(items)) return [];
-      return [...items].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0));
-    },
+  const sorted = useMemo(
+    () => (!Array.isArray(items) ? [] : [...items].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0))),
     [items]
   );
 
-  // ── Ajout d'une nouvelle ligne ─────────────────────────────────────────────
+  // ── Auto-save avec debounce 400 ms ─────────────────────────────────────────
 
-  const handleAddNew = useCallback(async () => {
-    setIsAddingNew(true);
+  const persist = useCallback((id: string, patch: Record<string, unknown>) => {
+    fetch(`/api/planning/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }).catch((e) => console.error("Planning save failed:", e));
+  }, []);
+
+  /** Met à jour l'état local immédiatement. Pour les champs texte : debounce 400 ms avant API. */
+  const update = useCallback(
+    (id: string, field: string, value: unknown, immediate = false) => {
+      onItemsChange?.(items.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
+
+      if (immediate) {
+        persist(id, { [field]: value });
+      } else {
+        const key = `${id}::${field}`;
+        clearTimeout(timers.current[key]);
+        timers.current[key] = setTimeout(() => persist(id, { [field]: value }), 400);
+      }
+    },
+    [items, onItemsChange, persist]
+  );
+
+  // ── Ajout ──────────────────────────────────────────────────────────────────
+
+  const handleAdd = useCallback(async () => {
+    if (isAdding) return;
+    setIsAdding(true);
     try {
-      const res = await fetch("/api/planning", {
+      const res  = await fetch("/api/planning", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          priority:    "MOYENNE",
-          clientName:  "",
-          quantity:    1,
-          designation: "",
-          note:        "",
-          unitPrice:   0,
-          deadline:    null,
-          status:      "A_DEVISER",
-          responsible: "",
+          priority: "MOYENNE", clientName: "", quantity: 1,
+          designation: "", note: "", unitPrice: 0,
+          deadline: null, status: "A_DEVISER", responsible: "",
         }),
       });
-      const data = await res.json();
-      onItemsChange?.([data.item, ...items]);
-    } catch (err) {
-      console.error("Failed to create planning item:", err);
+      const { item } = await res.json();
+      if (item) onItemsChange?.([item, ...items]);
+    } catch (e) {
+      console.error("Failed to add row:", e);
     } finally {
-      setTimeout(() => setIsAddingNew(false), 600);
+      setTimeout(() => setIsAdding(false), 700);
     }
-  }, [items, onItemsChange]);
+  }, [isAdding, items, onItemsChange]);
 
   // ── Suppression ────────────────────────────────────────────────────────────
 
   const handleDelete = useCallback(
     async (id: string) => {
-      setIsDeletingIds((prev) => new Set([...prev, id]));
-      onItemsChange?.(items.filter((i) => i.id !== id));
+      setDeletingIds((prev) => new Set([...prev, id]));
+      onItemsChange?.(items.filter((it) => it.id !== id));
       try {
         await fetch(`/api/planning/${id}`, { method: "DELETE" });
       } catch {
         const res  = await fetch("/api/planning");
         const data = await res.json();
         onItemsChange?.(data.items ?? []);
+      } finally {
+        setDeletingIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
       }
     },
     [items, onItemsChange]
   );
 
-  // ── Mise à jour optimiste ─────────────────────────────────────────────────
+  // ── Réordonnancement ────────────────────────────────────────────────────────
 
-  const handleFieldChange = useCallback(
-    (id: string, field: string, value: unknown) => {
+  const handleReorder = useCallback(
+    (newOrder: PlanningItem[]) => {
+      const reordered = newOrder.map((it, idx) => ({ ...it, position: idx }));
       onItemsChange?.(
-        items.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+        items
+          .filter((i) => !reordered.some((r) => r.id === i.id))
+          .concat(reordered)
       );
-    },
-    [items, onItemsChange]
-  );
-
-  const handleFieldBlur = useCallback(
-    async (id: string, field: string, value: unknown) => {
-      try {
-        await fetch(`/api/planning/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [field]: value }),
-        });
-      } catch (err) {
-        console.error("Failed to update planning item:", err);
-      }
-    },
-    []
-  );
-
-  // ── Stepper priorité — sélection directe ─────────────────────────────────
-
-  const handlePrioritySet = useCallback(
-    async (id: string, priority: PlanningItem["priority"]) => {
-      onItemsChange?.(
-        items.map((item) => (item.id === id ? { ...item, priority } : item))
-      );
-      try {
-        await fetch(`/api/planning/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ priority }),
-        });
-      } catch (err) {
-        console.error("Failed to update priority:", err);
-      }
+      Promise.all(
+        reordered.map((it) =>
+          fetch(`/api/planning/${it.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ position: it.position }),
+          })
+        )
+      ).catch(console.error);
     },
     [items, onItemsChange]
   );
@@ -235,334 +239,327 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-[18px] bg-white border border-gray-100 shadow-sm p-4 min-w-0"
+      className="flex flex-col rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden"
       style={{
-        fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+        fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
         WebkitFontSmoothing: "antialiased",
-        MozOsxFontSmoothing: "grayscale",
       }}
     >
 
-      {/* ── En-tête ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pb-2">
+      {/* ── Barre d'outils ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
         <div>
-          <h2 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+          <h2 className="text-[13px] font-semibold text-slate-900 tracking-tight">
             Planning d&apos;Entreprise
           </h2>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {sortedItems.length} ligne{sortedItems.length !== 1 ? "s" : ""}
+          <p className="text-[11px] text-slate-400 mt-0.5 tabular-nums">
+            {sorted.length} ligne{sorted.length !== 1 ? "s" : ""}
           </p>
         </div>
 
-        <motion.button
-          onClick={handleAddNew}
-          whileTap={{ scale: 0.92 }}
+        <button
+          onClick={handleAdd}
+          disabled={isAdding}
           className={cn(
-            "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
-            isAddingNew
-              ? "text-white bg-green-500 shadow-md"
-              : "text-gray-700 hover:text-gray-900 hover:bg-gray-100 border border-gray-200"
+            "flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[13px] font-semibold",
+            "transition-all duration-200 active:scale-95 select-none",
+            isAdding
+              ? "bg-emerald-500 text-white cursor-default"
+              : "bg-slate-900 text-white hover:bg-slate-700"
           )}
         >
-          <Plus className="h-4 w-4" />
-          {isAddingNew ? "Ajouté ✓" : "Nouvelle ligne"}
-        </motion.button>
+          <Plus className="h-3.5 w-3.5 shrink-0" />
+          {isAdding ? "Ajoutée ✓" : "Nouvelle ligne"}
+        </button>
       </div>
 
-      {/* ── En-tête colonnes ────────────────────────────────────────────────── */}
-      <div className={cn("grid gap-0 border-b border-gray-100 pb-2", GRID_COLS)}>
-        <div className="text-left   text-[11px] font-semibold text-gray-500 px-2">Priorité</div>
-        <div className="text-left   text-[11px] font-semibold text-gray-500 px-2">Client</div>
-        <div className="text-center text-[11px] font-semibold text-gray-500 px-2">Qté</div>
-        <div className="text-left   text-[11px] font-semibold text-gray-500 px-2">Désignation</div>
-        <div className="text-center text-[11px] font-semibold text-gray-500 px-2">Note</div>
-        <div className="text-right  text-[11px] font-semibold text-gray-500 px-2">Prix unit.</div>
-        <div className="text-right  text-[11px] font-semibold text-gray-500 px-2">Total</div>
-        <div className="text-left   text-[11px] font-semibold text-gray-500 px-2">Date limite</div>
-        <div className="text-left   text-[11px] font-semibold text-gray-500 px-2">État</div>
-        <div className="text-center text-[11px] font-semibold text-gray-500 px-2">Interne</div>
-        <div />
-      </div>
+      {/* ── Tableau (scroll horizontal) ─────────────────────────────────────── */}
+      <div className="overflow-x-auto">
 
-      {/* ── Lignes ──────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col gap-0">
+        {/* En-têtes */}
+        <div className={cn("grid min-w-max bg-slate-50/70 border-b border-slate-100", GRID)}>
+          {[
+            { t: "Priorité",    a: "left"   },
+            { t: "Client",      a: "left"   },
+            { t: "Qté",         a: "center" },
+            { t: "Désignation", a: "left"   },
+            { t: "Note",        a: "left"   },
+            { t: "Prix u.",     a: "right"  },
+            { t: "Total",       a: "right"  },
+            { t: "Échéance",    a: "left"   },
+            { t: "État",        a: "left"   },
+            { t: "Interne",     a: "center" },
+            { t: "",            a: "center" },
+          ].map(({ t, a }, i) => (
+            <div
+              key={i}
+              className={cn(
+                "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400",
+                a === "center" && "text-center",
+                a === "right"  && "text-right",
+              )}
+            >
+              {t}
+            </div>
+          ))}
+        </div>
+
+        {/* Lignes */}
         <Reorder.Group
           as="div"
           axis="y"
-          values={sortedItems}
-          onReorder={(newOrder) => {
-            const reordered = newOrder.map((item, idx) => ({ ...item, position: idx }));
-            onItemsChange?.(
-              items
-                .filter((i) => !reordered.some((r) => r.id === i.id))
-                .concat(reordered)
-            );
-            Promise.all(
-              reordered.map((item) =>
-                fetch(`/api/planning/${item.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ position: item.position }),
-                })
-              )
-            ).catch((err) => console.error("Failed to save positions:", err));
-          }}
-          className="flex flex-col"
+          values={sorted}
+          onReorder={handleReorder}
+          className="min-w-max"
         >
-          <AnimatePresence mode="popLayout">
-            {sortedItems.length === 0 ? (
+          <AnimatePresence mode="popLayout" initial={false}>
+
+            {/* État vide */}
+            {sorted.length === 0 && (
               <motion.div
+                key="empty"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="py-12 text-center text-gray-400 text-sm"
+                className="py-16 text-center"
               >
-                Aucune ligne — cliquez sur &quot;Nouvelle ligne&quot; pour commencer
+                <p className="text-[13px] text-slate-400">
+                  Aucune ligne —{" "}
+                  <button
+                    onClick={handleAdd}
+                    className="font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-900 transition-colors"
+                  >
+                    créer la première
+                  </button>
+                </p>
               </motion.div>
-            ) : (
-              sortedItems.map((item) => {
-                if (!item?.id) return null;
-                const isDeleting  = isDeletingIds.has(item.id);
-                const total       = item.quantity * item.unitPrice;
-                const urgentDate  = isDeadlineCritical(item.deadline);
+            )}
 
-                return (
-                  <Reorder.Item key={item.id} value={item} as="div">
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, y: -8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: 80 }}
-                      className={cn(
-                        "grid gap-0 border-b border-gray-100 transition-all group",
-                        GRID_COLS,
-                        isDeleting && "opacity-40 pointer-events-none",
-                        urgentDate
-                          ? "bg-red-50 hover:bg-red-100/70"
-                          : "hover:bg-gray-50/80"
-                      )}
-                    >
+            {sorted.map((item) => {
+              if (!item?.id) return null;
+              const isDeleting = deletingIds.has(item.id);
+              const total      = item.quantity * item.unitPrice;
+              const urgent     = isUrgent(item.deadline);
 
-                      {/* ── Priorité (148px) — stepper 3 boutons ────────────── */}
-                      <div className="flex items-center gap-1 px-2 py-2.5">
-                        {(["BASSE", "MOYENNE", "HAUTE"] as const).map((p) => (
-                          <button
-                            key={p}
-                            onClick={() => handlePrioritySet(item.id, p)}
-                            title={p === "BASSE" ? "Priorité basse" : p === "MOYENNE" ? "Priorité moyenne" : "Priorité haute"}
-                            className={cn(
-                              "flex-1 py-1 rounded-md text-[10px] font-bold border transition-all",
-                              item.priority === p
-                                ? PRIORITY_COLORS[p].active
-                                : PRIORITY_COLORS[p].inactive
-                            )}
-                          >
-                            {PRIORITY_LABELS[p]}
-                          </button>
-                        ))}
-                      </div>
+              return (
+                <Reorder.Item key={item.id} value={item} as="div">
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: isDeleting ? 0.25 : 1, y: 0 }}
+                    exit={{ opacity: 0, x: 30, transition: { duration: 0.18 } }}
+                    transition={{ type: "spring", stiffness: 480, damping: 38 }}
+                    className={cn(
+                      "grid min-w-max border-b border-slate-100 group transition-colors duration-100",
+                      GRID,
+                      urgent
+                        ? "bg-red-50 hover:bg-red-100/60"
+                        : "bg-white hover:bg-slate-50",
+                      isDeleting && "pointer-events-none"
+                    )}
+                  >
 
-                      {/* ── Client (155px) — majuscule auto ─────────────────── */}
+                    {/* ── 1. Priorité — pastilles sélecteur ─────────────────── */}
+                    <div className="flex items-center gap-0.5 px-2 py-2">
+                      {(["BASSE", "MOYENNE", "HAUTE"] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => update(item.id, "priority", p, true)}
+                          className={cn(
+                            "flex-1 py-[5px] rounded-[6px] text-[10px] font-semibold",
+                            "border transition-all duration-150 select-none",
+                            item.priority === p
+                              ? PRIORITY[p].active
+                              : `border-transparent ${PRIORITY[p].inactive}`
+                          )}
+                        >
+                          {PRIORITY[p].label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* ── 2. Client — majuscule auto ────────────────────────── */}
+                    <div className="flex items-center px-1 py-1">
                       <input
                         type="text"
                         value={item.clientName}
                         onChange={(e) =>
-                          handleFieldChange(item.id, "clientName", e.target.value.toUpperCase())
+                          update(item.id, "clientName", e.target.value.toUpperCase())
                         }
-                        onBlur={() => handleFieldBlur(item.id, "clientName", item.clientName)}
-                        className={cn(
-                          CELL_CLASS,
-                          "bg-white border border-transparent rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400",
-                          "text-gray-900 font-medium text-sm uppercase cursor-text",
-                          "hover:border-gray-300 transition-colors"
-                        )}
-                        placeholder="CLIENT"
+                        className={cn(field, "font-medium uppercase tracking-wide")}
+                        placeholder="NOM CLIENT"
                       />
+                    </div>
 
-                      {/* ── Quantité (88px) — datalist + saisie libre ───────── */}
-                      <div className="flex items-center justify-center px-2 py-2.5">
-                        <input
-                          type="number"
-                          list={`qty-presets-${item.id}`}
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleFieldChange(item.id, "quantity", parseFloat(e.target.value) || 1)
-                          }
-                          onBlur={() => handleFieldBlur(item.id, "quantity", item.quantity)}
-                          className="w-full bg-white border border-transparent rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-gray-900 text-sm text-center cursor-text hover:border-gray-300 transition-colors"
-                          placeholder="1"
-                          min="1"
-                        />
-                        <datalist id={`qty-presets-${item.id}`}>
-                          {QTY_PRESETS.map((v) => (
-                            <option key={v} value={v} />
-                          ))}
-                        </datalist>
-                      </div>
+                    {/* ── 3. Quantité — datalist + saisie libre ─────────────── */}
+                    <div className="flex items-center px-1 py-1">
+                      <input
+                        type="number"
+                        list={`qty-${item.id}`}
+                        value={item.quantity}
+                        onChange={(e) =>
+                          update(item.id, "quantity", parseFloat(e.target.value) || 1)
+                        }
+                        className={cn(field, "text-center")}
+                        placeholder="1"
+                        min="1"
+                      />
+                      <datalist id={`qty-${item.id}`}>
+                        {QTY_PRESETS.map((v) => <option key={v} value={v} />)}
+                      </datalist>
+                    </div>
 
-                      {/* ── Désignation (1fr) — champ large ─────────────────── */}
+                    {/* ── 4. Désignation — champ large ──────────────────────── */}
+                    <div className="flex items-center px-1 py-1">
                       <input
                         type="text"
                         value={item.designation}
-                        onChange={(e) => handleFieldChange(item.id, "designation", e.target.value)}
-                        onBlur={() => handleFieldBlur(item.id, "designation", item.designation)}
-                        className={cn(
-                          CELL_CLASS,
-                          "bg-white border border-transparent rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400",
-                          "text-gray-900 text-sm cursor-text hover:border-gray-300 transition-colors w-full"
-                        )}
-                        placeholder="Description de la commande…"
+                        onChange={(e) =>
+                          update(item.id, "designation", e.target.value)
+                        }
+                        className={field}
+                        placeholder="Description du travail…"
                       />
+                    </div>
 
-                      {/* ── Note (52px) — icône + popover ───────────────────── */}
-                      <div className="relative flex items-center justify-center">
-                        <button
-                          onClick={() =>
-                            setNotePopover(notePopover === item.id ? null : item.id)
-                          }
-                          title={item.note || "Ajouter une note"}
-                          className={cn(
-                            "p-1.5 rounded-md transition-colors",
-                            item.note
-                              ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50"
-                              : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
-                          )}
-                        >
-                          <StickyNote className="h-4 w-4" />
-                        </button>
-                        {notePopover === item.id && (
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-20 w-72">
-                            <div className="px-3 py-2 border-b border-gray-100">
-                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Note</p>
-                            </div>
-                            <textarea
-                              value={item.note}
-                              onChange={(e) => handleFieldChange(item.id, "note", e.target.value)}
-                              onBlur={() => {
-                                handleFieldBlur(item.id, "note", item.note);
-                                setNotePopover(null);
-                              }}
-                              autoFocus
-                              className="w-full px-3 py-2.5 border-none focus:outline-none resize-none text-sm text-gray-800 rounded-b-xl"
-                              rows={5}
-                              placeholder="Écrire une note sur cette commande…"
-                            />
-                          </div>
-                        )}
-                      </div>
+                    {/* ── 5. Note — zone texte secondaire inline ─────────────── */}
+                    <div className="flex items-center px-1 py-1">
+                      <input
+                        type="text"
+                        value={item.note}
+                        onChange={(e) => update(item.id, "note", e.target.value)}
+                        className={cn(field, "italic text-slate-500 placeholder:not-italic")}
+                        placeholder="Précisions…"
+                      />
+                    </div>
 
-                      {/* ── Prix unitaire (88px) ─────────────────────────────── */}
-                      <div className="flex items-center justify-end px-2 py-2.5">
-                        <input
-                          type="number"
-                          value={item.unitPrice === 0 ? "" : item.unitPrice}
-                          onChange={(e) =>
-                            handleFieldChange(item.id, "unitPrice", parseFloat(e.target.value) || 0)
-                          }
-                          onBlur={() => handleFieldBlur(item.id, "unitPrice", item.unitPrice)}
-                          className="w-full bg-white border border-transparent rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-gray-900 text-sm text-right cursor-text hover:border-gray-300 transition-colors"
-                          placeholder="0.00"
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
+                    {/* ── 6. Prix unitaire ──────────────────────────────────── */}
+                    <div className="flex items-center px-1 py-1">
+                      <input
+                        type="number"
+                        value={item.unitPrice === 0 ? "" : item.unitPrice}
+                        onChange={(e) =>
+                          update(item.id, "unitPrice", parseFloat(e.target.value) || 0)
+                        }
+                        className={cn(field, "text-right")}
+                        placeholder="0"
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
 
-                      {/* ── Total (78px) — lecture seule ────────────────────── */}
-                      <div className={cn(CELL_CLASS, "text-right font-semibold text-sm", total > 0 ? "text-gray-800" : "text-gray-300")}>
-                        {total > 0 ? `${total.toFixed(2)}€` : "—"}
-                      </div>
+                    {/* ── 7. Total — lecture seule, calculé ─────────────────── */}
+                    <div
+                      className={cn(
+                        "flex items-center justify-end px-3 py-2",
+                        "text-[13px] font-semibold tabular-nums",
+                        total > 0 ? "text-slate-800" : "text-slate-200"
+                      )}
+                    >
+                      {total > 0 ? `${total.toFixed(2)} €` : "—"}
+                    </div>
 
-                      {/* ── Date limite (112px) — rouge si urgente ───────────── */}
+                    {/* ── 8. Date limite — rouge si critique ────────────────── */}
+                    <div className="flex items-center px-1 py-1">
                       <input
                         type="date"
                         value={item.deadline ? item.deadline.split("T")[0] : ""}
                         onChange={(e) =>
-                          handleFieldChange(item.id, "deadline", e.target.value || null)
+                          update(item.id, "deadline", e.target.value || null, true)
                         }
-                        onBlur={() => handleFieldBlur(item.id, "deadline", item.deadline)}
                         className={cn(
-                          CELL_CLASS,
-                          "rounded focus:outline-none focus:ring-1 text-sm cursor-text transition-colors",
-                          urgentDate
-                            ? "border border-red-400 bg-red-100 text-red-800 font-semibold focus:ring-red-400"
-                            : "border border-transparent bg-white text-gray-900 hover:border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+                          "w-full bg-transparent text-[13px] px-2.5 py-[7px] rounded-lg border",
+                          "transition-all duration-150 focus:outline-none",
+                          urgent
+                            ? "border-red-200 text-red-600 font-semibold focus:ring-2 focus:ring-red-100"
+                            : "border-transparent text-slate-900 hover:border-slate-200 focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100/80"
                         )}
                       />
+                    </div>
 
-                      {/* ── État (178px) — select 16 statuts ────────────────── */}
+                    {/* ── 9. État — menu déroulant 16 statuts ───────────────── */}
+                    <div className="flex items-center px-1 py-1">
                       <select
                         value={item.status}
-                        onChange={(e) => {
-                          handleFieldChange(item.id, "status", e.target.value);
-                          handleFieldBlur(item.id, "status", e.target.value);
-                        }}
+                        onChange={(e) => update(item.id, "status", e.target.value, true)}
                         className={cn(
-                          CELL_CLASS,
-                          "bg-white border border-transparent rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400",
-                          "text-gray-900 text-sm cursor-pointer hover:border-gray-300 transition-colors"
+                          "w-full bg-transparent text-[13px] text-slate-900 px-2.5 py-[7px]",
+                          "rounded-lg border border-transparent cursor-pointer",
+                          "transition-all duration-150 focus:outline-none",
+                          "hover:border-slate-200 focus:border-blue-300 focus:bg-white",
+                          "focus:ring-2 focus:ring-blue-100/80 focus:shadow-sm"
                         )}
                       >
                         {Object.entries(STATUS_LABELS).map(([key, label]) => (
                           <option key={key} value={key}>{label}</option>
                         ))}
                       </select>
+                    </div>
 
-                      {/* ── Interne (138px) — initiales cliquables ───────────── */}
-                      <div className="flex items-center justify-center px-2 py-2.5 gap-1">
-                        {RESPONSIBLE_OPTIONS.map((person) => {
-                          const isActive = item.responsible === person.key;
-                          return (
-                            <button
-                              key={person.key}
-                              onClick={() => {
-                                const next = isActive ? "" : person.key;
-                                handleFieldChange(item.id, "responsible", next);
-                                handleFieldBlur(item.id, "responsible", next);
-                              }}
-                              title={person.full}
-                              className={cn(
-                                "w-6 h-6 rounded-full text-[10px] font-bold transition-all",
-                                isActive
-                                  ? "bg-blue-500 text-white shadow-sm scale-110"
-                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                              )}
-                            >
-                              {person.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    {/* ── 10. Interne — pastilles équipe ────────────────────── */}
+                    <div className="flex items-center justify-center gap-1 px-1 py-2">
+                      {TEAM.map((person) => {
+                        const active = item.responsible === person.key;
+                        return (
+                          <button
+                            key={person.key}
+                            onClick={() =>
+                              update(item.id, "responsible", active ? "" : person.key, true)
+                            }
+                            title={person.name}
+                            className={cn(
+                              "w-[22px] h-[22px] rounded-full text-[8px] font-bold",
+                              "transition-all duration-150 select-none",
+                              active
+                                ? "bg-blue-500 text-white scale-110 shadow-sm"
+                                : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                            )}
+                          >
+                            {person.initials}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                      {/* ── Supprimer (40px) ─────────────────────────────────── */}
+                    {/* ── Supprimer ─────────────────────────────────────────── */}
+                    <div className="flex items-center justify-center">
                       <button
                         onClick={() => handleDelete(item.id)}
-                        className="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-red-500 hover:bg-red-50 rounded"
+                        className={cn(
+                          "p-1.5 rounded-md transition-all duration-150",
+                          "opacity-0 group-hover:opacity-100",
+                          "text-slate-300 hover:text-red-400 hover:bg-red-50"
+                        )}
+                        aria-label="Supprimer"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                    </div>
 
-                    </motion.div>
-                  </Reorder.Item>
-                );
-              })
-            )}
+                  </motion.div>
+                </Reorder.Item>
+              );
+            })}
           </AnimatePresence>
         </Reorder.Group>
-      </div>
 
-      {/* ── Pied — bouton rapide d'ajout ─────────────────────────────────────── */}
-      {sortedItems.length > 0 && (
-        <div className="pt-2 border-t border-gray-50">
+        {/* ── Pied — ajout rapide ─────────────────────────────────────────── */}
+        {sorted.length > 0 && (
           <button
-            onClick={handleAddNew}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all border border-dashed border-gray-200 hover:border-gray-300"
+            onClick={handleAdd}
+            disabled={isAdding}
+            className={cn(
+              "min-w-max w-full flex items-center gap-2 px-5 py-3",
+              "text-[12px] font-medium text-slate-400",
+              "hover:text-slate-600 hover:bg-slate-50 transition-colors duration-150",
+              "border-t border-slate-50"
+            )}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3 w-3 shrink-0" />
             Ajouter une ligne
           </button>
-        </div>
-      )}
+        )}
 
+      </div>
     </div>
   );
 }

@@ -235,10 +235,12 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
 export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
   const [editing,     setEditing]     = useState<string | null>(null);
   const [draft,       setDraft]       = useState<Draft | null>(null);
+  const [draftKey,    setDraftKey]    = useState(0);
   const [savingIds,   setSavingIds]   = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [savingDraft, setSavingDraft] = useState(false);
-  const preEdit = useRef<unknown>(null);
+  const preEdit        = useRef<unknown>(null);
+  const draftClientRef = useRef<HTMLInputElement>(null);
 
   const sorted = useMemo(
     () =>
@@ -337,8 +339,10 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
       const { item } = await res.json();
       if (item) {
         onItemsChange?.([item, ...items]);
-        // Keep-adding mode: nouvelle ligne vide immédiatement
+        // Nouvelle ligne vide — on incrémente draftKey pour forcer le remontage
+        // du draft row → autoFocus se redéclenche naturellement sur le champ Client
         setDraft({ ...DEFAULT_DRAFT });
+        setDraftKey((k) => k + 1);
       } else {
         console.error("Draft save: API returned no item");
       }
@@ -352,9 +356,10 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
   // Ouvre un nouveau draft — si un draft existe déjà, le sauvegarde d'abord
   const showDraft = useCallback(() => {
     if (draft) {
-      saveDraft(); // sauvegarde la ligne courante → resets to DEFAULT_DRAFT via keep-adding
+      saveDraft();
     } else {
       setDraft({ ...DEFAULT_DRAFT });
+      setDraftKey((k) => k + 1);
     }
   }, [draft, saveDraft]);
 
@@ -462,11 +467,11 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
           <AnimatePresence>
             {draft && (
               <motion.div
-                key="draft"
+                key={`draft-${draftKey}`}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
+                transition={{ duration: 0.12, ease: "easeOut" }}
               >
                 <div className={cn("grid h-[44px] border-b-2 border-blue-200/60 bg-blue-50/25", GRID)}>
 
@@ -486,6 +491,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                   {/* Client */}
                   <div className={CELL_WRAP}>
                     <input
+                      ref={draftClientRef}
                       type="text"
                       value={draft.clientName}
                       onChange={(e) => changeDraft("clientName", e.target.value.toUpperCase())}
@@ -518,6 +524,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       list="draft-qty-list"
                       value={draft.quantity}
                       onChange={(e) => changeDraft("quantity", parseFloat(e.target.value) || 1)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDraft(); }}
                       className={cn(DRAFT_INPUT, "text-center")}
                       placeholder="1"
                       min="1"
@@ -533,6 +540,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       type="text"
                       value={draft.note}
                       onChange={(e) => changeDraft("note", e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDraft(); }}
                       className={cn(DRAFT_INPUT, "italic placeholder:not-italic")}
                       placeholder="Précisions…"
                     />
@@ -544,6 +552,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       type="number"
                       value={draft.unitPrice || ""}
                       onChange={(e) => changeDraft("unitPrice", parseFloat(e.target.value) || 0)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDraft(); }}
                       className={cn(DRAFT_INPUT, "text-right")}
                       placeholder="0"
                       min="0"

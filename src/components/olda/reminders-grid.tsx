@@ -16,7 +16,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, useMotionValue, useTransform, animate, Reorder, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Check } from "lucide-react";
+import { Plus, Trash2, Check, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TodoItem } from "./person-note-modal";
 
@@ -309,12 +309,23 @@ function ReminderCard({
                 >
                   <div
                     className={cn(
-                      "flex items-center gap-2.5 w-full rounded-[14px] px-3 py-2.5 bg-white border border-gray-100",
+                      "flex items-center gap-2 w-full rounded-[14px] pl-1.5 pr-3 py-2.5 bg-white border border-gray-100",
                       "transition-all",
-                      editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:border-gray-200 hover:shadow-sm group",
+                      editingId !== todo.id && "hover:border-gray-200 hover:shadow-sm group",
                     )}
-                    onDragStart={(e) => { if (editingId !== todo.id) handleDragStart(e, todo); }}
                   >
+                    {/* Grip handle — draggable natif, stopPropagation empêche Framer Motion d'intercepter */}
+                    {editingId !== todo.id && (
+                      <span
+                        draggable
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onDragStart={(e) => handleDragStart(e, todo)}
+                        className="shrink-0 p-1 rounded cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors touch-none"
+                        title="Glisser vers une autre carte"
+                      >
+                        <GripVertical className="h-3 w-3" />
+                      </span>
+                    )}
                   {/* Dot toggle ✓ avec animation */}
                   <motion.button
                     onClick={(e) => { e.stopPropagation(); toggle(todo.id); }}

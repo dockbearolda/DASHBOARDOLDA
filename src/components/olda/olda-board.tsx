@@ -694,13 +694,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <div className="flex flex-col gap-6">
-            <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
-            {/* ── PRTManager pour Loïc uniquement ── */}
-            {session.name === 'loic' && (
-              <PRTManager items={prtItems} onItemsChange={setPrtItems} />
-            )}
-          </div>
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
         </div>
 
         {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}

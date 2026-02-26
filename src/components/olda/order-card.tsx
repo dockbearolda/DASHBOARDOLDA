@@ -330,6 +330,8 @@ export function OrderCard({
   // Premier article pour la vue résumée (référence affichée dans le header)
   const firstArticle = articles[0];
   const reference = firstArticle?.reference ?? data.reference;
+  const visuelAvant = firstArticle?.fiche?.visuelAvant ?? data.fiche?.visuelAvant;
+  const visuelArriere = firstArticle?.fiche?.visuelArriere ?? data.fiche?.visuelArriere;
 
   // Paiement & prix
   const isPaid =

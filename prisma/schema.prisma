@@ -22,6 +22,9 @@ model Order {
   currency        String        @default("EUR")
   notes           String?
   category        String        @default("")
+  customerFirstName String?
+  customerAddress   String?
+  deadline          DateTime?
   shippingAddress Json?
   billingAddress  Json?
   items           OrderItem[]
@@ -107,4 +110,39 @@ model WorkflowItem {
   updatedAt DateTime     @updatedAt
 
   @@map("workflow_items")
+}
+
+model PlanningItem {
+  id          String    @id @default(cuid())
+  priority    String    @default("MOYENNE")
+  clientName  String    @default("")
+  quantity    Float     @default(1)
+  designation String    @default("")
+  note        String    @default("")
+  unitPrice   Float     @default(0)
+  deadline    DateTime?
+  status      String    @default("A_DEVISER")
+  responsible String    @default("")
+  color       String    @default("")
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("planning_items")
+}
+
+model PRTRequest {
+  id             String   @id @default(cuid())
+  clientName     String   @default("")
+  dimensions     String   @default("")
+  design         String   @default("")
+  designFileLink String?
+  color          String   @default("")
+  quantity       Int      @default(1)
+  done           Boolean  @default(false)
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("prt_requests")
 }

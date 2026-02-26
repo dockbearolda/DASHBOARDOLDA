@@ -178,7 +178,7 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
 
   const items    = Array.isArray(order.items) ? order.items : [];
   const isPaid   = order.paymentStatus === "PAID";
-  const deadline = getDeadlineInfo(null); // deadline not available in current schema
+  const deadline = getDeadlineInfo(order.deadline);
 
   // QR code value
   const qrValue = origin && order.id
@@ -190,9 +190,9 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
 
   // Visibilité accordéon
   const hasBlock1 = items.some(item =>
-    item.name || item.sku
+    item.famille || item.couleur || item.tailleDTF || item.collection || item.taille || item.noteClient || item.prtRef
   );
-  const hasBlock2 = !!(order.customerEmail || order.customerPhone);
+  const hasBlock2 = !!(order.customerEmail || order.customerAddress || order.customerPhone || order.deadline);
   const hasBlock3 = order.total > 0;
   const hasAccordion = hasBlock1 || hasBlock2 || hasBlock3;
 
@@ -215,12 +215,15 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
 
       <div className="olda-card-print hidden print:block">
         <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold">{order.customerName}</h1>
+          <h1 className="text-2xl font-bold">{order.customerFirstName} {order.customerName}</h1>
           {order.customerPhone && <p className="text-sm text-gray-600">{order.customerPhone}</p>}
-          {firstItem?.imageUrl && (
+          {firstItem?.imageAvant && (
             <div>
-              <p className="text-xs font-semibold text-gray-400 mb-2">Image</p>
-              <img src={firstItem.imageUrl} alt="Item" className="max-h-40" />
+              <p className="text-xs font-semibold text-gray-400 mb-2">AVANT</p>
+              {isDtfCode(firstItem.imageAvant)
+                ? <div className="border border-gray-300 p-2 rounded text-sm font-mono">{firstItem.imageAvant}</div>
+                : <img src={firstItem.imageAvant} alt="Avant" className="max-h-40" />
+              }
             </div>
           )}
         </div>
@@ -261,8 +264,10 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
                     {order.customerName}
                   </p>
                 )}
-                {order.customerEmail && (
-                  <p className="text-xs text-gray-500 leading-tight truncate">{order.customerEmail}</p>
+                {order.customerFirstName && (
+                  <p className="text-sm font-medium text-gray-600 leading-tight truncate">
+                    {order.customerFirstName}
+                  </p>
                 )}
                 {order.customerPhone && (
                   <p className="text-xs text-gray-400 font-mono mt-0.5">{order.customerPhone}</p>
@@ -279,31 +284,42 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
                 </div>
               )}
 
-              {/* Visuels — un bloc par article */}
-              {items.some(item => item.imageUrl) && (
+              {/* Visuels — un bloc par article, avec séparateurs */}
+              {items.some(item => item.imageAvant || item.imageArriere) && (
                 <div className="flex flex-col gap-2">
                   {items.map((item, i) => {
-                    if (!item.imageUrl) return null;
+                    const av  = item.imageAvant  ?? null;
+                    const arr = item.imageArriere ?? null;
+                    if (!av && !arr) return null;
                     return (
                       <div key={item.id ?? i}>
                         {items.length > 1 && (
                           <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mb-1">
-                            {item.name || `Article ${i + 1}`}
+                            {item.reference || `Article ${i + 1}`}
                           </p>
                         )}
-                        <VisualThumbnail src={item.imageUrl} label="Image" isDtf={false} />
+                        <div className="flex items-start gap-2.5">
+                          {av
+                            ? <VisualThumbnail src={av} label="Avant" isDtf={isDtfCode(av)} />
+                            : <EmptyBackIndicator />
+                          }
+                          {arr
+                            ? <VisualThumbnail src={arr} label="Arrière" isDtf={isDtfCode(arr)} />
+                            : av ? <EmptyBackIndicator /> : null
+                          }
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              {/* Note */}
-              {order.notes && (
+              {/* Note (premier article) */}
+              {firstItem?.noteClient && (
                 <div className="flex items-start gap-1.5">
                   <span className="text-xs mt-px select-none">📝</span>
                   <p className="text-xs italic text-gray-500 leading-snug break-words min-w-0">
-                    {order.notes}
+                    {firstItem.noteClient}
                   </p>
                 </div>
               )}
@@ -341,24 +357,50 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
         {isOpen && (
           <div className="rounded-b-2xl border border-t-0 border-gray-200 bg-gray-50 p-6 space-y-6">
 
-            {/* BLOC 1 — INFOS ARTICLES */}
+            {/* BLOC 1 — INFOS ATELIER : .map() sur order.items avec divide-y */}
             {hasBlock1 && (
               <section>
-                <SectionHeading icon={<Package size={14} />} label="Articles" />
+                <SectionHeading icon={<Package size={14} />} label="Infos Atelier" />
                 <div className="mt-4 divide-y divide-gray-100">
                   {items.map((item: OrderItem, i) => (
                     <div key={item.id ?? i} className={i > 0 ? "pt-4 pb-2" : "pb-2"}>
                       {items.length > 1 && (
                         <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">
-                          Article {i + 1}
+                          Article {i + 1}{item.reference ? ` · ${item.reference}` : ""}
                         </p>
                       )}
-                      <div className="space-y-2">
-                        {item.name && <InfoCell label="Nom" value={item.name} />}
-                        {item.sku && <InfoCell label="SKU" value={item.sku} />}
-                        {item.quantity > 0 && <InfoCell label="Quantité" value={String(item.quantity)} />}
-                        {item.price > 0 && <InfoCell label="Prix" value={item.price.toLocaleString("fr-FR", { style: "currency", currency: "EUR" })} />}
-                      </div>
+
+                      {/* Grille 2 colonnes */}
+                      {(item.famille || item.couleur || item.tailleDTF || item.collection || item.taille) && (
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          {item.famille    && <InfoCell label="Famille"    value={item.famille} />}
+                          {item.couleur    && <InfoCell label="Couleur"    value={item.couleur} />}
+                          {item.tailleDTF  && <InfoCell label="Taille DTF" value={item.tailleDTF} bold />}
+                          {item.collection && <InfoCell label="Collection" value={item.collection} />}
+                          {item.taille     && <InfoCell label="Taille"     value={item.taille} />}
+                          {item.positionLogo && <InfoCell label="Position Logo" value={item.positionLogo} />}
+                        </div>
+                      )}
+
+                      {/* Note client */}
+                      {item.noteClient && (
+                        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Note client</p>
+                          <p className="text-sm font-medium text-gray-800 italic leading-relaxed break-words">{item.noteClient}</p>
+                        </div>
+                      )}
+
+                      {/* PRT */}
+                      {(item.prtRef || item.prtTaille || item.prtQuantite != null) && (
+                        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Impression (PRT)</p>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            {item.prtRef     && <InfoCell label="Référence"        value={item.prtRef} />}
+                            {item.prtTaille  && <InfoCell label="Taille impression" value={item.prtTaille} />}
+                            {item.prtQuantite != null && <InfoCell label="Quantité" value={String(item.prtQuantite)} bold />}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -368,11 +410,27 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
             {/* BLOC 2 — CONTACT */}
             {hasBlock2 && (
               <section>
-                <SectionHeading icon={<Users size={14} />} label="Contact" />
+                <SectionHeading icon={<Users size={14} />} label="Livraison & Contact" />
                 <dl className="mt-4 space-y-3">
                   {order.customerPhone && <DlEntry label="Téléphone">{order.customerPhone}</DlEntry>}
                   {order.customerEmail && order.customerEmail !== "olda@studio" && (
                     <DlEntry label="Email">{order.customerEmail}</DlEntry>
+                  )}
+                  {order.customerAddress && (
+                    <DlEntry label="Adresse">
+                      <span className="flex items-start gap-1">
+                        <MapPin size={13} className="text-gray-400 mt-0.5 shrink-0" />
+                        <span className="whitespace-pre-line">{order.customerAddress}</span>
+                      </span>
+                    </DlEntry>
+                  )}
+                  {deadline && (
+                    <DlEntry label="Date limite">
+                      <div className="flex flex-col gap-1">
+                        <DeadlineBadge label={deadline.label} state={deadline.state} />
+                        <span className="text-xs text-gray-400 mt-0.5">{deadline.fullDate}</span>
+                      </div>
+                    </DlEntry>
                   )}
                 </dl>
               </section>

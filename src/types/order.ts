@@ -50,8 +50,11 @@ export interface Order {
   id: string;
   orderNumber: string;
   customerName: string;
+  customerFirstName?: string | null;
   customerEmail: string;
   customerPhone?: string | null;
+  customerAddress?: string | null;
+  deadline?: string | Date | null;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   total: number;

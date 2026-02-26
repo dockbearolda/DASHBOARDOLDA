@@ -16,31 +16,39 @@ async function main() {
     const refNumber = String(i).padStart(3, "0");
     const reference = `H-${refNumber}`;
     const orderNumber = `CMD-${Date.now()}-${i}`;
-    const price = 35 + i * 5;
+
+    const deadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     await prisma.order.create({
       data: {
         orderNumber,
-        customerName:  `Client ${i}`,
-        customerEmail: `client${i}@example.com`,
-        customerPhone: `06${String(Math.random() * 100000000).padStart(8, "0")}`,
-        status:        "COMMANDE_A_TRAITER",
-        paymentStatus: i % 2 === 0 ? "PAID" : "PENDING",
-        total:         price,
-        subtotal:      price - 5,
-        shipping:      5,
-        tax:           0,
-        currency:      "EUR",
-        category:      "t-shirt",
-        notes:         `Commande test ${i}`,
+        customerName:      `Client ${i}`,
+        customerFirstName: `Prénom${i}`,
+        customerEmail:     `client${i}@example.com`,
+        customerPhone:     `06${String(Math.random() * 100000000).padStart(8, "0")}`,
+        status:            "COMMANDE_A_TRAITER",
+        paymentStatus:     i % 2 === 0 ? "PAID" : "PENDING",
+        total:             35 + i * 5,
+        subtotal:          30 + i * 5,
+        shipping:          5,
+        tax:               0,
+        currency:          "EUR",
+        category:          "t-shirt",
+        deadline,
+        notes:             `Commande test ${i}`,
         items: {
           create: [
             {
-              name:     `T-Shirt ${reference}`,
-              sku:      reference,
-              quantity: 1,
-              price:    price,
-              imageUrl: `https://example.com/logo-${refNumber}.png`,
+              famille:      "T-Shirt",
+              couleur:      "Blanc",
+              tailleDTF:    "A4",
+              reference,
+              taille:       "L",
+              collection:   "Homme",
+              imageAvant:   `LOGO-${refNumber}-AV`,
+              imageArriere: `LOGO-${refNumber}-AR`,
+              noteClient:   `Note de test ${i}`,
+              prixUnitaire: 35 + i * 5,
             },
           ],
         },

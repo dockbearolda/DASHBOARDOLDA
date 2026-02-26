@@ -298,7 +298,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
     fetch("/api/planning", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ id: newId, ...newItem, deadline: null }),
+      body:    JSON.stringify({ ...newItem, deadline: null }),
     }).catch((e) => console.error("Failed to save new row:", e));
   }, [items, sorted, onItemsChange]);
 

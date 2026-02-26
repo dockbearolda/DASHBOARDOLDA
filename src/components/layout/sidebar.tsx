@@ -4,17 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard,
   Settings,
   Webhook,
   Sparkles,
-  Factory,
+  Shirt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const primaryNav = [
-  { label: "Vue d'ensemble", href: "/dashboard",      icon: LayoutDashboard },
-  { label: "Dashboard OLDA", href: "/dashboard/olda", icon: Factory },
+// Commandes : liens rapides vers chaque flux produit
+const commandesNav = [
+  { label: "Commandes", href: "/dashboard/olda", icon: Shirt },
 ];
 
 const secondaryNav = [
@@ -47,7 +46,6 @@ function NavItem({
               : "text-muted-foreground hover:text-foreground hover:bg-accent/70"
           )}
         >
-          <item.icon className="h-[15px] w-[15px] shrink-0" />
           {item.label}
         </div>
       </div>
@@ -59,9 +57,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const isActive = (href: string) =>
-    href === "/dashboard"
-      ? pathname === "/dashboard"
-      : pathname.startsWith(href);
+    pathname.startsWith(href);
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden md:flex h-full w-64 flex-col border-r border-border/50 bg-background/85 backdrop-blur-2xl pl-safe">
@@ -81,13 +77,10 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* ── Primary navigation ───────────────────────────────────────── */}
+      {/* ── Navigation ───────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5">
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-          Principal
-        </p>
-        {primaryNav.map((item) => (
-          <NavItem key={item.href} item={item} isActive={isActive(item.href)} />
+        {commandesNav.map((item) => (
+          <NavItem key={item.href + item.label} item={item} isActive={isActive(item.href)} />
         ))}
 
         <div className="my-3 border-t border-border/50" />

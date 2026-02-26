@@ -1,36 +1,36 @@
 -- ── Nouvelle architecture : colonnes dédiées OrderItem ──
--- Idempotent: uses IF NOT EXISTS / IF EXISTS so it is safe to re-run.
 
 -- Step 1: Ajouter les nouvelles colonnes à order_items
-ALTER TABLE "order_items"
-  ADD COLUMN IF NOT EXISTS "famille"      TEXT,
-  ADD COLUMN IF NOT EXISTS "couleur"      TEXT,
-  ADD COLUMN IF NOT EXISTS "tailleDTF"    TEXT,
-  ADD COLUMN IF NOT EXISTS "positionLogo" TEXT,
-  ADD COLUMN IF NOT EXISTS "noteClient"   TEXT,
-  ADD COLUMN IF NOT EXISTS "imageAvant"   TEXT,
-  ADD COLUMN IF NOT EXISTS "imageArriere" TEXT,
-  ADD COLUMN IF NOT EXISTS "reference"    TEXT,
-  ADD COLUMN IF NOT EXISTS "taille"       TEXT,
-  ADD COLUMN IF NOT EXISTS "collection"   TEXT,
-  ADD COLUMN IF NOT EXISTS "prtRef"       TEXT,
-  ADD COLUMN IF NOT EXISTS "prtTaille"    TEXT,
-  ADD COLUMN IF NOT EXISTS "prtQuantite"  INTEGER,
-  ADD COLUMN IF NOT EXISTS "prixUnitaire" DOUBLE PRECISION NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS "positionNote" TEXT;
+ALTER TABLE "order_items" ADD COLUMN "famille" TEXT,
+ADD COLUMN "couleur" TEXT,
+ADD COLUMN "tailleDTF" TEXT,
+ADD COLUMN "positionLogo" TEXT,
+ADD COLUMN "noteClient" TEXT,
+ADD COLUMN "imageAvant" TEXT,
+ADD COLUMN "imageArriere" TEXT,
+ADD COLUMN "reference" TEXT,
+ADD COLUMN "taille" TEXT,
+ADD COLUMN "collection" TEXT,
+ADD COLUMN "prtRef" TEXT,
+ADD COLUMN "prtTaille" TEXT,
+ADD COLUMN "prtQuantite" INTEGER,
+ADD COLUMN "prixUnitaire" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN "positionNote" TEXT;
 
--- Step 2: Migrer les données (price → prixUnitaire) si price existe encore
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'order_items' AND column_name = 'price'
-  ) THEN
-    UPDATE "order_items" SET "prixUnitaire" = COALESCE("price"::double precision, 0);
-  END IF;
-END $$;
+-- Step 2: Migrer les données (price → prixUnitaire)
+UPDATE "order_items" SET "prixUnitaire" = COALESCE("price", 0) WHERE "price" IS NOT NULL;
 
 -- Step 3: Ajouter les nouvelles colonnes à orders
-ALTER TABLE "orders"
-  ADD COLUMN IF NOT EXISTS "customerFirstName" TEXT,
-  ADD COLUMN IF NOT EXISTS "deadline"          TIMESTAMP(3);
+ALTER TABLE "orders" ADD COLUMN "customerFirstName" TEXT,
+ADD COLUMN "deadline" TIMESTAMP(3);
+
+-- Step 4: Dropper les anciennes colonnes de order_items
+ALTER TABLE "order_items" DROP COLUMN "name",
+DROP COLUMN "sku",
+DROP COLUMN "quantity",
+DROP COLUMN "price",
+DROP COLUMN "imageUrl";
+
+-- Step 5: Dropper les anciennes colonnes de orders
+ALTER TABLE "orders" DROP COLUMN "shippingAddress",
+DROP COLUMN "billingAddress";

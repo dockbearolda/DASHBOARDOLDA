@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { OldaCommandeInput as OldaCommandePayload } from "@/types/order";
 
 /**
  * POST /api/orders/from-external
@@ -44,41 +45,6 @@ function verifyToken(request: NextRequest): boolean {
   if (xSecret === secret) return true;
 
   return false;
-}
-
-/**
- * Format de payload Olda attendu
- */
-interface OldaCommandePayload {
-  commande: string;
-  nom: string;
-  prenom?: string;
-  telephone?: string;
-  adresse?: string;
-  collection?: string;
-  reference?: string;
-  taille?: string;
-  note?: string;
-  limit?: string;
-  fiche?: {
-    visuelAvant?: string;
-    visuelArriere?: string;
-    tailleDTFAr?: string;
-    typeProduit?: string;
-    couleur?: string;
-    designation?: string;
-  };
-  prt?: {
-    refPrt?: string;
-    taillePrt?: string;
-    quantite?: number;
-  };
-  prix?: {
-    total: number;
-  };
-  paiement?: {
-    statut?: string;
-  };
 }
 
 /**

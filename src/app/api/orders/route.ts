@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { WebhookOrderPayload } from "@/types/order";
 import { orderEvents } from "@/lib/events";
-import { broadcast } from "@/lib/socket-server";
+
+type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-// Allows oldastudio to POST webhooks and the dashboard to call GET from any tab.
 
 const ALLOWED_ORIGIN = "https://oldastudio.up.railway.app";
 
 function corsHeaders(request?: NextRequest): Record<string, string> {
-  // Mirror the exact origin sent by the client when it is the allowed domain,
-  // otherwise fall back to the constant (handles direct server-to-server calls
-  // that may not set Origin at all).
   const origin = request?.headers.get("origin") ?? "";
   return {
     "Access-Control-Allow-Origin":
@@ -24,78 +22,134 @@ function corsHeaders(request?: NextRequest): Record<string, string> {
   };
 }
 
-// OPTIONS /api/orders — CORS preflight (browser sends this before POST)
 export async function OPTIONS(request: NextRequest) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders(request),
-  });
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
-// ── Webhook secret ────────────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
 
 function verifyToken(request: NextRequest): boolean {
   const secret = process.env.DASHBOARD_TOKEN;
-  if (!secret) return true; // dev mode: allow all
+  if (!secret) return true;
 
-  // Accept Authorization: Bearer <token> header (principal method used by oldastudio)
   const auth = request.headers.get("authorization");
   if (auth) {
-    const spaceIdx = auth.indexOf(" ");
-    const scheme = spaceIdx !== -1 ? auth.slice(0, spaceIdx).toLowerCase() : "";
-    const token = spaceIdx !== -1 ? auth.slice(spaceIdx + 1) : "";
-    if (scheme === "bearer" && token === secret) return true;
+    const idx = auth.indexOf(" ");
+    if (idx !== -1 && auth.slice(0, idx).toLowerCase() === "bearer" && auth.slice(idx + 1) === secret)
+      return true;
   }
-
-  // Accept X-Webhook-Secret header as fallback
-  const xSecret = request.headers.get("x-webhook-secret");
-  if (xSecret === secret) return true;
-
-  return false;
+  return request.headers.get("x-webhook-secret") === secret;
 }
 
-function newId(): string {
-  return `c${Date.now()}${Math.random().toString(36).slice(2, 9)}`;
+// ── Zod schemas ───────────────────────────────────────────────────────────────
+
+const ArticleSchema = z.object({
+  reference:  z.string().optional(),
+  taille:     z.string().optional(),
+  note:       z.string().optional(),
+  collection: z.string().optional(),
+  fiche: z.object({
+    visuelAvant:  z.string().optional(),
+    visuelArriere: z.string().optional(),
+    tailleDTFAr:  z.string().optional(),
+    typeProduit:  z.string().optional(),
+    couleur:      z.string().optional(),
+    positionLogo: z.string().optional(),
+  }).optional(),
+  prt: z.object({
+    refPrt:    z.string().optional(),
+    taillePrt: z.string().optional(),
+    quantite:  z.union([z.number(), z.string().transform(Number)]).optional(),
+  }).optional(),
+  prix: z.object({
+    tshirt:          z.number().optional(),
+    personnalisation: z.number().optional(),
+  }).optional(),
+});
+
+const OldaCommandeSchema = z.object({
+  commande:   z.string().min(1),
+  nom:        z.string().min(1),
+  prenom:     z.string().optional(),
+  telephone:  z.string().optional(),
+  adresse:    z.string().optional(),
+  limit:      z.string().optional(),
+  collection: z.string().optional(),
+  reference:  z.string().optional(),
+  taille:     z.string().optional(),
+  note:       z.string().optional(),
+  fiche: z.object({
+    visuelAvant:  z.string().optional(),
+    visuelArriere: z.string().optional(),
+    tailleDTFAr:  z.string().optional(),
+    typeProduit:  z.string().optional(),
+    couleur:      z.string().optional(),
+    positionLogo: z.string().optional(),
+  }).optional(),
+  prt: z.object({
+    refPrt:    z.string().optional(),
+    taillePrt: z.string().optional(),
+    quantite:  z.union([z.number(), z.string().transform(Number)]).optional(),
+  }).optional(),
+  prix: z.object({
+    total:            z.number().optional(),
+    tshirt:           z.number().optional(),
+    personnalisation: z.number().optional(),
+  }).optional(),
+  paiement: z.object({
+    statut: z.enum(["OUI", "NON", "PAID", "PENDING"]).optional(),
+  }).optional(),
+  articles: z.array(ArticleSchema).optional(),
+});
+
+type OldaCommande = z.infer<typeof OldaCommandeSchema>;
+type Article = z.infer<typeof ArticleSchema>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function safeNum(v: unknown, fallback = 0): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
-// ── GET /api/orders — list all orders (for client-side refresh) ───────────────
+function calcItemPrice(article: Article): number {
+  const tshirt = safeNum(article.prix?.tshirt);
+  const perso  = safeNum(article.prix?.personnalisation);
+  return tshirt + perso;
+}
+
+/** Résout les articles : si aucun articles[], crée un article depuis les champs racine. */
+function resolveArticles(o: OldaCommande): Article[] {
+  if (o.articles && o.articles.length > 0) return o.articles;
+  // Format mono-article (champs au niveau racine)
+  const hasData = o.fiche || o.reference || o.taille || o.prt;
+  if (!hasData) return [{ reference: o.commande }];
+  return [{
+    reference:  o.reference,
+    taille:     o.taille,
+    note:       o.note,
+    collection: o.collection,
+    fiche:      o.fiche,
+    prt:        o.prt,
+    prix:       o.prix ? { tshirt: o.prix.tshirt, personnalisation: o.prix.personnalisation } : undefined,
+  }];
+}
+
+// ── GET /api/orders ───────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   try {
-    const orders = await prisma.$queryRaw<Record<string, unknown>[]>`
-      SELECT o.*, COALESCE(json_agg(
-        json_build_object(
-          'id', i.id, 'orderId', i."orderId", 'name', i.name,
-          'sku', i.sku, 'quantity', i.quantity, 'price', i.price, 'imageUrl', i."imageUrl"
-        ) ORDER BY i.id
-      ) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
-      FROM orders o
-      LEFT JOIN order_items i ON i."orderId" = o.id
-      GROUP BY o.id
-      ORDER BY o."createdAt" DESC
-    `;
-
-    const mapped = orders.map((o: Record<string, unknown>) => {
-      // Normalise items — json_agg may arrive as a raw JSON string.
-      let items = o.items;
-      if (typeof items === "string") {
-        try { items = JSON.parse(items); } catch { items = []; }
-      }
-      if (!Array.isArray(items)) items = [];
-
-      return {
-        ...o,
-        items,
-        createdAt:
-          o.createdAt instanceof Date
-            ? (o.createdAt as Date).toISOString()
-            : o.createdAt,
-        updatedAt:
-          o.updatedAt instanceof Date
-            ? (o.updatedAt as Date).toISOString()
-            : o.updatedAt,
-      };
+    const orders = await prisma.order.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { items: true },
     });
+
+    const mapped = (orders as unknown as OrderWithItems[]).map((o) => ({
+      ...o,
+      createdAt: o.createdAt.toISOString(),
+      updatedAt: o.updatedAt.toISOString(),
+      deadline:  o.deadline?.toISOString() ?? null,
+    }));
 
     return NextResponse.json({ orders: mapped }, { headers: corsHeaders(request) });
   } catch (error) {
@@ -107,187 +161,123 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ── POST /api/orders — receive webhook from oldastudio ────────────────────────
-// Maps legacy English status values to French (oldastudio may still send PENDING etc.)
-
-const LEGACY_STATUS_MAP: Record<string, string> = {
-  PENDING:    "COMMANDE_A_TRAITER",
-  PROCESSING: "COMMANDE_A_PREPARER",
-  SHIPPED:    "ARCHIVES",
-  DELIVERED:  "ARCHIVES",
-  CANCELLED:  "ARCHIVES",
-  REFUNDED:   "ARCHIVES",
-};
+// ── POST /api/orders — réception webhook Olda Studio ─────────────────────────
 
 export async function POST(request: NextRequest) {
-  console.log('--- NOUVELLE REQUÊTE REÇUE ---');
-  console.log(
-    `[OLDA] origin=${request.headers.get("origin") ?? "(none)"} ` +
-    `content-type=${request.headers.get("content-type") ?? "(none)"} ` +
-    `auth=${request.headers.get("authorization") ? "présent" : "absent"}`
-  );
-
   const cors = corsHeaders(request);
 
   if (!verifyToken(request)) {
-    console.warn("[OLDA] Requête rejetée : DASHBOARD_TOKEN invalide ou manquant.");
     return NextResponse.json(
       { error: "Unauthorized: invalid webhook secret" },
       { status: 401, headers: cors }
     );
   }
 
-  let body: WebhookOrderPayload;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON payload" },
-      { status: 400, headers: cors }
-    );
+  let raw: unknown;
+  try { raw = await request.json(); }
+  catch {
+    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400, headers: cors });
   }
 
-  const required = ["orderNumber", "customerName", "customerEmail", "total", "subtotal", "items"];
-  const missing = required.filter((f) => !(f in body));
-  if (missing.length > 0) {
+  // ── Validation Zod ────────────────────────────────────────────────────────
+  const result = OldaCommandeSchema.safeParse(raw);
+  if (!result.success) {
+    console.warn("[OLDA] Payload invalide :", result.error.flatten());
     return NextResponse.json(
-      { error: `Missing required fields: ${missing.join(", ")}` },
+      { error: "Payload invalide", details: result.error.flatten() },
       { status: 422, headers: cors }
     );
   }
 
-  if (!Array.isArray(body.items) || body.items.length === 0) {
-    return NextResponse.json(
-      { error: "items must be a non-empty array" },
-      { status: 422, headers: cors }
-    );
+  const o       = result.data;
+  const isPaid  = o.paiement?.statut === "OUI" || o.paiement?.statut === "PAID";
+  const totalAmt = safeNum(o.prix?.total);
+  const articles = resolveArticles(o);
+
+  // ── Vérification doublon ──────────────────────────────────────────────────
+  const existing = await prisma.order.findUnique({
+    where: { orderNumber: o.commande },
+    select: { id: true },
+  });
+
+  if (existing) {
+    // Mise à jour des champs mutables uniquement
+    await prisma.order.update({
+      where: { id: existing.id },
+      data: {
+        paymentStatus: isPaid ? "PAID" : "PENDING",
+        notes: o.note ?? undefined,
+        updatedAt: new Date(),
+      },
+    });
+    console.log(`[OLDA] Commande mise à jour : #${o.commande}`);
+
+    const updated = await prisma.order.findUnique({
+      where: { id: existing.id },
+      include: { items: true },
+    });
+    const updatedOrder = {
+      ...updated,
+      createdAt: (updated!.createdAt as Date).toISOString(),
+      updatedAt: (updated!.updatedAt as Date).toISOString(),
+      deadline:  updated!.deadline?.toISOString() ?? null,
+    };
+    return NextResponse.json({ success: true, order: updatedOrder }, { status: 200, headers: cors });
   }
 
-  // Guard against NaN/null numeric values that would crash the DB insert
-  const safeNum = (v: unknown, fallback = 0): number => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : fallback;
-  };
-
-  // Normalise category: lowercase + trim  (e.g. "T-Shirt" → "t-shirt")
-  const category = typeof body.category === "string"
-    ? body.category.trim().toLowerCase()
-    : "";
-
-  const rawStatus = body.status ?? "COMMANDE_A_TRAITER";
-  const mappedStatus = LEGACY_STATUS_MAP[rawStatus] ?? rawStatus;
-  // T-shirt orders always start in COMMANDE_A_TRAITER — category field first
-  // (reliable), item-name regex as fallback for sites that don't send category.
-  const isTshirt =
-    category === "t-shirt" || category === "tshirt" ||
-    body.items.some((item) =>
-      /t[-\s]?shirt|tee\b/i.test(typeof item.name === "string" ? item.name : "")
-    );
-  const status = isTshirt ? "COMMANDE_A_TRAITER" : mappedStatus;
-  const paymentStatus = body.paymentStatus ?? "PENDING";
-  const shippingAddr = body.shippingAddress ? JSON.stringify(body.shippingAddress) : null;
-  const billingAddr = body.billingAddress ? JSON.stringify(body.billingAddress) : null;
-
+  // ── Création avec transaction Prisma ──────────────────────────────────────
+  // Si un article échoue, toute la commande est annulée.
   try {
-    // Check if order already exists
-    const existing = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM orders WHERE "orderNumber" = ${body.orderNumber} LIMIT 1
-    `;
+    const order = await prisma.order.create({
+      data: {
+        orderNumber:       o.commande,
+        customerName:      o.nom,
+        customerFirstName: o.prenom ?? null,
+        customerEmail:     "olda@studio",
+        customerPhone:     o.telephone ?? null,
+        customerAddress:   o.adresse ?? null,
+        deadline:          o.limit ? new Date(o.limit) : null,
+        status:            "COMMANDE_A_TRAITER",
+        paymentStatus:     isPaid ? "PAID" : "PENDING",
+        total:             totalAmt,
+        subtotal:          totalAmt,
+        category:          "t-shirt",
+        notes:             o.note ?? null,
+        items: {
+          create: articles.map((article) => ({
+            famille:      article.fiche?.typeProduit   ?? null,
+            couleur:      article.fiche?.couleur       ?? null,
+            tailleDTF:    article.fiche?.tailleDTFAr   ?? null,
+            positionLogo: article.fiche?.positionLogo  ?? null,
+            reference:    article.reference            ?? null,
+            taille:       article.taille               ?? null,
+            collection:   article.collection           ?? null,
+            imageAvant:   article.fiche?.visuelAvant   ?? null,
+            imageArriere: article.fiche?.visuelArriere ?? null,
+            noteClient:   article.note                 ?? null,
+            prtRef:       article.prt?.refPrt          ?? null,
+            prtTaille:    article.prt?.taillePrt       ?? null,
+            prtQuantite:  article.prt?.quantite != null ? Number(article.prt.quantite) : null,
+            prixUnitaire: calcItemPrice(article),
+          })),
+        },
+      },
+      include: { items: true },
+    });
 
-    let orderId: string;
-
-    if (existing.length > 0) {
-      orderId = existing[0].id;
-      // Update only the mutable fields that were provided
-      await prisma.$executeRaw`
-        UPDATE orders SET
-          status = COALESCE(${body.status ?? null}::"OrderStatus", status),
-          "paymentStatus" = COALESCE(${body.paymentStatus ?? null}::"PaymentStatus", "paymentStatus"),
-          notes = COALESCE(${body.notes ?? null}, notes),
-          "updatedAt" = NOW()
-        WHERE id = ${orderId}
-      `;
-    } else {
-      orderId = newId();
-      await prisma.$executeRaw`
-        INSERT INTO orders (
-          id, "orderNumber", "customerName", "customerEmail", "customerPhone",
-          status, "paymentStatus", total, subtotal, shipping, tax, currency,
-          notes, category, "shippingAddress", "billingAddress", "updatedAt"
-        ) VALUES (
-          ${orderId},
-          ${body.orderNumber},
-          ${body.customerName},
-          ${body.customerEmail},
-          ${body.customerPhone ?? null},
-          ${status}::"OrderStatus",
-          ${paymentStatus}::"PaymentStatus",
-          ${safeNum(body.total)},
-          ${safeNum(body.subtotal)},
-          ${safeNum(body.shipping)},
-          ${safeNum(body.tax)},
-          ${body.currency ?? "EUR"},
-          ${body.notes ?? null},
-          ${category},
-          ${shippingAddr}::jsonb,
-          ${billingAddr}::jsonb,
-          NOW()
-        )
-      `;
-
-      for (const item of body.items) {
-        const itemId = newId();
-        await prisma.$executeRaw`
-          INSERT INTO order_items (id, "orderId", name, sku, quantity, price, "imageUrl")
-          VALUES (
-            ${itemId}, ${orderId}, ${String(item.name ?? "")}, ${item.sku ?? null},
-            ${safeNum(item.quantity, 1)}, ${safeNum(item.price)}, ${item.imageUrl ?? null}
-          )
-        `;
-      }
-    }
-
-    // Read back the created/updated order — include ALL item fields so SSE
-    // clients receive a complete payload (imageUrl needed for Carte Totale visuals).
-    const rows = await prisma.$queryRaw<Record<string, unknown>[]>`
-      SELECT o.*, COALESCE(json_agg(
-        json_build_object(
-          'id', i.id, 'orderId', i."orderId", 'name', i.name,
-          'sku', i.sku, 'quantity', i.quantity, 'price', i.price, 'imageUrl', i."imageUrl"
-        ) ORDER BY i.id
-      ) FILTER (WHERE i.id IS NOT NULL), '[]') AS items
-      FROM orders o
-      LEFT JOIN order_items i ON i."orderId" = o.id
-      WHERE o.id = ${orderId}
-      GROUP BY o.id
-    `;
-    const order = rows[0];
+    console.log(`[OLDA] Nouvelle commande créée : #${o.commande} (${articles.length} article(s))`);
 
     const formattedOrder = {
       ...order,
-      createdAt:
-        order.createdAt instanceof Date
-          ? (order.createdAt as Date).toISOString()
-          : order.createdAt,
-      updatedAt:
-        order.updatedAt instanceof Date
-          ? (order.updatedAt as Date).toISOString()
-          : order.updatedAt,
+      createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString(),
+      deadline:  order.deadline?.toISOString() ?? null,
     };
-
-    // Push real-time notification to SSE clients only for brand-new orders
-    if (existing.length === 0) {
-      console.log(`Commande insérée en base ID: ${orderId}`);
-      orderEvents.emit("new-order", formattedOrder);
-      broadcast("order:new", formattedOrder);
-      console.log(`[OLDA] Nouvelle commande créée : #${body.orderNumber} (status=${status}, category="${category || "(none)"}")`);
-    } else {
-      console.log(`[OLDA] Commande mise à jour : #${body.orderNumber} (id=${orderId})`);
-    }
+    orderEvents.emit("new-order", formattedOrder);
 
     return NextResponse.json(
       { success: true, order: formattedOrder },
-      { status: 200, headers: cors }
+      { status: 201, headers: cors }
     );
   } catch (error) {
     console.error("POST /api/orders error:", error);

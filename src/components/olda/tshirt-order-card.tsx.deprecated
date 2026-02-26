@@ -1,0 +1,22 @@
+DEPRECATED: This file has been replaced by order-card.tsx
+
+The old TshirtOrderCard component is no longer used. It has been replaced by the
+new OrderCard component which provides:
+
+- Apple Premium design (18px corners, #E5E5E5 border)
+- Accordion for secondary details (chevron)
+- Optimized print mode (A4)
+- Zero labels philosophy
+- Strict type checking with OldaExtraData
+
+To use the new component, import from:
+  import { OrderCard } from "./order-card";
+
+And provide data as:
+  <OrderCard data={order.shippingAddress as OldaExtraData || {}} orderId={order.id} />
+
+See IMPLEMENTATION_GUIDE.md for full integration details.
+
+---
+Date: 2026-02-25
+Deprecation: Complete replacement (no backward compatibility needed)

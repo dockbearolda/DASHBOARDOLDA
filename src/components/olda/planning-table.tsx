@@ -151,26 +151,29 @@ const COL_HEADERS = [
 
 // ── Styles partagés ────────────────────────────────────────────────────────────
 
-/** Cellule en mode affichage (clic pour éditer) */
+/** Cellule en mode affichage (clic pour éditer) — hauteur fixe 32 px */
 const CELL_DISPLAY =
-  "w-full px-2.5 py-[8px] text-[13px] text-slate-800 rounded-lg cursor-text " +
+  "w-full h-8 px-2.5 text-[13px] text-slate-800 rounded-lg cursor-text " +
   "flex items-center hover:bg-black/[0.03] active:bg-black/[0.05] " +
-  "transition-colors duration-100 select-none min-h-[36px]";
+  "transition-colors duration-100 select-none";
 
-/** Cellule en mode édition (input actif) */
+/** Cellule en mode édition (input actif) — hauteur fixe 32 px */
 const CELL_INPUT =
-  "w-full px-2.5 py-[7px] text-[13px] text-slate-900 bg-white rounded-lg " +
+  "w-full h-8 px-2.5 text-[13px] text-slate-900 bg-white rounded-lg " +
   "border border-blue-300 ring-2 ring-blue-100/70 shadow-sm focus:outline-none";
 
-/** Input dans le draft row */
+/** Input dans le draft row — hauteur fixe 32 px */
 const DRAFT_INPUT =
-  "w-full px-2.5 py-[7px] text-[13px] text-slate-900 bg-white rounded-lg " +
+  "w-full h-8 px-2.5 text-[13px] text-slate-900 bg-white rounded-lg " +
   "border border-blue-200/50 shadow-sm focus:outline-none " +
   "focus:border-blue-300 focus:ring-2 focus:ring-blue-100/60 " +
   "placeholder:text-slate-300";
 
 /** Valeur vide en mode affichage */
 const EMPTY_TEXT = "text-slate-300 italic font-normal";
+
+/** Wrapper d'une cellule — hauteur totale de ligne = 44 px */
+const CELL_WRAP = "h-full flex items-center px-1.5";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -322,8 +325,12 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
         body:    JSON.stringify({ ...draft, deadline: draft.deadline || null }),
       });
       const { item } = await res.json();
-      if (item) onItemsChange?.([item, ...items]);
-      setDraft(null);
+      if (item) {
+        onItemsChange?.([item, ...items]);
+        setDraft(null);
+      } else {
+        console.error("Draft save: API returned no item", await res.text?.());
+      }
     } catch (e) {
       console.error("Failed to save draft row:", e);
     } finally {
@@ -440,13 +447,12 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2, ease: "easeOut" }}
-                className={cn(
-                  "grid border-b-2 border-blue-200/60 bg-blue-50/25",
-                  GRID
-                )}
               >
+                {/* Inner grid — h-[44px] fixe comme les lignes normales */}
+                <div className={cn("grid h-[44px] border-b-2 border-blue-200/60 bg-blue-50/25", GRID)}>
+
                 {/* Priorité */}
-                <div className="flex items-center px-2 py-2">
+                <div className={CELL_WRAP}>
                   <button
                     onClick={() => changeDraft("priority", nextPriority(draft.priority))}
                     className={cn(
@@ -459,7 +465,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* Client */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <input
                     type="text"
                     value={draft.clientName}
@@ -472,7 +478,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* Qté */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <input
                     type="number"
                     list="draft-qty-list"
@@ -488,7 +494,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* Désignation */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <input
                     type="text"
                     value={draft.designation}
@@ -499,7 +505,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* Note */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <input
                     type="text"
                     value={draft.note}
@@ -510,7 +516,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* Prix unitaire */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <input
                     type="number"
                     value={draft.unitPrice || ""}
@@ -523,14 +529,14 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* Total (lecture seule, live) */}
-                <div className="flex items-center justify-end px-3 py-2 text-[13px] font-semibold tabular-nums text-slate-700">
+                <div className="h-full flex items-center justify-end px-3 text-[13px] font-semibold tabular-nums text-slate-700">
                   {draft.quantity * draft.unitPrice > 0
                     ? `${(draft.quantity * draft.unitPrice).toFixed(2)} €`
                     : "—"}
                 </div>
 
                 {/* Échéance */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <input
                     type="date"
                     value={draft.deadline}
@@ -540,10 +546,10 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 </div>
 
                 {/* État */}
-                <div className="flex items-center px-1 py-1">
+                <div className={CELL_WRAP}>
                   <div className="relative w-full">
                     <div className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border",
+                      "flex items-center h-8 gap-1.5 px-2.5 rounded-lg border",
                       "border-blue-200/50 bg-white text-[13px] text-slate-700 shadow-sm"
                     )}>
                       <span className="truncate flex-1">{STATUS_LABELS[draft.status]}</span>
@@ -561,30 +567,33 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                   </div>
                 </div>
 
-                {/* Interne */}
-                <div className="flex items-center justify-center gap-1 px-1 py-2">
-                  {TEAM.map((p) => {
-                    const active = draft.responsible === p.key;
-                    return (
-                      <button
-                        key={p.key}
-                        onClick={() => changeDraft("responsible", active ? "" : p.key)}
-                        title={p.name}
-                        className={cn(
-                          "w-[22px] h-[22px] rounded-full text-[8.5px] font-bold transition-all select-none",
-                          active
-                            ? "bg-blue-500 text-white scale-110 shadow-sm"
-                            : "bg-slate-100 text-slate-400 hover:bg-slate-200"
-                        )}
-                      >
-                        {p.initials}
-                      </button>
-                    );
-                  })}
+                {/* Interne — menu déroulant */}
+                <div className={CELL_WRAP}>
+                  <div className="relative w-full">
+                    <div className={cn(
+                      "flex items-center h-8 gap-1.5 px-2.5 rounded-lg border",
+                      "border-blue-200/50 bg-white text-[13px] text-slate-700 shadow-sm"
+                    )}>
+                      <span className="truncate flex-1">
+                        {TEAM.find((p) => p.key === draft.responsible)?.name || "—"}
+                      </span>
+                      <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
+                    </div>
+                    <select
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                      value={draft.responsible}
+                      onChange={(e) => changeDraft("responsible", e.target.value)}
+                    >
+                      <option value="">—</option>
+                      {TEAM.map((p) => (
+                        <option key={p.key} value={p.key}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 {/* Confirmer / Annuler */}
-                <div className="flex items-center justify-center gap-1.5 px-2 py-2">
+                <div className="h-full flex items-center justify-center gap-1.5 px-1.5">
                   <button
                     onClick={saveDraft}
                     disabled={savingDraft}
@@ -606,6 +615,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                   </button>
                 </div>
 
+                </div>{/* end inner grid */}
               </motion.div>
             )}
           </AnimatePresence>
@@ -656,7 +666,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       exit={{ opacity: 0, x: 24, transition: { duration: 0.15 } }}
                       transition={{ type: "spring", stiffness: 500, damping: 42 }}
                       className={cn(
-                        "grid border-b border-slate-100 group relative",
+                        "grid h-[44px] border-b border-slate-100 group relative",
                         "transition-colors duration-100",
                         GRID,
                         urgent     ? "bg-red-50 hover:bg-red-100/60" : "bg-white hover:bg-slate-50",
@@ -678,7 +688,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </AnimatePresence>
 
                       {/* ── 1. Priorité — pastille cycle ─────────────────────── */}
-                      <div className="flex items-center px-2 py-2">
+                      <div className={CELL_WRAP}>
                         <button
                           onClick={() => saveNow(item.id, "priority", nextPriority(item.priority))}
                           title="Cliquer pour changer la priorité"
@@ -693,7 +703,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 2. Client — click-to-edit, majuscules ────────────── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "clientName") ? (
                           <input
                             type="text"
@@ -724,7 +734,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 3. Quantité — click-to-edit + datalist ───────────── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "quantity") ? (
                           <>
                             <input
@@ -758,7 +768,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 4. Désignation — click-to-edit ───────────────────── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "designation") ? (
                           <input
                             type="text"
@@ -781,7 +791,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 5. Note — click-to-edit, italique ────────────────── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "note") ? (
                           <input
                             type="text"
@@ -808,7 +818,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 6. Prix unitaire — click-to-edit ─────────────────── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "unitPrice") ? (
                           <input
                             type="number"
@@ -843,7 +853,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       {/* ── 7. Total — lecture seule, live ───────────────────── */}
                       <div
                         className={cn(
-                          "flex items-center justify-end px-3 py-2",
+                          "h-full flex items-center justify-end px-3",
                           "text-[13px] font-semibold tabular-nums",
                           total > 0 ? "text-slate-800" : "text-slate-200"
                         )}
@@ -852,7 +862,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 8. Échéance — click-to-edit ──────────────────────── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "deadline") ? (
                           <input
                             type="date"
@@ -889,11 +899,11 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* ── 9. État — custom display + native select overlay ──── */}
-                      <div className="flex items-center px-1 py-1">
+                      <div className={CELL_WRAP}>
                         <div className="relative w-full">
                           <div
                             className={cn(
-                              "flex items-center gap-1.5 px-2.5 py-[7px] rounded-lg border text-[13px]",
+                              "flex items-center h-8 gap-1.5 px-2.5 rounded-lg border text-[13px]",
                               "border-slate-100 bg-white/50 text-slate-800",
                               "hover:bg-white hover:border-slate-200 cursor-pointer",
                               "transition-all duration-100"
@@ -916,33 +926,34 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         </div>
                       </div>
 
-                      {/* ── 10. Interne — initiales cliquables ──────────────── */}
-                      <div className="flex items-center justify-center gap-1 px-1 py-2">
-                        {TEAM.map((p) => {
-                          const active = item.responsible === p.key;
-                          return (
-                            <button
-                              key={p.key}
-                              onClick={() =>
-                                saveNow(item.id, "responsible", active ? "" : p.key)
-                              }
-                              title={p.name}
-                              className={cn(
-                                "w-[22px] h-[22px] rounded-full text-[8.5px] font-bold",
-                                "transition-all duration-150 select-none",
-                                active
-                                  ? "bg-blue-500 text-white scale-110 shadow-sm"
-                                  : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
-                              )}
-                            >
-                              {p.initials}
-                            </button>
-                          );
-                        })}
+                      {/* ── 10. Interne — menu déroulant ─────────────────────── */}
+                      <div className={CELL_WRAP}>
+                        <div className="relative w-full">
+                          <div className={cn(
+                            "flex items-center h-8 gap-1.5 px-2.5 rounded-lg border text-[13px]",
+                            "border-slate-100 bg-white/50 text-slate-800",
+                            "hover:bg-white hover:border-slate-200 cursor-pointer transition-all duration-100"
+                          )}>
+                            <span className="truncate flex-1 font-medium">
+                              {TEAM.find((p) => p.key === item.responsible)?.name || "—"}
+                            </span>
+                            <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
+                          </div>
+                          <select
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full"
+                            value={item.responsible}
+                            onChange={(e) => saveNow(item.id, "responsible", e.target.value)}
+                          >
+                            <option value="">—</option>
+                            {TEAM.map((p) => (
+                              <option key={p.key} value={p.key}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       {/* ── Supprimer ────────────────────────────────────────── */}
-                      <div className="flex items-center justify-center">
+                      <div className="h-full flex items-center justify-center">
                         <button
                           onClick={() => handleDelete(item.id)}
                           className={cn(

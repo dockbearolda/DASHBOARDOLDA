@@ -165,14 +165,14 @@ function PriceRow({ label, value, total, paid }: { label: string; value: string;
 
 export interface OrderCardProps {
   order: Order;
-  customerAddress?: string;
+  isNew?: boolean;
   onDelete?: () => void;
   onEdit?: () => void;
 }
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
-export function OrderCard({ order, customerAddress }: OrderCardProps) {
+export function OrderCard({ order, isNew }: OrderCardProps) {
   const origin = useOrigin();
   const [isOpen, setIsOpen] = useState(false);
 
@@ -192,7 +192,7 @@ export function OrderCard({ order, customerAddress }: OrderCardProps) {
   const hasBlock1 = items.some(item =>
     item.famille || item.couleur || item.tailleDTF || item.collection || item.taille || item.noteClient || item.prtRef
   );
-  const hasBlock2 = !!(order.customerEmail || customerAddress || order.customerPhone || order.deadline);
+  const hasBlock2 = !!(order.customerEmail || order.customerAddress || order.customerPhone || order.deadline);
   const hasBlock3 = order.total > 0;
   const hasAccordion = hasBlock1 || hasBlock2 || hasBlock3;
 
@@ -232,10 +232,20 @@ export function OrderCard({ order, customerAddress }: OrderCardProps) {
       {/* ── Écran ── */}
       <div className="print:hidden">
         <div className={cn(
-          "rounded-[18px] border border-[#E5E5E5] bg-white p-4",
+          "rounded-[18px] border bg-white p-4",
           "shadow-[0_1px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)]",
           "transition-all duration-200",
+          isNew ? "border-blue-400 ring-2 ring-blue-100" : "border-[#E5E5E5]",
         )}>
+          {/* Badge nouveau */}
+          {isNew && (
+            <div className="flex justify-end mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                Nouveau
+              </span>
+            </div>
+          )}
+
           {/* Header: QR + Identité */}
           <div className="flex gap-4 items-start">
             {order.orderNumber && (
@@ -406,11 +416,11 @@ export function OrderCard({ order, customerAddress }: OrderCardProps) {
                   {order.customerEmail && order.customerEmail !== "olda@studio" && (
                     <DlEntry label="Email">{order.customerEmail}</DlEntry>
                   )}
-                  {customerAddress && (
+                  {order.customerAddress && (
                     <DlEntry label="Adresse">
                       <span className="flex items-start gap-1">
                         <MapPin size={13} className="text-gray-400 mt-0.5 shrink-0" />
-                        <span className="whitespace-pre-line">{customerAddress}</span>
+                        <span className="whitespace-pre-line">{order.customerAddress}</span>
                       </span>
                     </DlEntry>
                   )}

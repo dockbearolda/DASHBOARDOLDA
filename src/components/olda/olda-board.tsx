@@ -7,7 +7,7 @@
  *   ┌─ sticky header ─ RemindersGrid (4 person cards) ───────────────┐
  *   ├─ hero (title + live indicator) ────────────────────────────────┤
  *   ├─ tabs: Tshirt | Tasse (soon) | Accessoire (soon) ──────────────┤
- *   └─ workspace: single kanban grid, ALL columns use TshirtOrderCard ┘
+ *   └─ workspace: single kanban grid, ALL columns use OrderCard ─────────┘
  */
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
@@ -16,7 +16,7 @@ import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
-import { TshirtOrderCard } from "./tshirt-order-card";
+import { OrderCard } from "./order-card";
 import { DTFProductionTable } from "./dtf-production-table";
 import { WorkflowListsGrid } from "./workflow-list";
 import { PRTManager } from "./prt-manager";
@@ -243,7 +243,7 @@ const PEOPLE = [
 
 
 // ── Kanban column ──────────────────────────────────────────────────────────────
-// All columns use TshirtOrderCard (full card with QR, L1-L6, todos).
+// All columns use OrderCard (QR, customer info, items accordion).
 
 function KanbanColumn({
   col,
@@ -320,11 +320,10 @@ function KanbanColumn({
               }}
               className="w-full cursor-grab active:cursor-grabbing"
             >
-              <TshirtOrderCard
+              <OrderCard
                 order={o}
                 isNew={newOrderIds?.has(o.id)}
                 onDelete={onDeleteOrder ? () => onDeleteOrder(o.id) : undefined}
-                compact={compact}
               />
             </div>
           ))

@@ -52,6 +52,7 @@ export interface Order {
   customerFirstName?: string | null; // Prénom
   customerEmail: string;
   customerPhone?: string | null;
+  customerAddress?: string | null; // Adresse de livraison
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   total: number;
@@ -109,6 +110,7 @@ export interface OldaCommandeInput {
   nom: string;
   prenom?: string;
   telephone?: string;
+  adresse?: string;
   limit?: string;
   collection?: string;
   reference?: string;

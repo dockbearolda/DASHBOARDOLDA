@@ -56,6 +56,7 @@ interface ExternalOrderFormat {
   nom?: string;
   prenom?: string;
   telephone?: string;
+  adresse?: string;
   deadline?: string;
   collection?: string;
   reference?: string;
@@ -109,6 +110,7 @@ function transformExternalToOlda(data: ExternalOrderFormat): OldaCommandePayload
     nom:        data.nom || "Client",
     prenom:     data.prenom,
     telephone:  data.telephone,
+    adresse:    data.adresse,
     collection: data.collection,
     reference:  data.reference,
     taille:     data.taille,

@@ -14,6 +14,7 @@ model Order {
   customerFirstName String?       // Prénom
   customerEmail     String
   customerPhone     String?
+  customerAddress   String?       // Adresse de livraison
   status            OrderStatus   @default(COMMANDE_A_TRAITER)
   paymentStatus     PaymentStatus @default(PENDING)
   total             Float

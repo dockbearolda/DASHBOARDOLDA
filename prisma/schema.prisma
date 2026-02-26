@@ -152,6 +152,7 @@ model PlanningItem {
   deadline    DateTime?
   status      PlanningStatus   @default(A_DEVISER)
   responsible String           @default("")
+  color       String           @default("")
   position    Int              @default(0)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

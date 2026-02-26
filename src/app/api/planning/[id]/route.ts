@@ -19,6 +19,7 @@ export async function PATCH(
       deadline,
       status,
       responsible,
+      color,
       position,
     } = body;
 
@@ -32,6 +33,7 @@ export async function PATCH(
     if (deadline !== undefined) updateData.deadline = deadline ? new Date(deadline) : null;
     if (status !== undefined) updateData.status = status;
     if (responsible !== undefined) updateData.responsible = responsible;
+    if (color !== undefined) updateData.color = color;
     if (position !== undefined) updateData.position = position;
 
     if (Object.keys(updateData).length === 0) {

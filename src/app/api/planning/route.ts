@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       deadline,
       status,
       responsible,
+      color,
     } = body;
 
     const lastItem = await prisma.planningItem.findFirst({
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
         deadline: deadline ? new Date(deadline) : null,
         status: status || "A_DEVISER",
         responsible: responsible || "",
+        color: color || "",
         position,
       },
     });

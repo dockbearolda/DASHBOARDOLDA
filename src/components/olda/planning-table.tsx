@@ -364,14 +364,14 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         }
                         className={cn(
                           CELL_CLASS,
-                          "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 font-medium text-sm uppercase"
+                          "bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 font-medium text-sm uppercase cursor-text hover:border-gray-400 transition-colors"
                         )}
                         placeholder="CLIENT"
                         style={{ textTransform: "uppercase" }}
                       />
 
                       {/* Qté (80px) */}
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center px-3 py-3">
                         <input
                           type="number"
                           value={item.quantity}
@@ -385,11 +385,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                           onBlur={() =>
                             handleFieldBlur(item.id, "quantity", item.quantity)
                           }
-                          className={cn(
-                            "flex-1",
-                            CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
-                          )}
+                          className="flex-1 bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 text-sm text-center cursor-text hover:border-gray-400 transition-colors"
                           placeholder="1"
                         />
                       </div>
@@ -406,7 +402,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         }
                         className={cn(
                           CELL_CLASS,
-                          "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
+                          "bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 text-sm cursor-text hover:border-gray-400 transition-colors"
                         )}
                         placeholder="Désignation"
                       />
@@ -460,7 +456,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         }
                         className={cn(
                           CELL_CLASS,
-                          "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm text-right"
+                          "bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 text-sm text-right cursor-text hover:border-gray-400 transition-colors"
                         )}
                         placeholder="0.00"
                       />
@@ -482,8 +478,10 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         }
                         className={cn(
                           CELL_CLASS,
-                          "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm",
-                          isDeadlineCritical && "bg-red-100 text-red-900"
+                          "bg-white border rounded focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-900 text-sm cursor-text transition-colors",
+                          isDeadlineCritical
+                            ? "border-red-400 bg-red-50 text-red-900 focus:border-red-400"
+                            : "border-gray-300 hover:border-gray-400 focus:border-blue-400"
                         )}
                       />
 
@@ -498,7 +496,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         }
                         className={cn(
                           CELL_CLASS,
-                          "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
+                          "bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 text-gray-900 text-sm cursor-pointer hover:border-gray-400 transition-colors"
                         )}
                       >
                         {Object.entries(STATUS_LABELS).map(([key, label]) => (

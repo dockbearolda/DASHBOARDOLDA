@@ -318,10 +318,6 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
 
   // ── Draft row ─────────────────────────────────────────────────────────────────
 
-  const showDraft = useCallback(() => {
-    if (!draft) setDraft({ ...DEFAULT_DRAFT });
-  }, [draft]);
-
   const changeDraft = useCallback(
     (field: keyof Draft, value: unknown) => {
       setDraft((p) => (p ? { ...p, [field]: value } : p));
@@ -352,6 +348,15 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
       setSavingDraft(false);
     }
   }, [draft, savingDraft, items, onItemsChange]);
+
+  // Ouvre un nouveau draft — si un draft existe déjà, le sauvegarde d'abord
+  const showDraft = useCallback(() => {
+    if (draft) {
+      saveDraft(); // sauvegarde la ligne courante → resets to DEFAULT_DRAFT via keep-adding
+    } else {
+      setDraft({ ...DEFAULT_DRAFT });
+    }
+  }, [draft, saveDraft]);
 
   // ── Delete ────────────────────────────────────────────────────────────────────
 
@@ -419,11 +424,11 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
 
         <button
           onClick={showDraft}
-          disabled={!!draft}
+          disabled={savingDraft}
           className={cn(
             "flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold shadow-sm",
             "transition-all duration-200 active:scale-[0.97] select-none",
-            draft
+            savingDraft
               ? "bg-slate-100 text-slate-400 cursor-default"
               : "bg-blue-500 text-white hover:bg-blue-600 shadow-blue-200"
           )}
@@ -966,14 +971,16 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
           </Reorder.Group>
 
           {/* ── Bouton ajout bas de tableau ──────────────────────────────────── */}
-          {sorted.length > 0 && !draft && (
+          {sorted.length > 0 && (
             <button
               onClick={showDraft}
+              disabled={savingDraft}
               className={cn(
                 "w-full flex items-center gap-2 px-5 py-3",
                 "text-[12px] font-semibold text-blue-500",
                 "transition-colors duration-150 border-t border-slate-100",
-                "hover:text-blue-700 hover:bg-blue-50/50"
+                "hover:text-blue-700 hover:bg-blue-50/50",
+                savingDraft && "opacity-40 cursor-default"
               )}
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />

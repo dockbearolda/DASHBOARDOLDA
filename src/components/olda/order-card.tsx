@@ -410,12 +410,16 @@ export function OrderCard({
         {/* ── Carte principale ── */}
         <div
           className={cn(
-            "rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200",
-            "p-4",
-            isOpen && "rounded-b-none border-b-0"
+            "rounded-[18px] border border-[#E5E5E5] bg-red-500 p-4",
+            "shadow-[0_1px_8px_rgba(0,0,0,0.05)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)]",
+            "transition-all duration-200",
+            "font-[-apple-system, BlinkMacSystemFont, 'SF Pro Display', Inter, sans-serif]"
           )}
         >
-          {/* Layout flex horizontal : QR Code | Données */}
+          {/* TEST MODIFICATION */}
+          <div className="text-4xl font-black text-white mb-4">TEST MODIFICATION</div>
+
+          {/* Header: QR + Identité */}
           <div className="flex gap-4 items-start">
 
             {/* ▌GAUCHE : QR Code ▌ */}

@@ -200,7 +200,6 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
 
 export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
   const [editing,     setEditing]     = useState<string | null>(null);
-  const [addingRow,   setAddingRow]   = useState(false);
   const [savingIds,   setSavingIds]   = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const preEdit = useRef<unknown>(null);
@@ -281,32 +280,27 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
     [updateItem]
   );
 
-  // ── Ajouter une ligne (création instantanée en DB) ───────────────────────────
+  // ── Ajouter une ligne — optimiste : row visible immédiatement, DB en arrière-plan ──
 
-  const addRow = useCallback(async () => {
-    if (addingRow) return;
-    setAddingRow(true);
-    try {
-      const res = await fetch("/api/planning", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          priority: "MOYENNE", clientName: "", quantity: 1,
-          designation: "", note: "", unitPrice: 0,
-          deadline: null, status: "A_DEVISER", responsible: "", color: "",
-        }),
-      });
-      const { item } = await res.json();
-      if (item) {
-        onItemsChange?.([item, ...items]);
-        setEditing(`${item.id}:clientName`);
-      }
-    } catch (e) {
-      console.error("Failed to add row:", e);
-    } finally {
-      setAddingRow(false);
-    }
-  }, [addingRow, items, onItemsChange]);
+  const addRow = useCallback(() => {
+    // ID unique généré côté client pour éviter d'attendre la DB
+    const newId    = `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+    const position = (sorted[0]?.position ?? 1) - 1;
+    const newItem: PlanningItem = {
+      id: newId, priority: "MOYENNE", clientName: "", quantity: 1,
+      designation: "", note: "", unitPrice: 0, deadline: null,
+      status: "A_DEVISER", responsible: "", color: "", position,
+    };
+    // Affichage instantané + focus sur Client
+    onItemsChange?.([newItem, ...items]);
+    setEditing(`${newId}:clientName`);
+    // Sauvegarde silencieuse en arrière-plan
+    fetch("/api/planning", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ id: newId, ...newItem, deadline: null }),
+    }).catch((e) => console.error("Failed to save new row:", e));
+  }, [items, sorted, onItemsChange]);
 
   // ── Delete ────────────────────────────────────────────────────────────────────
 
@@ -374,19 +368,11 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
 
         <button
           onClick={addRow}
-          disabled={addingRow}
-          className={cn(
-            "flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold shadow-sm",
-            "transition-all duration-200 active:scale-[0.97] select-none",
-            addingRow
-              ? "bg-slate-100 text-slate-400 cursor-default"
-              : "bg-blue-500 text-white hover:bg-blue-600 shadow-blue-200"
-          )}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold shadow-sm
+            bg-blue-500 text-white hover:bg-blue-600 shadow-blue-200
+            transition-all duration-150 active:scale-[0.97] select-none"
         >
-          {addingRow
-            ? <div className="h-3.5 w-3.5 rounded-full border-2 border-slate-300 border-t-slate-500 animate-spin" />
-            : <Plus className="h-3.5 w-3.5 shrink-0" />
-          }
+          <Plus className="h-3.5 w-3.5 shrink-0" />
           Nouvelle ligne
         </button>
       </div>
@@ -737,14 +723,10 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
           {sorted.length > 0 && (
             <button
               onClick={addRow}
-              disabled={addingRow}
-              className={cn(
-                "w-full flex items-center gap-2 px-5 py-3",
-                "text-[12px] font-semibold text-blue-500",
-                "transition-colors duration-150 border-t border-slate-100",
-                "hover:text-blue-700 hover:bg-blue-50/50",
-                addingRow && "opacity-40 cursor-default"
-              )}
+              className="w-full flex items-center gap-2 px-5 py-3
+                text-[12px] font-semibold text-blue-500
+                transition-colors duration-150 border-t border-slate-100
+                hover:text-blue-700 hover:bg-blue-50/50"
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               Ajouter une ligne

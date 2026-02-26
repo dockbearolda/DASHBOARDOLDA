@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
+      id,
       priority,
       clientName,
       quantity,
@@ -29,16 +30,21 @@ export async function POST(req: NextRequest) {
       status,
       responsible,
       color,
+      position: bodyPosition,
     } = body;
 
-    // Nouveau item avant tous les existants → apparaît en haut du tableau
-    const firstItem = await prisma.planningItem.findFirst({
-      orderBy: { position: "asc" },
-    });
-    const position = (firstItem?.position ?? 1) - 1;
+    // Position fournie par le client (optimistic UI), sinon calcul server-side
+    let position = bodyPosition;
+    if (position === undefined || position === null) {
+      const firstItem = await prisma.planningItem.findFirst({
+        orderBy: { position: "asc" },
+      });
+      position = (firstItem?.position ?? 1) - 1;
+    }
 
     const item = await prisma.planningItem.create({
       data: {
+        ...(id ? { id } : {}),
         priority: priority || "MOYENNE",
         clientName: clientName || "",
         quantity: quantity || 1,

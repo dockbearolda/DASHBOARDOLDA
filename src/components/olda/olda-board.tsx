@@ -12,7 +12,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Order, OrderStatus, WorkflowItem } from "@/types/order";
-import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
+import { Inbox, Pencil, Layers, Phone, RefreshCw, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
@@ -431,6 +431,14 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [allPrtItems, setAllPrtItems] = useState<PRTItem[]>([]);
   const [planningItems, setPlanningItems] = useState<PlanningItem[]>([]);
 
+  const addOrder = async () => {
+    const res = await fetch("/api/orders/manual", { method: "POST" });
+    if (!res.ok) return;
+    const { order } = await res.json();
+    setOrders((prev) => [order, ...prev]);
+    setViewTab("commandes");
+  };
+
   // ── Session temporelle ────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -696,6 +704,16 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             </button>
           ))}
         </div>
+        {/* Bouton + commande — visible sur l'onglet commandes */}
+        {viewTab === 'commandes' && (
+          <button
+            onClick={addOrder}
+            className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-all duration-150 shrink-0"
+            aria-label="Ajouter une commande"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
         {/* Indicateur live — repoussé à droite */}
         <div className="ml-auto">
           <LiveIndicator connected={sseConnected} />

@@ -62,8 +62,10 @@ export type PlanningStatus =
   | "FACTURE_FAITE";
 
 interface PlanningTableProps {
-  items:          PlanningItem[];
-  onItemsChange?: (items: PlanningItem[]) => void;
+  items:            PlanningItem[];
+  onItemsChange?:   (items: PlanningItem[]) => void;
+  /** Appelé quand l'état d'édition change (true = en cours, false = terminé) */
+  onEditingChange?: (isEditing: boolean) => void;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────────
@@ -532,10 +534,19 @@ function HybridDateInput({
 
 // ── Main component ──────────────────────────────────────────────────────────────
 
-export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
+export function PlanningTable({ items, onItemsChange, onEditingChange }: PlanningTableProps) {
   const [editing,     setEditing]     = useState<string | null>(null);
   const [savingIds,   setSavingIds]   = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // Ref vers l'état d'édition courant, accessible dans les handlers socket/polling
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+
+  // Notifier le parent dès que editing change (pour suspendre le polling)
+  useEffect(() => {
+    onEditingChange?.(editing !== null);
+  }, [editing, onEditingChange]);
 
   // ── Temps réel : écoute les changements des autres utilisateurs ────────────
   const itemsRef = useRef(items);
@@ -543,12 +554,14 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
   useSocket({
     "planning:created": (data) => {
       const newItem = data as PlanningItem;
-      // Ignorer si on a déjà cet item (optimistic UI local)
       if (itemsRef.current.some((i) => i.id === newItem.id)) return;
       onItemsChange?.([...itemsRef.current, newItem]);
     },
     "planning:updated": (data) => {
       const updated = data as PlanningItem;
+      // Ne pas écraser la cellule actuellement en cours d'édition
+      const editingItemId = editingRef.current?.split(":")[0];
+      if (editingItemId === updated.id) return;
       onItemsChange?.(
         itemsRef.current.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
       );

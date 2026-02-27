@@ -628,13 +628,20 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   }, []);
 
   // ── Planning items ─────────────────────────────────────────────────────────
-  // Chargement initial + polling de secours toutes les 10 s
-  // (le socket temps réel prend le relais si disponible)
+  // Chargement initial + polling de secours toutes les 10 s.
+  // Le polling est suspendu pendant qu'une cellule est en cours d'édition
+  // pour ne pas écraser la frappe de l'utilisateur.
+
+  const planningEditingRef = useRef(false);
 
   const fetchPlanning = useCallback(() => {
+    if (planningEditingRef.current) return; // pause while editing
     fetch("/api/planning")
       .then((r) => r.json())
-      .then((data) => { setPlanningItems(data.items ?? []); })
+      .then((data) => {
+        if (planningEditingRef.current) return; // double-check au retour async
+        setPlanningItems(data.items ?? []);
+      })
       .catch(() => {});
   }, []);
 
@@ -790,7 +797,11 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE PLANNING — Tableau d'entreprise partagé ════════════════════ */}
         <div className={cn(viewTab !== 'planning' && 'hidden', 'h-full')}>
-          <PlanningTable items={planningItems} onItemsChange={setPlanningItems} />
+          <PlanningTable
+            items={planningItems}
+            onItemsChange={setPlanningItems}
+            onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
+          />
         </div>
 
       </div>

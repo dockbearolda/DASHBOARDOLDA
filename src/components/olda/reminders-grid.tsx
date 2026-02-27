@@ -58,15 +58,18 @@ function ReminderCard({
   isActive,
   onUpdate,
   onReceiveTodo,
+  onEditingChange,
 }: {
-  personKey:    PersonKey;
-  personName:   string;
-  todos:        TodoItem[];
-  isActive?:    boolean;
+  personKey:       PersonKey;
+  personName:      string;
+  todos:           TodoItem[];
+  isActive?:       boolean;
   /** Called when THIS card's todos change */
-  onUpdate:     (next: TodoItem[]) => void;
+  onUpdate:        (next: TodoItem[]) => void;
   /** Called when a dragged item is dropped FROM another card */
-  onReceiveTodo:(fromKey: PersonKey, todoId: string) => void;
+  onReceiveTodo:   (fromKey: PersonKey, todoId: string) => void;
+  /** Called when editing starts/stops so SSE can be paused */
+  onEditingChange?:(isEditing: boolean) => void;
 }) {
   // ── Local UI state ───────────────────────────────────────────────────────────
   const [editingId,  setEditingId]  = useState<string | null>(null);
@@ -81,6 +84,11 @@ function ReminderCard({
 
   // Cleanup timer on unmount
   useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
+
+  // Notifier le parent quand la card passe en mode édition / saisie
+  useEffect(() => {
+    onEditingChange?.(editingId !== null || isAdding);
+  }, [editingId, isAdding, onEditingChange]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -349,8 +357,10 @@ export function RemindersGrid({
     return m;
   });
 
-  const saveTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const mountedRef  = useRef(true);
+  const saveTimers    = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const mountedRef    = useRef(true);
+  // Clé de la personne dont une card est en cours d'édition (null = aucune)
+  const editingKeyRef = useRef<string | null>(null);
 
   // ── SSE : synchronisation temps réel entre utilisateurs ─────────────────────
   useEffect(() => {
@@ -370,6 +380,8 @@ export function RemindersGrid({
               person: string;
               todos:  TodoItem[] | string;
             };
+            // Ne pas écraser la card en cours d'édition
+            if (editingKeyRef.current === note.person) return;
             let todos: TodoItem[] = [];
             if (Array.isArray(note.todos))       todos = note.todos;
             else if (typeof note.todos === "string") {
@@ -427,6 +439,9 @@ export function RemindersGrid({
           isActive={p.key === activeUser}
           onUpdate={(next) => handleUpdate(p.key, next)}
           onReceiveTodo={(fromKey, todoId) => handleReceiveTodo(fromKey, p.key, todoId)}
+          onEditingChange={(isEditing) => {
+            editingKeyRef.current = isEditing ? p.key : null;
+          }}
         />
       ))}
     </div>

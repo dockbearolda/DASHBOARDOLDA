@@ -5,14 +5,13 @@
  * ─ 4 listes : Achat, Standard, Atelier, DTF
  * ─ Édition inline : clic sur le texte pour modifier
  * ─ Ajout rapide : champ minimaliste en bas (Enter pour ajouter)
- * ─ Drag & drop vertical avec position sauvegardée en DB
- * ─ Swipe-to-delete : glisse vers l'extérieur, animation rouge fluide
+ * ─ Drag & drop vertical fluide via useDragControls (handle dédié)
  * ─ Design Apple : Inter, 18px radius, antialiased, ombres légères
  */
 
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { motion, Reorder, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
-import { Trash2, Plus, ChevronUp, ChevronDown } from "lucide-react";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { motion, Reorder, AnimatePresence, useDragControls } from "framer-motion";
+import { Trash2, Plus, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkflowItem } from "@/types/order";
 
@@ -33,32 +32,25 @@ interface WorkflowListProps {
   isLoading?: boolean;
 }
 
+/* ─────────────────────────────────────────────
+   WorkflowItemRow — contenu pur (sans motion)
+───────────────────────────────────────────── */
 function WorkflowItemRow({
   item,
   onDelete,
   onUpdate,
-  onMoveUp,
-  onMoveDown,
   isDeleting,
-  canMoveUp,
-  canMoveDown,
+  onDragHandlePointerDown,
 }: {
   item: WorkflowItem;
   onDelete: (id: string) => Promise<void>;
   onUpdate: (title: string) => Promise<void>;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   isDeleting: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
+  onDragHandlePointerDown: (e: React.PointerEvent) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.title);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleDelete = useCallback(async () => {
-    await onDelete(item.id);
-  }, [item.id, onDelete]);
 
   const handleEditStart = useCallback(() => {
     setIsEditing(true);
@@ -70,122 +62,143 @@ function WorkflowItemRow({
     if (editValue.trim() && editValue !== item.title) {
       try {
         await onUpdate(editValue.trim());
-      } catch (err) {
-        console.error("Failed to update title:", err);
+      } catch {
         setEditValue(item.title);
       }
     }
     setIsEditing(false);
   }, [editValue, item.title, onUpdate]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleEditEnd();
-    if (e.key === "Escape") setIsEditing(false);
-  }, [handleEditEnd]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") handleEditEnd();
+      if (e.key === "Escape") setIsEditing(false);
+    },
+    [handleEditEnd]
+  );
 
   return (
-    <motion.div
-      layout
-      layoutId={item.id}
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: 100 }}
-      transition={{
-        layout: { type: "spring", stiffness: 400, damping: 35 },
-        opacity: { duration: 0.2 },
-      }}
-      className="relative"
-    >
-      {/* Item row */}
-      <div className="relative z-10 group">
+    <div className="group">
+      <div
+        className={cn(
+          "flex items-center gap-2 px-3 py-2.5 rounded-[14px] bg-white border border-gray-100",
+          "transition-all hover:border-gray-200 hover:shadow-sm select-none",
+          isDeleting && "opacity-40 pointer-events-none"
+        )}
+      >
+        {/* Drag handle — seule zone draggable */}
         <div
+          onPointerDown={(e) => {
+            e.preventDefault();
+            onDragHandlePointerDown(e);
+          }}
           className={cn(
-            "flex items-center gap-2.5 px-3.5 py-2.5 rounded-[14px] bg-white border border-gray-100",
-            "transition-all hover:border-gray-200 hover:shadow-sm",
-            "cursor-grab active:cursor-grabbing",
-            isDeleting && "opacity-50"
+            "shrink-0 touch-none",
+            "opacity-0 group-hover:opacity-100 transition-opacity duration-150",
+            "cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 transition-colors"
           )}
         >
-          {/* Up/Down buttons */}
-          <div className="flex flex-col gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            <motion.button
-              whileTap={{ scale: 0.85 }}
-              onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
-              disabled={!canMoveUp || isDeleting}
-              className={cn(
-                "p-0.5 rounded text-gray-300 transition-colors",
-                canMoveUp ? "hover:text-gray-600 hover:bg-gray-100 cursor-pointer" : "opacity-20 cursor-default"
-              )}
-            >
-              <ChevronUp className="h-3 w-3" />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.85 }}
-              onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
-              disabled={!canMoveDown || isDeleting}
-              className={cn(
-                "p-0.5 rounded text-gray-300 transition-colors",
-                canMoveDown ? "hover:text-gray-600 hover:bg-gray-100 cursor-pointer" : "opacity-20 cursor-default"
-              )}
-            >
-              <ChevronDown className="h-3 w-3" />
-            </motion.button>
-          </div>
-
-          {/* Content */}
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              type="text"
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={handleEditEnd}
-              onKeyDown={handleKeyDown}
-              className="flex-1 text-sm font-medium text-gray-900 bg-transparent border-b border-gray-200 focus:outline-none focus:border-gray-400 px-0 py-0"
-              style={{
-                fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-                WebkitFontSmoothing: "antialiased",
-                MozOsxFontSmoothing: "grayscale",
-              }}
-            />
-          ) : (
-            <span
-              onClick={handleEditStart}
-              className="flex-1 text-sm font-medium text-gray-900 cursor-text hover:text-gray-700 transition-colors truncate"
-              style={{
-                fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-                WebkitFontSmoothing: "antialiased",
-                MozOsxFontSmoothing: "grayscale",
-              }}
-            >
-              {item.title}
-            </span>
-          )}
-
-          {/* Trash icon - visible on hover */}
-          {!isEditing && (
-            <motion.button
-              initial={{ opacity: 0 }}
-              whileHover={{ opacity: 1 }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDelete();
-              }}
-              className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-            >
-              <Trash2 className="h-4 w-4" />
-            </motion.button>
-          )}
+          <GripVertical className="h-4 w-4" />
         </div>
+
+        {/* Contenu éditable */}
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleEditEnd}
+            onKeyDown={handleKeyDown}
+            className="flex-1 text-sm font-medium text-gray-900 bg-transparent border-b border-gray-200 focus:outline-none focus:border-gray-400 px-0 py-0"
+            style={{
+              fontFamily:
+                "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+              WebkitFontSmoothing: "antialiased",
+            }}
+          />
+        ) : (
+          <span
+            onClick={handleEditStart}
+            className="flex-1 text-sm font-medium text-gray-900 cursor-text hover:text-gray-700 transition-colors truncate"
+            style={{
+              fontFamily:
+                "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+              WebkitFontSmoothing: "antialiased",
+            }}
+          >
+            {item.title}
+          </span>
+        )}
+
+        {/* Suppression au hover */}
+        {!isEditing && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(item.id);
+            }}
+            className="shrink-0 p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
+/* ─────────────────────────────────────────────
+   DraggableWorkflowItem — Reorder.Item + drag
+   useDragControls garantit que seul le handle
+   déclenche le drag, le texte reste cliquable.
+───────────────────────────────────────────── */
+function DraggableWorkflowItem({
+  item,
+  onDelete,
+  onUpdate,
+  isDeleting,
+}: {
+  item: WorkflowItem;
+  onDelete: (id: string) => Promise<void>;
+  onUpdate: (title: string) => Promise<void>;
+  isDeleting: boolean;
+}) {
+  const controls = useDragControls();
+
+  return (
+    <Reorder.Item
+      value={item}
+      dragListener={false}
+      dragControls={controls}
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: 60, transition: { duration: 0.15 } }}
+      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+      whileDrag={{
+        scale: 1.025,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+        zIndex: 50,
+      }}
+      className="list-none"
+    >
+      <WorkflowItemRow
+        item={item}
+        onDelete={onDelete}
+        onUpdate={onUpdate}
+        isDeleting={isDeleting}
+        onDragHandlePointerDown={(e) => controls.start(e)}
+      />
+    </Reorder.Item>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   AddItemInput
+───────────────────────────────────────────── */
 function AddItemInput({
-  listType,
   onCreate,
-  isCreating,
 }: {
   listType: WorkflowItem["listType"];
   onCreate: (title: string) => Promise<void>;
@@ -200,18 +213,12 @@ function AddItemInput({
     try {
       await onCreate(value.trim());
       setValue("");
-    } catch (err) {
-      console.error("Failed to create item:", err);
+    } catch {
+      // ignore
     } finally {
       setIsLoading(false);
     }
   }, [value, onCreate]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !isLoading) {
-      handleCreate();
-    }
-  }, [handleCreate, isLoading]);
 
   return (
     <div className="flex items-center gap-2 px-3.5 py-2 rounded-[14px] bg-gray-50 border border-gray-100 hover:bg-gray-100 transition-colors">
@@ -220,20 +227,23 @@ function AddItemInput({
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => e.key === "Enter" && !isLoading && handleCreate()}
         placeholder="Ajouter une tâche..."
         disabled={isLoading}
         className="flex-1 text-sm text-gray-700 bg-transparent border-none focus:outline-none placeholder-gray-400 disabled:opacity-50"
         style={{
-          fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+          fontFamily:
+            "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
           WebkitFontSmoothing: "antialiased",
-          MozOsxFontSmoothing: "grayscale",
         }}
       />
     </div>
   );
 }
 
+/* ─────────────────────────────────────────────
+   WorkflowListColumn
+───────────────────────────────────────────── */
 export function WorkflowListColumn({
   items,
   onReorder,
@@ -241,61 +251,47 @@ export function WorkflowListColumn({
   onUpdate,
   onCreate,
   listType,
-  isLoading,
 }: WorkflowListProps) {
   const config = LIST_CONFIGS[listType];
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
-  const handleDeleteItem = useCallback(async (id: string) => {
-    setDeletingIds((prev) => new Set([...prev, id]));
-    try {
-      await onDelete(id);
-    } catch (err) {
-      console.error("Failed to delete item:", err);
-      setDeletingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  }, [onDelete]);
+  const handleDeleteItem = useCallback(
+    async (id: string) => {
+      setDeletingIds((prev) => new Set([...prev, id]));
+      try {
+        await onDelete(id);
+      } catch {
+        setDeletingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [onDelete]
+  );
 
-  const handleUpdateItem = useCallback(async (id: string, title: string) => {
-    try {
-      await onUpdate(id, title);
-    } catch (err) {
-      console.error("Failed to update item:", err);
-    }
-  }, [onUpdate]);
+  const handleUpdateItem = useCallback(
+    async (id: string, title: string) => {
+      try {
+        await onUpdate(id, title);
+      } catch {
+        // ignore
+      }
+    },
+    [onUpdate]
+  );
 
-  const handleReorder = useCallback(async (newOrder: WorkflowItem[]) => {
-    try {
-      await onReorder(newOrder);
-    } catch (err) {
-      console.error("Failed to reorder items:", err);
-    }
-  }, [onReorder]);
-
-  const handleMoveItem = useCallback(async (idx: number, direction: -1 | 1) => {
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= items.length) return;
-    const newOrder = [...items];
-    const [moved] = newOrder.splice(idx, 1);
-    newOrder.splice(newIdx, 0, moved);
-    try {
-      await onReorder(newOrder);
-    } catch (err) {
-      console.error("Failed to move item:", err);
-    }
-  }, [items, onReorder]);
-
-  const handleCreate = useCallback(async (title: string) => {
-    try {
-      await onCreate(title, listType);
-    } catch (err) {
-      console.error("Failed to create item:", err);
-    }
-  }, [onCreate, listType]);
+  const handleCreate = useCallback(
+    async (title: string) => {
+      try {
+        await onCreate(title, listType);
+      } catch {
+        // ignore
+      }
+    },
+    [onCreate, listType]
+  );
 
   return (
     <div className="flex-1 min-w-[300px] max-w-[400px] flex flex-col gap-3">
@@ -306,9 +302,9 @@ export function WorkflowListColumn({
           <span
             className="text-xs font-bold text-gray-900 uppercase tracking-wider"
             style={{
-              fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+              fontFamily:
+                "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
               WebkitFontSmoothing: "antialiased",
-              MozOsxFontSmoothing: "grayscale",
               letterSpacing: "0.05em",
             }}
           >
@@ -325,8 +321,9 @@ export function WorkflowListColumn({
         <Reorder.Group
           axis="y"
           values={items}
-          onReorder={handleReorder}
+          onReorder={onReorder}
           className="flex flex-col gap-2 flex-1"
+          style={{ listStyle: "none", padding: 0, margin: 0 }}
         >
           <AnimatePresence mode="popLayout">
             {items.length === 0 ? (
@@ -339,35 +336,28 @@ export function WorkflowListColumn({
                 Aucune tâche
               </motion.div>
             ) : (
-              items.map((item, idx) => (
-                <Reorder.Item key={item.id} value={item}>
-                  <WorkflowItemRow
-                    item={item}
-                    onDelete={(id) => handleDeleteItem(id)}
-                    onUpdate={(title) => handleUpdateItem(item.id, title)}
-                    onMoveUp={() => handleMoveItem(idx, -1)}
-                    onMoveDown={() => handleMoveItem(idx, 1)}
-                    isDeleting={deletingIds.has(item.id)}
-                    canMoveUp={idx > 0}
-                    canMoveDown={idx < items.length - 1}
-                  />
-                </Reorder.Item>
+              items.map((item) => (
+                <DraggableWorkflowItem
+                  key={item.id}
+                  item={item}
+                  onDelete={handleDeleteItem}
+                  onUpdate={(title) => handleUpdateItem(item.id, title)}
+                  isDeleting={deletingIds.has(item.id)}
+                />
               ))
             )}
           </AnimatePresence>
         </Reorder.Group>
 
-        {/* Add item input at bottom */}
-        <AddItemInput
-          listType={listType}
-          onCreate={handleCreate}
-          isCreating={false}
-        />
+        <AddItemInput listType={listType} onCreate={handleCreate} isCreating={false} />
       </div>
     </div>
   );
 }
 
+/* ─────────────────────────────────────────────
+   WorkflowListsGrid
+───────────────────────────────────────────── */
 interface WorkflowListsGridProps {
   items: WorkflowItem[];
   onItemsChange?: (items: WorkflowItem[]) => void;
@@ -383,11 +373,8 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
       DTF: [],
     };
     items.forEach((item) => {
-      if (groups[item.listType]) {
-        groups[item.listType].push(item);
-      }
+      if (groups[item.listType]) groups[item.listType].push(item);
     });
-    // Sort by position
     Object.keys(groups).forEach((key) => {
       groups[key as WorkflowItem["listType"]].sort((a, b) => a.position - b.position);
     });
@@ -396,17 +383,9 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
 
   const handleReorder = useCallback(
     async (listType: WorkflowItem["listType"], newItems: WorkflowItem[]) => {
-      const updatedItems = newItems.map((item, idx) => ({
-        ...item,
-        position: idx,
-      }));
-
-      const allItems = [
-        ...updatedItems,
-        ...items.filter((i) => i.listType !== listType),
-      ];
+      const updatedItems = newItems.map((item, idx) => ({ ...item, position: idx }));
+      const allItems = [...updatedItems, ...items.filter((i) => i.listType !== listType)];
       onItemsChange?.(allItems);
-
       try {
         await Promise.all(
           updatedItems.map((item) =>
@@ -429,8 +408,7 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
       onItemsChange?.(items.filter((i) => i.id !== itemId));
       try {
         await fetch(`/api/workflow-items/${itemId}`, { method: "DELETE" });
-      } catch (err) {
-        console.error("Failed to delete item:", err);
+      } catch {
         const res = await fetch("/api/workflow-items");
         const data = await res.json();
         onItemsChange?.(data.items ?? []);
@@ -441,17 +419,14 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
 
   const handleUpdate = useCallback(
     async (itemId: string, title: string) => {
-      onItemsChange?.(
-        items.map((i) => (i.id === itemId ? { ...i, title } : i))
-      );
+      onItemsChange?.(items.map((i) => (i.id === itemId ? { ...i, title } : i)));
       try {
         await fetch(`/api/workflow-items/${itemId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title }),
         });
-      } catch (err) {
-        console.error("Failed to update item:", err);
+      } catch {
         const res = await fetch("/api/workflow-items");
         const data = await res.json();
         onItemsChange?.(data.items ?? []);

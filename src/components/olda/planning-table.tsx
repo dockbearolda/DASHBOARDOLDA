@@ -345,7 +345,7 @@ function NoteCell({
           if (e.key === "Escape") { e.preventDefault(); onCancel(); }
         }}
         className={cn(
-          "w-full px-2.5 py-1.5 text-[13px] italic text-slate-600 bg-white rounded-xl",
+          "w-full px-2 py-1 text-[10px] italic text-slate-600 bg-white rounded-xl",
           "border border-blue-300 ring-2 ring-blue-100/70 shadow-lg focus:outline-none resize-none",
         )}
         placeholder="Précisions…"
@@ -358,7 +358,7 @@ function NoteCell({
     <div
       onClick={onStartEdit}
       className={cn(
-        "w-full px-2.5 text-[13px] rounded-lg cursor-text leading-snug",
+        "w-full px-2 text-[10px] rounded-lg cursor-text leading-snug",
         "hover:bg-black/[0.03] transition-colors duration-100 select-none",
         "whitespace-pre-wrap break-words",
         note ? "text-slate-500 italic" : EMPTY_CLS,
@@ -813,7 +813,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
       {/* ── Search bar ────────────────────────────────────────────────── */}
       <div className="px-4 py-2.5 border-b border-slate-100 bg-white">
-        <SearchBar value={search} onChange={setSearch} maxWidth="60%" />
+        <SearchBar value={search} onChange={setSearch} maxWidth="18%" />
       </div>
 
       {/* ── Tabs (feature 8) ────────────────────────────────────────────────── */}
@@ -860,7 +860,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
               <div
                 key={i}
                 className={cn(
-                  "px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400",
+                  "px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400",
                   align === "center" && "text-center",
                   (align as string) === "right" && "text-right",
                 )}

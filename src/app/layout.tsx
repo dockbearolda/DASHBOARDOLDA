@@ -31,13 +31,13 @@ const fontMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dashboard OLDA",
+  title: "OLDA",
   description: "Dashboard de gestion des commandes OLDA Studio",
   // Apple Web App — allows "Add to Home Screen" as a native-feel PWA
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Dashboard OLDA",
+    title: "OLDA",
   },
 };
 

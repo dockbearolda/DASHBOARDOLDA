@@ -164,7 +164,7 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
 // Grip | Type | Priorité | Client | Secteur | Qté | Note | Échéance | État | Interne | ×
 
 const GRID_COLS =
-  "32px 76px 94px 175px 158px 64px minmax(110px,1fr) 165px 172px 108px 40px";
+  "32px 76px 94px 175px 158px 64px minmax(78px,1fr) 165px 172px 108px 40px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
 const COL_HEADERS = [
@@ -261,14 +261,16 @@ function toTitleCase(s: string): string {
 // ── Sub-components ──────────────────────────────────────────────────────────────
 
 // Search bar glassmorphism (feature 1)
-function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function SearchBar({ value, onChange, maxWidth }: { value: string; onChange: (v: string) => void; maxWidth?: string }) {
   return (
-    <div className={cn(
-      "flex items-center gap-2.5 h-9 px-3.5 rounded-xl flex-1",
-      "bg-white/60 backdrop-blur-md border border-slate-200/80 shadow-sm",
-      "transition-all duration-200",
-      "focus-within:bg-white focus-within:border-blue-200 focus-within:shadow-blue-50",
-    )}>
+    <div
+      style={{ maxWidth }}
+      className={cn(
+        "flex items-center gap-2.5 h-9 px-3.5 rounded-xl w-full",
+        "bg-white/60 backdrop-blur-md border border-slate-200/80 shadow-sm",
+        "transition-all duration-200",
+        "focus-within:bg-white focus-within:border-blue-200 focus-within:shadow-blue-50",
+      )}>
       <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
       <input
         type="text"
@@ -571,8 +573,9 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
       onItemsChange?.(itemsRef.current.filter((i) => i.id !== id));
     },
   });
-  const [search,      setSearch]      = useState("");
-  const [activeTab,   setActiveTab]   = useState<TabKey>("general");
+  const [search,        setSearch]        = useState("");
+  const [filterPerson,  setFilterPerson]  = useState("");
+  const [activeTab,     setActiveTab]     = useState<TabKey>("general");
   // Feature 10: type stored in localStorage (no DB migration needed)
   const [types, setTypes] = useState<Record<string, ItemType>>(() => {
     if (typeof window === "undefined") return {};
@@ -608,17 +611,19 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
     return sorted.filter((i) => i.color === tab.secteur);
   }, [activeTab, generalSorted, sorted]);
 
-  // Search filter (features 1 + 2)
+  // Search + person filter
   const displayItems = useMemo(() => {
-    if (!search.trim()) return tabItems;
+    let result = tabItems;
+    if (filterPerson) result = result.filter((i) => i.responsible === filterPerson);
+    if (!search.trim()) return result;
     const q = search.toLowerCase();
-    return tabItems.filter(
+    return result.filter(
       (i) =>
         i.clientName.toLowerCase().includes(q) ||
         i.designation.toLowerCase().includes(q) ||
         i.note.toLowerCase().includes(q),
     );
-  }, [tabItems, search]);
+  }, [tabItems, search, filterPerson]);
 
   // Tab counts
   const tabCounts = useMemo((): Record<TabKey, number> => ({
@@ -775,21 +780,45 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
         <button
           onClick={addRow}
           className={cn(
-            "flex items-center justify-center w-7 h-7 rounded-lg",
+            "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium",
             "bg-blue-500 text-white hover:bg-blue-600 active:scale-95",
             "transition-all duration-150 shadow-sm shadow-blue-200 shrink-0",
           )}
           aria-label="Ajouter une ligne"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
+          <span>Ajouter</span>
         </button>
-        {/* Feature 1: Search bar */}
-        <SearchBar value={search} onChange={setSearch} />
+
+        {/* Compteur total */}
+        <span className="text-[12px] text-slate-400 font-medium tabular-nums">
+          {sorted.length} ligne{sorted.length !== 1 ? "s" : ""}
+        </span>
+
+        {/* Filtre par personne */}
+        {filterPerson && (
+          <button
+            onClick={() => setFilterPerson("")}
+            className={cn(
+              "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold",
+              "bg-blue-50 text-blue-600 border border-blue-200",
+              "hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors duration-150",
+            )}
+          >
+            {TEAM.find((p) => p.key === filterPerson)?.name}
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {/* ── Search bar ────────────────────────────────────────────────── */}
+      <div className="px-4 py-2.5 border-b border-slate-100 bg-white">
+        <SearchBar value={search} onChange={setSearch} maxWidth="60%" />
       </div>
 
       {/* ── Tabs (feature 8) ────────────────────────────────────────────────── */}
       <div className="border-b border-slate-100 bg-slate-50/50 overflow-x-auto">
-        <div className="flex justify-center items-end gap-1 px-4 min-w-max mx-auto">
+        <div className="flex justify-start items-end gap-1 px-4 min-w-max">
           {TABS.map((tab) => {
             const active = activeTab === tab.key;
             const count  = tabCounts[tab.key];
@@ -1024,19 +1053,37 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         </AppleSelect>
                       </div>
 
-                      {/* 9 · Interne */}
+                      {/* 9 · Interne — clic droit sur le nom = filtre rapide */}
                       <div className={CELL_WRAP}>
-                        <AppleSelect
-                          value={item.responsible}
-                          displayLabel={TEAM.find((p) => p.key === item.responsible)?.name ?? "—"}
-                          onChange={(v) => saveNow(item.id, "responsible", v)}
-                          pillStyle="font-medium"
-                        >
-                          <option value="">—</option>
-                          {TEAM.map((p) => (
-                            <option key={p.key} value={p.key}>{p.name}</option>
-                          ))}
-                        </AppleSelect>
+                        <div className="relative flex items-center gap-1">
+                          {item.responsible && (
+                            <button
+                              title={`Filtrer : ${TEAM.find((p) => p.key === item.responsible)?.name}`}
+                              onClick={() => setFilterPerson(
+                                filterPerson === item.responsible ? "" : item.responsible
+                              )}
+                              className={cn(
+                                "shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors duration-150",
+                                filterPerson === item.responsible
+                                  ? "bg-blue-500 text-white"
+                                  : "bg-slate-100 text-slate-400 hover:bg-blue-100 hover:text-blue-500",
+                              )}
+                            >
+                              {TEAM.find((p) => p.key === item.responsible)?.name?.[0] ?? "?"}
+                            </button>
+                          )}
+                          <AppleSelect
+                            value={item.responsible}
+                            displayLabel={TEAM.find((p) => p.key === item.responsible)?.name ?? "—"}
+                            onChange={(v) => saveNow(item.id, "responsible", v)}
+                            pillStyle="font-medium"
+                          >
+                            <option value="">—</option>
+                            {TEAM.map((p) => (
+                              <option key={p.key} value={p.key}>{p.name}</option>
+                            ))}
+                          </AppleSelect>
+                        </div>
                       </div>
 
                       {/* 10 · Supprimer */}
@@ -1060,6 +1107,22 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
               })}
             </AnimatePresence>
           </Reorder.Group>
+
+          {/* Ghost row — ajouter rapidement en bas de liste */}
+          {displayItems.length > 0 && !search && !filterPerson && (
+            <button
+              onClick={addRow}
+              className={cn(
+                "w-full flex items-center gap-2 px-4 py-2.5 text-[12px] font-medium",
+                "text-slate-300 hover:text-blue-400 hover:bg-blue-50/40",
+                "border-t border-dashed border-slate-100 hover:border-blue-200",
+                "transition-all duration-150 group/ghost",
+              )}
+            >
+              <Plus className="h-3.5 w-3.5 opacity-50 group-hover/ghost:opacity-100 transition-opacity" />
+              Ajouter une ligne
+            </button>
+          )}
 
           {/* Empty state */}
           {displayItems.length === 0 && (

@@ -24,6 +24,7 @@ import {
   Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useSocket } from "@/hooks/useSocket";
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
@@ -535,6 +536,28 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
   const [editing,     setEditing]     = useState<string | null>(null);
   const [savingIds,   setSavingIds]   = useState<Set<string>>(new Set());
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // ── Temps réel : écoute les changements des autres utilisateurs ────────────
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  useSocket({
+    "planning:created": (data) => {
+      const newItem = data as PlanningItem;
+      // Ignorer si on a déjà cet item (optimistic UI local)
+      if (itemsRef.current.some((i) => i.id === newItem.id)) return;
+      onItemsChange?.([...itemsRef.current, newItem]);
+    },
+    "planning:updated": (data) => {
+      const updated = data as PlanningItem;
+      onItemsChange?.(
+        itemsRef.current.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+      );
+    },
+    "planning:deleted": (data) => {
+      const { id } = data as { id: string };
+      onItemsChange?.(itemsRef.current.filter((i) => i.id !== id));
+    },
+  });
   const [search,      setSearch]      = useState("");
   const [activeTab,   setActiveTab]   = useState<TabKey>("general");
   // Feature 10: type stored in localStorage (no DB migration needed)

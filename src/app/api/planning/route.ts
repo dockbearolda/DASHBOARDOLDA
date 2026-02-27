@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { broadcast } from "@/lib/socket-server";
 
 // GET /api/planning — return all planning items
 export async function GET() {
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    broadcast("planning:created", item);
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
     console.error("POST /api/planning error:", error);

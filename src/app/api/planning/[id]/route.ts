@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { broadcast } from "@/lib/socket-server";
 
 // PATCH /api/planning/[id] — update a planning item
 export async function PATCH(
@@ -45,6 +46,7 @@ export async function PATCH(
       data: updateData,
     });
 
+    broadcast("planning:updated", item);
     return NextResponse.json({ item });
   } catch (error) {
     console.error(`PATCH /api/planning/[id] error:`, error);
@@ -64,6 +66,7 @@ export async function DELETE(
       where: { id },
     });
 
+    broadcast("planning:deleted", { id });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(`DELETE /api/planning/[id] error:`, error);

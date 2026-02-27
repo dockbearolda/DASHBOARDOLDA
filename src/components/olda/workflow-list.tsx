@@ -12,7 +12,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { motion, Reorder, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkflowItem } from "@/types/order";
 
@@ -37,12 +37,20 @@ function WorkflowItemRow({
   item,
   onDelete,
   onUpdate,
+  onMoveUp,
+  onMoveDown,
   isDeleting,
+  canMoveUp,
+  canMoveDown,
 }: {
   item: WorkflowItem;
   onDelete: (id: string) => Promise<void>;
   onUpdate: (title: string) => Promise<void>;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   isDeleting: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(item.title);
@@ -78,10 +86,14 @@ function WorkflowItemRow({
   return (
     <motion.div
       layout
+      layoutId={item.id}
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 100 }}
-      transition={{ duration: 0.2 }}
+      transition={{
+        layout: { type: "spring", stiffness: 400, damping: 35 },
+        opacity: { duration: 0.2 },
+      }}
       className="relative"
     >
       {/* Item row */}
@@ -94,11 +106,30 @@ function WorkflowItemRow({
             isDeleting && "opacity-50"
           )}
         >
-          {/* Drag handle */}
-          <div className="flex flex-col gap-0.5 shrink-0">
-            <div className="w-0.5 h-0.5 rounded-full bg-gray-300" />
-            <div className="w-0.5 h-0.5 rounded-full bg-gray-300" />
-            <div className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+          {/* Up/Down buttons */}
+          <div className="flex flex-col gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
+              disabled={!canMoveUp || isDeleting}
+              className={cn(
+                "p-0.5 rounded text-gray-300 transition-colors",
+                canMoveUp ? "hover:text-gray-600 hover:bg-gray-100 cursor-pointer" : "opacity-20 cursor-default"
+              )}
+            >
+              <ChevronUp className="h-3 w-3" />
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
+              disabled={!canMoveDown || isDeleting}
+              className={cn(
+                "p-0.5 rounded text-gray-300 transition-colors",
+                canMoveDown ? "hover:text-gray-600 hover:bg-gray-100 cursor-pointer" : "opacity-20 cursor-default"
+              )}
+            >
+              <ChevronDown className="h-3 w-3" />
+            </motion.button>
           </div>
 
           {/* Content */}
@@ -245,6 +276,19 @@ export function WorkflowListColumn({
     }
   }, [onReorder]);
 
+  const handleMoveItem = useCallback(async (idx: number, direction: -1 | 1) => {
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= items.length) return;
+    const newOrder = [...items];
+    const [moved] = newOrder.splice(idx, 1);
+    newOrder.splice(newIdx, 0, moved);
+    try {
+      await onReorder(newOrder);
+    } catch (err) {
+      console.error("Failed to move item:", err);
+    }
+  }, [items, onReorder]);
+
   const handleCreate = useCallback(async (title: string) => {
     try {
       await onCreate(title, listType);
@@ -295,13 +339,17 @@ export function WorkflowListColumn({
                 Aucune tâche
               </motion.div>
             ) : (
-              items.map((item) => (
+              items.map((item, idx) => (
                 <Reorder.Item key={item.id} value={item}>
                   <WorkflowItemRow
                     item={item}
                     onDelete={(id) => handleDeleteItem(id)}
                     onUpdate={(title) => handleUpdateItem(item.id, title)}
+                    onMoveUp={() => handleMoveItem(idx, -1)}
+                    onMoveDown={() => handleMoveItem(idx, 1)}
                     isDeleting={deletingIds.has(item.id)}
+                    canMoveUp={idx > 0}
+                    canMoveDown={idx < items.length - 1}
                   />
                 </Reorder.Item>
               ))

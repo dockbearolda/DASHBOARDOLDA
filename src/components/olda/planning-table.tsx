@@ -484,7 +484,7 @@ function HybridDateInput({
         placeholder="JJ/MM"
         maxLength={10}
         className={cn(
-          "w-[54px] shrink-0 h-8 px-2 text-[13px] rounded-lg border bg-transparent",
+          "w-[66px] shrink-0 h-8 px-2 text-[13px] rounded-lg border bg-transparent",
           "focus:outline-none focus:ring-2 focus:border-blue-300 focus:ring-blue-100/70 focus:bg-white",
           "transition-all duration-100 tabular-nums",
           urgent

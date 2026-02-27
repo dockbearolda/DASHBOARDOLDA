@@ -126,9 +126,9 @@ const COLORS = [
 ] as const;
 
 // ── Grille (13 colonnes) ───────────────────────────────────────────────────────
-// Grip | Priorité | Client | Désignation | Qté | Note | Prix u. | Total | Échéance | État | Interne | Couleur | ×
+// Grip | Priorité | Client | Désignation | Qté | Note | Prix u. | Total | Échéance | État | Interne | Secteur | ×
 
-const GRID_COLS = "32px 90px 150px 110px 70px minmax(140px,1fr) 90px 90px 120px 120px 110px 82px 44px";
+const GRID_COLS = "32px 90px 190px 165px 70px 90px 90px 90px 120px 175px 110px 130px 44px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
 const COL_HEADERS = [
@@ -143,7 +143,7 @@ const COL_HEADERS = [
   { label: "Échéance",    align: "left"   },
   { label: "État",        align: "left"   },
   { label: "Interne",     align: "center" },
-  { label: "Couleur",     align: "center" },
+  { label: "Secteur",     align: "left"   },
   { label: "",            align: "center" },
 ] as const;
 
@@ -238,25 +238,37 @@ function getRowBg(color: string, urgent: boolean): string {
   return c ? `${c.row} ${c.hover}` : "bg-white hover:bg-slate-50";
 }
 
-// ── Color picker (5 pastilles inline) ─────────────────────────────────────────
+const SECTEUR_OPTIONS = [
+  { value: "Impression DTF", label: "Impression DTF",  color: "bg-pink-100 text-pink-700"    },
+  { value: "Gravure",        label: "Gravure",          color: "bg-violet-100 text-violet-700"},
+  { value: "Impression UV",  label: "Impression UV",   color: "bg-cyan-100 text-cyan-700"    },
+  { value: "Autre",          label: "Autre",            color: "bg-slate-100 text-slate-600"  },
+] as const;
 
-function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+// ── Secteur picker ─────────────────────────────────────────────────────────────
+
+function SecteurPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const opt = SECTEUR_OPTIONS.find((o) => o.value === value);
   return (
-    <div className="flex items-center gap-1 justify-center">
-      {COLORS.map((c) => (
-        <button
-          key={c.key}
-          onClick={() => onChange(value === c.key ? "" : c.key)}
-          title={c.key}
-          className={cn(
-            "w-[14px] h-[14px] rounded-full transition-all duration-150 shrink-0",
-            c.dot,
-            value === c.key
-              ? "ring-2 ring-offset-1 ring-slate-500 scale-110"
-              : "opacity-35 hover:opacity-70 hover:scale-110"
-          )}
-        />
-      ))}
+    <div className="relative w-full">
+      <div className={cn(
+        "flex items-center h-8 gap-1 px-2.5 rounded-lg border text-[12px] font-medium",
+        "border-slate-100 hover:bg-white hover:border-slate-200 cursor-pointer transition-all duration-100",
+        opt ? opt.color : "bg-white/50 text-slate-400"
+      )}>
+        <span className="truncate flex-1">{opt?.label ?? "—"}</span>
+        <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
+      </div>
+      <select
+        className="absolute inset-0 opacity-0 cursor-pointer w-full"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">—</option>
+        {SECTEUR_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -793,11 +805,11 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         </AppleSelect>
                       </div>
 
-                      {/* 11. Couleur */}
+                      {/* 11. Secteur */}
                       <div className={CELL_WRAP}>
-                        <ColorPicker
+                        <SecteurPicker
                           value={item.color ?? ""}
-                          onChange={(c) => saveNow(item.id, "color", c)}
+                          onChange={(v) => saveNow(item.id, "color", v)}
                         />
                       </div>
 

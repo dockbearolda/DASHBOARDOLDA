@@ -22,7 +22,6 @@ import { WorkflowListsGrid } from "./workflow-list";
 import { PRTManager } from "./prt-manager";
 import { PlanningTable, type PlanningItem } from "./planning-table";
 import { ClientProTable, type ClientItem } from "./client-pro-table";
-import { TeamGrid } from "./team-grid";
 
 interface PRTItem {
   id: string;
@@ -427,7 +426,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning' | 'clients_pro' | 'team'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning' | 'clients_pro'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
   // Ref pour connaître l'onglet courant dans les callbacks SSE (évite les stale closures)
@@ -753,7 +752,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 overflow-x-auto">
-            {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning', 'clients_pro', 'team'] as const).map((v) => (
+            {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning', 'clients_pro'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => handleTabChange(v)}
@@ -765,7 +764,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : v === 'planning' ? 'Planning' : v === 'team' ? 'Team' : 'Clients Pro'}
+                {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : v === 'planning' ? 'Planning' : 'Clients Pro'}
                 {v === 'flux' && fluxHasNotif && (
                   <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
                 )}
@@ -860,10 +859,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           />
         </div>
 
-        {/* ══ VUE TEAM — 4 cartes collaborateurs (notes & humeur) ═════════════ */}
-        <div className={cn(viewTab !== 'team' && 'hidden')}>
-          <TeamGrid activeUser={session.name} />
-        </div>
 
       </div>
 

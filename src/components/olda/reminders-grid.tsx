@@ -3,14 +3,19 @@
 /**
  * RemindersGrid — Gestures-first, Apple Reminders style, 4 inline cards.
  *
- * Interactions :
+ * En-tête enrichi :
+ *   · Avatar circulaire (photo URL ou gradient + initiale)
+ *   · Clic avatar → input URL photo (save on blur/Enter)
+ *   · Mood picker (6 états emoji, dropdown animé)
+ *   · Zone de note libre (debounce 900ms + save immédiat au blur)
+ *
+ * Interactions todo (inchangées) :
  *   • Clic simple sur un texte  → édition inline (blur = save auto)
  *   • Double-clic sur un texte  → suppression immédiate
  *   • Glisser-déposer           → déplace un item entre les 4 fiches
  *   • Clic sur le cercle        → toggle ✓/⊘
  *   • Crayon en haut à droite   → ouvre l'input d'ajout
  *
- * Pas de bouton poubelle ni de croix — les gestes font tout.
  * Drag & Drop 100 % natif (HTML5 DataTransfer), zéro lib externe.
  */
 
@@ -20,16 +25,25 @@ import { Plus, Trash2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TodoItem } from "./person-note-modal";
 
-// ── Constantes ─────────────────────────────────────────────────────────────────
+// ── Config équipe ───────────────────────────────────────────────────────────────
 
 const PEOPLE = [
-  { key: "loic",     name: "Loïc" },
-  { key: "charlie",  name: "Charlie" },
-  { key: "melina",   name: "Mélina" },
-  { key: "amandine", name: "Amandine" },
+  { key: "loic",     name: "Loïc",     initial: "L", from: "#3a3a3c", to: "#1c1c1e" },
+  { key: "charlie",  name: "Charlie",  initial: "C", from: "#0a84ff", to: "#0071e3" },
+  { key: "melina",   name: "Mélina",   initial: "M", from: "#ff6b9d", to: "#ff375f" },
+  { key: "amandine", name: "Amandine", initial: "A", from: "#bf5af2", to: "#9b59b6" },
 ] as const;
 
 type PersonKey = typeof PEOPLE[number]["key"];
+
+const MOODS = [
+  { emoji: "🔥", label: "En rush" },
+  { emoji: "☕️", label: "En pause" },
+  { emoji: "💪", label: "Dans le flow" },
+  { emoji: "🎯", label: "Focus" },
+  { emoji: "🤔", label: "En réflexion" },
+  { emoji: "😊", label: "Bien" },
+] as const;
 
 /** Délai (ms) pour distinguer clic simple / double-clic */
 const DBL_DELAY = 280;
@@ -38,9 +52,9 @@ function newId(): string {
   return `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-// ── Persistence (fire-and-forget) ─────────────────────────────────────────────
+// ── Persistence helpers ────────────────────────────────────────────────────────
 
-function apiSave(key: string, todos: TodoItem[]) {
+function apiSaveTodos(key: string, todos: TodoItem[]) {
   fetch(`/api/notes/${key}`, {
     method:  "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -48,55 +62,209 @@ function apiSave(key: string, todos: TodoItem[]) {
   }).catch(() => {});
 }
 
+function apiSaveNote(key: string, content: string) {
+  fetch(`/api/notes/${key}`, {
+    method:  "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ content }),
+  }).catch(() => {});
+}
+
+function apiSaveProfile(userId: string, patch: { mood?: string; profilePhotoLink?: string | null }) {
+  fetch("/api/user-profiles", {
+    method:  "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ userId, ...patch }),
+  }).catch(() => {});
+}
+
+// ── MoodButton ─────────────────────────────────────────────────────────────────
+
+function MoodButton({
+  current,
+  onChange,
+}: {
+  current: string;
+  onChange: (emoji: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onOutside);
+    return () => document.removeEventListener("mousedown", onOutside);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        title="Humeur"
+        className={cn(
+          "flex items-center justify-center w-6 h-6 rounded-lg text-[14px] leading-none",
+          "transition-colors duration-100 hover:bg-gray-100",
+          open && "bg-gray-100"
+        )}
+      >
+        {current || <span className="text-[11px] text-gray-300">·</span>}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.88, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.88, y: -4 }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute right-0 top-full mt-1.5 z-50 flex flex-col gap-0.5 p-1.5 rounded-2xl border border-gray-100 bg-white"
+            style={{
+              minWidth: 136,
+              boxShadow: "0 8px 28px rgba(0,0,0,0.11), 0 1px 0 rgba(255,255,255,0.7) inset",
+            }}
+          >
+            {MOODS.map(({ emoji, label }) => (
+              <button
+                key={emoji}
+                onClick={() => { onChange(current === emoji ? "" : emoji); setOpen(false); }}
+                className={cn(
+                  "flex items-center gap-2 w-full px-2 py-1.5 rounded-xl text-left transition-colors duration-100 hover:bg-gray-50",
+                  current === emoji && "bg-gray-50"
+                )}
+              >
+                <span className="text-[15px] leading-none">{emoji}</span>
+                <span className={cn("text-[12px]", current === emoji ? "font-semibold text-gray-700" : "text-gray-500")}>
+                  {label}
+                </span>
+              </button>
+            ))}
+            {current && (
+              <>
+                <div className="h-px bg-gray-100 mx-1 my-0.5" />
+                <button
+                  onClick={() => { onChange(""); setOpen(false); }}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded-xl text-left hover:bg-gray-50 transition-colors duration-100"
+                >
+                  <span className="text-[12px] opacity-30 leading-none">✕</span>
+                  <span className="text-[12px] text-gray-400">Effacer</span>
+                </button>
+              </>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ── ReminderCard ───────────────────────────────────────────────────────────────
 
 function ReminderCard({
   personKey,
   personName,
+  personInitial,
+  personFrom,
+  personTo,
   todos,
+  note,
+  mood,
+  photoLink,
   isActive,
   onUpdate,
   onReceiveTodo,
   onEditingChange,
+  onMoodChange,
+  onNoteChange,
+  onPhotoChange,
 }: {
   personKey:       PersonKey;
   personName:      string;
+  personInitial:   string;
+  personFrom:      string;
+  personTo:        string;
   todos:           TodoItem[];
+  note:            string;
+  mood:            string;
+  photoLink:       string | null;
   isActive?:       boolean;
-  /** Called when THIS card's todos change */
   onUpdate:        (next: TodoItem[]) => void;
-  /** Called when a dragged item is dropped FROM another card */
   onReceiveTodo:   (fromKey: PersonKey, todoId: string) => void;
-  /** Called when editing starts/stops so SSE can be paused */
   onEditingChange?:(isEditing: boolean) => void;
+  onMoodChange:    (emoji: string) => void;
+  onNoteChange:    (text: string) => void;
+  onPhotoChange:   (url: string) => void;
 }) {
-  // ── Local UI state ───────────────────────────────────────────────────────────
+  // ── Todo UI state ────────────────────────────────────────────────────────────
   const [editingId,  setEditingId]  = useState<string | null>(null);
   const [editText,   setEditText]   = useState("");
   const [isAdding,   setIsAdding]   = useState(false);
   const [draft,      setDraft]      = useState("");
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // ── Profile / note UI state ──────────────────────────────────────────────────
+  const [showPhotoInput, setShowPhotoInput] = useState(false);
+  const [photoUrl,       setPhotoUrl]       = useState(photoLink ?? "");
+  const [localNote,      setLocalNote]      = useState(note);
+  const [noteSaved,      setNoteSaved]      = useState(false);
+  const noteTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const photoRef   = useRef<HTMLInputElement>(null);
+
   const editInputRef = useRef<HTMLInputElement>(null);
   const addInputRef  = useRef<HTMLInputElement>(null);
   const clickTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cleanup timer on unmount
-  useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
+  // Sync note from parent (SSE update) — ne pas écraser si on est en train de taper
+  useEffect(() => { setLocalNote(note); }, [note]);
+  useEffect(() => { setPhotoUrl(photoLink ?? ""); }, [photoLink]);
 
-  // Notifier le parent quand la card passe en mode édition / saisie
+  useEffect(() => () => {
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    if (noteTimer.current)  clearTimeout(noteTimer.current);
+  }, []);
+
+  // Notifier parent quand mode édition change
   useEffect(() => {
     onEditingChange?.(editingId !== null || isAdding);
   }, [editingId, isAdding, onEditingChange]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // Focus input photo à l'ouverture
+  useEffect(() => {
+    if (showPhotoInput) setTimeout(() => photoRef.current?.focus(), 30);
+  }, [showPhotoInput]);
+
+  // ── Note handlers ─────────────────────────────────────────────────────────────
+
+  const handleNoteInput = useCallback((val: string) => {
+    setLocalNote(val);
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(() => {
+      onNoteChange(val);
+      setNoteSaved(true);
+      setTimeout(() => setNoteSaved(false), 1600);
+    }, 900);
+  }, [onNoteChange]);
+
+  const handleNoteBlur = useCallback(() => {
+    if (noteTimer.current) { clearTimeout(noteTimer.current); noteTimer.current = null; }
+    onNoteChange(localNote);
+    setNoteSaved(true);
+    setTimeout(() => setNoteSaved(false), 1600);
+  }, [localNote, onNoteChange]);
+
+  // ── Photo handlers ────────────────────────────────────────────────────────────
+
+  const commitPhoto = useCallback(() => {
+    setShowPhotoInput(false);
+    onPhotoChange(photoUrl.trim());
+  }, [photoUrl, onPhotoChange]);
+
+  // ── Todo helpers ──────────────────────────────────────────────────────────────
 
   const toggle = useCallback((id: string) => {
     onUpdate(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
   }, [todos, onUpdate]);
-
-  // ── Inline edit ──────────────────────────────────────────────────────────────
 
   const startEdit = useCallback((todo: TodoItem) => {
     setEditingId(todo.id);
@@ -116,28 +284,19 @@ function ReminderCard({
     setEditText("");
   }, [editingId, editText, todos, onUpdate]);
 
-  // ── Geste : clic simple → éditer · double-clic → supprimer ───────────────────
-
   const handleItemClick = useCallback((todo: TodoItem) => {
-    // Already editing → ignore
     if (editingId === todo.id) return;
-
     if (clickTimer.current) {
-      // Second click arrives before timer → double-clic → delete
       clearTimeout(clickTimer.current);
       clickTimer.current = null;
       onUpdate(todos.filter(t => t.id !== todo.id));
       return;
     }
-
-    // First click : wait to see if a second one arrives
     clickTimer.current = setTimeout(() => {
       clickTimer.current = null;
       startEdit(todo);
     }, DBL_DELAY);
   }, [editingId, todos, onUpdate, startEdit]);
-
-  // ── Ajout rapide ─────────────────────────────────────────────────────────────
 
   const commitDraft = useCallback(() => {
     const text = draft.trim();
@@ -156,7 +315,7 @@ function ReminderCard({
     setTimeout(() => addInputRef.current?.focus(), 30);
   };
 
-  // ── Drag & Drop (HTML5 natif) ─────────────────────────────────────────────────
+  // ── Drag & Drop ───────────────────────────────────────────────────────────────
 
   const handleDragStart = (e: React.DragEvent, todo: TodoItem) => {
     e.dataTransfer.effectAllowed = "move";
@@ -171,9 +330,7 @@ function ReminderCard({
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsDragOver(false);
-    }
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -181,17 +338,15 @@ function ReminderCard({
     setIsDragOver(false);
     const todoId  = e.dataTransfer.getData("rd_todoId");
     const fromKey = e.dataTransfer.getData("rd_fromKey") as PersonKey;
-    if (todoId && fromKey && fromKey !== personKey) {
-      onReceiveTodo(fromKey, todoId);
-    }
+    if (todoId && fromKey && fromKey !== personKey) onReceiveTodo(fromKey, todoId);
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div
       className={cn(
-        "rounded-2xl bg-white border p-3 flex flex-col",
+        "rounded-2xl bg-white border p-3 flex flex-col gap-0",
         "transition-colors duration-150",
         isActive   ? "border-blue-300/70 bg-blue-50/30" : "border-gray-100",
         isDragOver ? "border-blue-400 bg-blue-50/50" : ""
@@ -213,24 +368,138 @@ function ReminderCard({
             : "0 1px 4px 0 rgba(0,0,0,0.05)",
       }}
     >
-      {/* ── Header ── */}
-      <div className="flex items-center gap-2 mb-2.5">
-        {isActive && <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />}
-        <span className={cn(
-          "text-[11px] font-bold text-gray-900 uppercase tracking-wider",
-          isActive && "text-blue-600"
-        )}>
-          {personName}
-        </span>
-        <span className="text-[11px] font-semibold text-gray-400 ml-auto px-2 py-0.5 rounded-full bg-gray-100/80">
+      {/* ── En-tête : Avatar + Nom + Mood ──────────────────────────────────── */}
+      <div className="flex items-center gap-2 mb-2">
+
+        {/* Avatar cliquable */}
+        <button
+          onClick={() => setShowPhotoInput((p) => !p)}
+          title="Changer la photo"
+          className="relative shrink-0 group rounded-full focus:outline-none"
+          style={{ width: 34, height: 34 }}
+        >
+          {/* Cercle gradient ou photo */}
+          <div
+            className="w-full h-full rounded-full overflow-hidden flex items-center justify-center"
+            style={{ background: `linear-gradient(145deg, ${personFrom}, ${personTo})` }}
+          >
+            {photoLink ? (
+              <img
+                src={photoLink}
+                alt={personName}
+                className="w-full h-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.92)",
+                  letterSpacing: "-0.01em",
+                  userSelect: "none",
+                }}
+              >
+                {personInitial}
+              </span>
+            )}
+          </div>
+          {/* Overlay crayon au survol */}
+          <div className="absolute inset-0 rounded-full bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center justify-center">
+            <span style={{ fontSize: 10, color: "white" }}>✎</span>
+          </div>
+        </button>
+
+        {/* Nom + mood label */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            {isActive && <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shrink-0" />}
+            <span className={cn(
+              "text-[11px] font-bold uppercase tracking-wider truncate",
+              isActive ? "text-blue-600" : "text-gray-900"
+            )}>
+              {personName}
+            </span>
+          </div>
+          {mood && (
+            <p className="text-[10px] text-gray-400 leading-tight mt-0.5">
+              {MOODS.find((m) => m.emoji === mood)?.label ?? ""}
+            </p>
+          )}
+        </div>
+
+        {/* Count badge */}
+        <span className="text-[11px] font-semibold text-gray-400 px-2 py-0.5 rounded-full bg-gray-100/80 shrink-0">
           {todos.length}
         </span>
+
+        {/* Mood picker */}
+        <MoodButton current={mood} onChange={onMoodChange} />
       </div>
 
-      {/* ── Liste des todos ── */}
+      {/* ── Input URL photo (affiché si showPhotoInput) ─────────────────────── */}
+      <AnimatePresence>
+        {showPhotoInput && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden mb-2"
+          >
+            <input
+              ref={photoRef}
+              value={photoUrl}
+              onChange={(e) => setPhotoUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter")  { e.preventDefault(); commitPhoto(); }
+                if (e.key === "Escape") { setShowPhotoInput(false); }
+              }}
+              onBlur={commitPhoto}
+              placeholder="URL de la photo (lien direct)…"
+              className="w-full text-[11px] text-gray-700 placeholder:text-gray-300 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-blue-300 transition-colors"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Zone de note libre ───────────────────────────────────────────────── */}
+      <div className="mb-2 relative">
+        <textarea
+          value={localNote}
+          onChange={(e) => handleNoteInput(e.target.value)}
+          onBlur={handleNoteBlur}
+          placeholder={`Note pour ${personName}…`}
+          rows={2}
+          className="w-full resize-none border-none outline-none bg-transparent text-[12px] leading-relaxed text-gray-600 placeholder:text-gray-300"
+          style={{
+            fontFamily: "inherit",
+            letterSpacing: "-0.005em",
+            caretColor: personFrom,
+          }}
+        />
+        <AnimatePresence>
+          {noteSaved && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute bottom-0 right-0 text-[10px] text-green-500 font-semibold"
+            >
+              ✓
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* ── Séparateur ──────────────────────────────────────────────────────── */}
+      <div className="h-px bg-gray-100 mb-2" />
+
+      {/* ── Liste des todos ──────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col gap-1.5">
         {todos.length === 0 && !isAdding && (
-          <p className="text-xs italic text-gray-300 py-4 text-center">Aucune tâche</p>
+          <p className="text-xs italic text-gray-300 py-2 text-center">Aucune tâche</p>
         )}
 
         <AnimatePresence mode="sync">
@@ -252,7 +521,7 @@ function ReminderCard({
                 editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:border-gray-200 group",
               )}
             >
-              {/* Dot toggle ✓ */}
+              {/* Dot toggle */}
               <motion.button
                 onClick={(e) => { e.stopPropagation(); toggle(todo.id); }}
                 whileTap={{ scale: 0.82, transition: { duration: 0.1 } }}
@@ -292,13 +561,10 @@ function ReminderCard({
                 </span>
               )}
 
-              {/* Trash — visible au survol */}
+              {/* Trash au survol */}
               {editingId !== todo.id && (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdate(todos.filter(t => t.id !== todo.id));
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onUpdate(todos.filter(t => t.id !== todo.id)); }}
                   className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors duration-150 opacity-0 group-hover:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -309,7 +575,7 @@ function ReminderCard({
         </AnimatePresence>
       </div>
 
-      {/* Input ajout rapide */}
+      {/* ── Ajout rapide ────────────────────────────────────────────────────── */}
       <div className="mt-auto pt-2 border-t border-gray-100">
         {isAdding ? (
           <div className="flex items-center gap-2">
@@ -343,6 +609,12 @@ function ReminderCard({
 
 // ── RemindersGrid ──────────────────────────────────────────────────────────────
 
+interface ProfileData {
+  userId:          string;
+  profilePhotoLink: string | null;
+  mood:            string;
+}
+
 export function RemindersGrid({
   notesMap,
   activeUser,
@@ -350,25 +622,51 @@ export function RemindersGrid({
 }: {
   notesMap:       Record<string, TodoItem[]>;
   activeUser?:    string;
-  /** Appelé à chaque fois qu'une note SSE arrive — person = clé de la personne modifiée */
   onNoteChanged?: (person: string) => void;
 }) {
-  // State remonté pour les déplacements cross-card
   const [todosMap, setTodosMap] = useState<Record<string, TodoItem[]>>(() => {
     const m: Record<string, TodoItem[]> = {};
     for (const p of PEOPLE) m[p.key] = notesMap[p.key] ?? [];
     return m;
   });
 
+  // Notes libres (content)
+  const [notesContent, setNotesContent] = useState<Record<string, string>>({});
+
+  // Profils (mood + photo)
+  const [profiles, setProfiles] = useState<Record<string, ProfileData>>({});
+
   const saveTimers       = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const mountedRef       = useRef(true);
-  // Clé de la personne dont une card est en cours d'édition (null = aucune)
   const editingKeyRef    = useRef<string | null>(null);
-  // Ref pour garder le callback toujours à jour sans relancer le SSE
   const onNoteChangedRef = useRef(onNoteChanged);
   useEffect(() => { onNoteChangedRef.current = onNoteChanged; }, [onNoteChanged]);
 
-  // ── SSE : synchronisation temps réel entre utilisateurs ─────────────────────
+  // ── Chargement initial des profils ────────────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/user-profiles")
+      .then((r) => r.json())
+      .then((data: { profiles: ProfileData[] }) => {
+        const map: Record<string, ProfileData> = {};
+        for (const p of data.profiles) map[p.userId] = p;
+        setProfiles(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── Chargement initial des notes (content) ────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/notes")
+      .then((r) => r.json())
+      .then((data: { notes: { person: string; content: string }[] }) => {
+        const map: Record<string, string> = {};
+        for (const n of data.notes) map[n.person] = n.content ?? "";
+        setNotesContent(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── SSE : todos en temps réel ─────────────────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true;
     let es: EventSource | null = null;
@@ -386,12 +684,10 @@ export function RemindersGrid({
               person: string;
               todos:  TodoItem[] | string;
             };
-            // Notifier le parent (pour le badge d'onglet)
             onNoteChangedRef.current?.(note.person);
-            // Ne pas écraser la card en cours d'édition
             if (editingKeyRef.current === note.person) return;
             let todos: TodoItem[] = [];
-            if (Array.isArray(note.todos))       todos = note.todos;
+            if (Array.isArray(note.todos))           todos = note.todos;
             else if (typeof note.todos === "string") {
               try { todos = JSON.parse(note.todos); } catch { todos = []; }
             }
@@ -404,7 +700,7 @@ export function RemindersGrid({
           es?.close();
           reconnectTimer = setTimeout(connect, 10_000);
         };
-      } catch { /* SSE not supported — degrade silently */ }
+      } catch { /* SSE not supported */ }
     };
 
     connect();
@@ -413,27 +709,48 @@ export function RemindersGrid({
       es?.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
-  }, []); // stable — ne dépend d'aucune prop/state
+  }, []);
 
-  // Mise à jour locale + persist debounced
+  // ── Handlers ──────────────────────────────────────────────────────────────────
+
   const handleUpdate = useCallback((key: string, next: TodoItem[]) => {
     setTodosMap(prev => ({ ...prev, [key]: next }));
     if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
-    saveTimers.current[key] = setTimeout(() => apiSave(key, next), 600);
+    saveTimers.current[key] = setTimeout(() => apiSaveTodos(key, next), 600);
   }, []);
 
-  // Déplacement cross-card (drag & drop)
   const handleReceiveTodo = useCallback((fromKey: PersonKey, toKey: string, todoId: string) => {
     setTodosMap(prev => {
       const todo = prev[fromKey]?.find(t => t.id === todoId);
       if (!todo) return prev;
       const nextFrom = prev[fromKey].filter(t => t.id !== todoId);
       const nextTo   = [...(prev[toKey] ?? []), { ...todo, done: false }];
-      // Persist les deux fiches
-      apiSave(fromKey, nextFrom);
-      apiSave(toKey,   nextTo);
+      apiSaveTodos(fromKey, nextFrom);
+      apiSaveTodos(toKey,   nextTo);
       return { ...prev, [fromKey]: nextFrom, [toKey]: nextTo };
     });
+  }, []);
+
+  const handleNoteChange = useCallback((key: string, content: string) => {
+    setNotesContent(prev => ({ ...prev, [key]: content }));
+    apiSaveNote(key, content);
+  }, []);
+
+  const handleMoodChange = useCallback((key: string, emoji: string) => {
+    setProfiles(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? { userId: key, profilePhotoLink: null, mood: "" }), mood: emoji },
+    }));
+    apiSaveProfile(key, { mood: emoji });
+  }, []);
+
+  const handlePhotoChange = useCallback((key: string, url: string) => {
+    const link = url || null;
+    setProfiles(prev => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? { userId: key, profilePhotoLink: null, mood: "" }), profilePhotoLink: link },
+    }));
+    apiSaveProfile(key, { profilePhotoLink: link });
   }, []);
 
   return (
@@ -443,13 +760,20 @@ export function RemindersGrid({
           key={p.key}
           personKey={p.key}
           personName={p.name}
+          personInitial={p.initial}
+          personFrom={p.from}
+          personTo={p.to}
           todos={todosMap[p.key] ?? []}
+          note={notesContent[p.key] ?? ""}
+          mood={profiles[p.key]?.mood ?? ""}
+          photoLink={profiles[p.key]?.profilePhotoLink ?? null}
           isActive={p.key === activeUser}
           onUpdate={(next) => handleUpdate(p.key, next)}
           onReceiveTodo={(fromKey, todoId) => handleReceiveTodo(fromKey, p.key, todoId)}
-          onEditingChange={(isEditing) => {
-            editingKeyRef.current = isEditing ? p.key : null;
-          }}
+          onEditingChange={(isEditing) => { editingKeyRef.current = isEditing ? p.key : null; }}
+          onMoodChange={(emoji) => handleMoodChange(p.key, emoji)}
+          onNoteChange={(content) => handleNoteChange(p.key, content)}
+          onPhotoChange={(url) => handlePhotoChange(p.key, url)}
         />
       ))}
     </div>

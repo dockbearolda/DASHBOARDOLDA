@@ -1443,22 +1443,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                       {/* 9 · Interne — clic droit sur le nom = filtre rapide */}
                       <div className={CELL_WRAP}>
                         <div className="relative flex items-center gap-1">
-                          {item.responsible && (
-                            <button
-                              title={`Filtrer : ${TEAM.find((p) => p.key === item.responsible)?.name}`}
-                              onClick={() => setFilterPerson(
-                                filterPerson === item.responsible ? "" : item.responsible
-                              )}
-                              className={cn(
-                                "shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors duration-150",
-                                filterPerson === item.responsible
-                                  ? "bg-blue-500 text-white"
-                                  : "bg-slate-100 text-slate-400 hover:bg-blue-100 hover:text-blue-500",
-                              )}
-                            >
-                              {TEAM.find((p) => p.key === item.responsible)?.name?.[0] ?? "?"}
-                            </button>
-                          )}
                           <AppleSelect
                             value={item.responsible}
                             displayLabel={TEAM.find((p) => p.key === item.responsible)?.name ?? "—"}

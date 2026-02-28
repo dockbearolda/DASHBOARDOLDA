@@ -195,14 +195,17 @@ function AvatarPicker({
   const preset = getPreset(cardColor);
   const ref    = useRef<HTMLDivElement>(null);
 
-  // Fermeture au clic extérieur
+  // Fermeture au clic extérieur — useRef pour éviter de recréer le listener à chaque render
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   useEffect(() => {
     function onOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (ref.current && !ref.current.contains(e.target as Node)) onCloseRef.current();
     }
     document.addEventListener("mousedown", onOutside);
     return () => document.removeEventListener("mousedown", onOutside);
-  }, [onClose]);
+  }, []);
 
   return (
     <motion.div
@@ -580,6 +583,7 @@ function ReminderCard({
         {/* Avatar cliquable → AvatarPicker */}
         <div ref={pickerAnchor} className="relative shrink-0">
           <button
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={() => setShowPicker((p) => !p)}
             title="Changer l'avatar"
             className="relative group rounded-full focus:outline-none"

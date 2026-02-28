@@ -426,7 +426,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning' | 'clients_pro'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
   // Ref pour connaître l'onglet courant dans les callbacks SSE (évite les stale closures)
@@ -752,7 +752,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 overflow-x-auto">
-            {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning', 'clients_pro'] as const).map((v) => (
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => handleTabChange(v)}
@@ -764,23 +764,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : v === 'planning' ? 'Planning' : 'Clients Pro'}
+                {v === 'flux' ? 'Flux' : v === 'planning' ? 'Planning' : v === 'clients_pro' ? 'Clients Pro' : v === 'demande_prt' ? 'Demande de DTF' : v === 'production_dtf' ? 'Production' : 'Gestion d\'atelier'}
                 {v === 'flux' && fluxHasNotif && (
                   <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
                 )}
               </button>
             ))}
           </div>
-          {/* Bouton + commande — visible sur l'onglet commandes */}
-          {viewTab === 'commandes' && (
-            <button
-              onClick={addOrder}
-              className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-all duration-150 shrink-0"
-              aria-label="Ajouter une commande"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          )}
         </div>
         {/* Utilisateur + déconnexion — positionné à gauche en absolu */}
         <div className="absolute left-4 sm:left-6">
@@ -813,18 +803,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
-        {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}
-        <div className={cn(viewTab !== 'commandes' && 'hidden')}>
-          <KanbanBoard
-            columns={TSHIRT_COLUMNS}
-            orders={tshirt}
-            newOrderIds={newOrderIds}
-            onUpdateOrder={handleUpdateOrder}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        </div>
-
-        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
+        {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
           <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
         </div>

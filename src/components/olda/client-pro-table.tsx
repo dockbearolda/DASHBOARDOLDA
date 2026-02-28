@@ -296,7 +296,7 @@ function ClientRow({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 40 }}
+            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
             className="overflow-hidden"
           >
             <div className="mx-4 mb-3 rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">

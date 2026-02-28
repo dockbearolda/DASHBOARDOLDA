@@ -187,9 +187,9 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
         <motion.button
           onClick={handleAddNew}
           whileTap={{ scale: 0.92 }}
-          animate={isAddingNew ? { backgroundColor: "#10b981" } : { backgroundColor: "transparent" }}
+          style={{ willChange: "transform" }}
           className={cn(
-            "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all",
+            "flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-[background-color,color,box-shadow]",
             isAddingNew
               ? "text-white bg-green-500 shadow-md"
               : "text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-200"
@@ -264,12 +264,13 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
                 return (
                 <Reorder.Item key={item.id} value={item} as="div">
                   <motion.div
-                    layout
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: 100 }}
+                    transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+                    style={{ willChange: "transform, opacity" }}
                     className={cn(
-                      "grid gap-0 border-b border-gray-100 transition-all group hover:bg-gray-50",
+                      "grid gap-0 border-b border-gray-100 transition-colors group hover:bg-gray-50",
                       GRID_COLS,
                       item?.done && "opacity-50"
                     )}
@@ -447,7 +448,7 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.95 }}
                         className={cn(
-                          "p-1.5 rounded-lg transition-all",
+                          "p-1.5 rounded-lg transition-[background-color,color]",
                           item?.done
                             ? "text-green-600 bg-green-50"
                             : "text-gray-400 hover:text-green-600 hover:bg-green-50"

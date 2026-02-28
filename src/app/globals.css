@@ -241,6 +241,24 @@
     will-change: transform, opacity;
   }
 
+  /* ── Layout containment for animated lists (Windows Chromium perf) ─ */
+  /* Isolates style recalculation to the container — prevents a list   */
+  /* animation from triggering a full-page style flush on Windows.     */
+  .contain-layout {
+    contain: layout style;
+  }
+
+  /* ── Animated rows — pre-promote to GPU layer before animation ───── */
+  /* Applied to Framer Motion list items. The translateZ(0) creates     */
+  /* a separate compositing layer so Chrome doesn't flatten and repaint */
+  /* the whole list on every animation frame (critical on Windows iGPU) */
+  [data-framer-motion-layout-id],
+  .motion-row {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+
   /* ── Scrollbar hiding (iOS-style snap containers) ───────────────── */
   .no-scrollbar {
     -ms-overflow-style: none;

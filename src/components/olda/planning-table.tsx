@@ -275,7 +275,7 @@ function SearchBar({ value, onChange, maxWidth }: { value: string; onChange: (v:
       className={cn(
         "flex items-center gap-2.5 h-9 px-3.5 rounded-xl w-full",
         "bg-white/60 backdrop-blur-md border border-slate-200/80 shadow-sm",
-        "transition-all duration-200",
+        "transition-[background-color,border-color,box-shadow] duration-200",
         "focus-within:bg-white focus-within:border-blue-200 focus-within:shadow-blue-50",
       )}>
       <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -310,7 +310,7 @@ function TypePicker({ value, onChange }: { value: ItemType; onChange: (v: ItemTy
       title="Cliquer pour changer le type"
       className={cn(
         "px-2 py-0.5 rounded-md text-[11px] font-bold tracking-widest",
-        "transition-all duration-150 active:scale-95 select-none whitespace-nowrap",
+        "transition-[background-color,color,transform] duration-150 active:scale-95 select-none whitespace-nowrap",
         cfg.badge,
       )}
     >
@@ -383,7 +383,7 @@ function SecteurPicker({ value, onChange }: { value: string; onChange: (v: strin
     <div className="relative w-full">
       <div className={cn(
         "flex items-center h-8 gap-1.5 px-2.5 rounded-lg border text-[12px] font-medium cursor-pointer",
-        "transition-all duration-100",
+        "transition-[background-color,border-color] duration-100",
         "bg-white/50 border-slate-100 hover:bg-white hover:border-slate-200",
         cfg ? "text-slate-700" : "text-slate-400",
       )}>
@@ -420,7 +420,7 @@ function AppleSelect({
       <div className={cn(
         "flex items-center h-8 gap-1 px-2.5 rounded-lg border text-[12px]",
         "border-slate-100 bg-white/50 text-slate-800",
-        "hover:bg-white hover:border-slate-200 cursor-pointer transition-all duration-100",
+        "hover:bg-white hover:border-slate-200 cursor-pointer transition-[background-color,border-color] duration-100",
         pillStyle,
       )}>
         <span className="truncate flex-1">{displayLabel}</span>
@@ -503,7 +503,7 @@ function HybridDateInput({
         className={cn(
           "w-[82px] shrink-0 h-8 px-2 text-[12px] rounded-lg border bg-transparent",
           "focus:outline-none focus:ring-2 focus:border-blue-300 focus:ring-blue-100/70 focus:bg-white",
-          "transition-all duration-100 tabular-nums",
+          "transition-[border-color,box-shadow] duration-100 tabular-nums",
           urgent
             ? "text-red-600 font-semibold border-transparent hover:border-red-200"
             : text
@@ -949,7 +949,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
           className={cn(
             "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium",
             "bg-blue-500 text-white hover:bg-blue-600 active:scale-95",
-            "transition-all duration-150 shadow-sm shadow-blue-200 shrink-0",
+            "transition-[background-color,transform] duration-150 shadow-sm shadow-blue-200 shrink-0",
           )}
           aria-label="Ajouter une ligne"
         >
@@ -1093,7 +1093,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                           <span className={cn(
                             "flex items-center justify-center gap-1 h-7 px-2.5 rounded-full",
                             "text-[12px] font-semibold cursor-pointer select-none w-full",
-                            "transition-all duration-150 hover:opacity-75 active:scale-95",
+                            "transition-[opacity,transform] duration-150 hover:opacity-75 active:scale-95",
                             PRIORITY_CONFIG[item.priority].style,
                           )}>
                             {PRIORITY_CONFIG[item.priority].label}
@@ -1191,7 +1191,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                             "w-full h-8 px-2 text-[12px] italic bg-transparent rounded-lg",
                             "border border-transparent hover:border-slate-200",
                             "focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100/70 focus:outline-none",
-                            "transition-all duration-100 placeholder:text-slate-300",
+                            "transition-[border-color,background-color,box-shadow] duration-100 placeholder:text-slate-300",
                             item.note ? "text-slate-500" : "text-slate-300",
                           )}
                         />
@@ -1257,7 +1257,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         <button
                           onClick={() => handleDelete(item.id)}
                           className={cn(
-                            "p-1.5 rounded-md transition-all duration-150",
+                            "p-1.5 rounded-md transition-[background-color,color] duration-150",
                             "opacity-0 group-hover:opacity-100",
                             "text-slate-300 hover:text-red-400 hover:bg-red-50",
                           )}
@@ -1282,7 +1282,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                 "w-full flex items-center gap-2 px-4 py-2.5 text-[12px] font-medium",
                 "text-slate-300 hover:text-blue-400 hover:bg-blue-50/40",
                 "border-t border-dashed border-slate-100 hover:border-blue-200",
-                "transition-all duration-150 group/ghost",
+                "transition-[background-color,color,border-color] duration-150 group/ghost",
               )}
             >
               <Plus className="h-3.5 w-3.5 opacity-50 group-hover/ghost:opacity-100 transition-opacity" />

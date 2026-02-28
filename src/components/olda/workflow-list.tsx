@@ -82,7 +82,7 @@ function WorkflowItemRow({
       <div
         className={cn(
           "flex items-center gap-2 px-3 py-2.5 rounded-[14px] bg-white border border-gray-100",
-          "transition-all hover:border-gray-200 hover:shadow-sm select-none",
+          "transition-[border-color] hover:border-gray-200 select-none",
           isDeleting && "opacity-40 pointer-events-none"
         )}
       >
@@ -171,16 +171,16 @@ function DraggableWorkflowItem({
       value={item}
       dragListener={false}
       dragControls={controls}
-      layout
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 60, transition: { duration: 0.15 } }}
-      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+      transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
       whileDrag={{
         scale: 1.025,
-        boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+        filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.12))",
         zIndex: 50,
       }}
+      style={{ willChange: "transform" }}
       className="list-none"
     >
       <WorkflowItemRow
@@ -322,7 +322,7 @@ export function WorkflowListColumn({
           axis="y"
           values={items}
           onReorder={onReorder}
-          className="flex flex-col gap-2 flex-1"
+          className="flex flex-col gap-2 flex-1 contain-layout"
           style={{ listStyle: "none", padding: 0, margin: 0 }}
         >
           <AnimatePresence mode="popLayout">

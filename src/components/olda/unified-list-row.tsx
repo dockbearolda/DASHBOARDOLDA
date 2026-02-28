@@ -52,15 +52,14 @@ export function UnifiedListRow<T extends UnifiedListItemData>({
 
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 100 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
       ref={rowRef}
       className={cn(
         "flex items-center gap-3 px-3.5 py-2.5 rounded-[14px] border border-gray-100",
-        "transition-all group hover:border-gray-200 hover:shadow-sm",
+        "transition-[border-color] group hover:border-gray-200",
         isAltBackground ? "bg-gray-50/50" : "bg-white",
         item.done && "opacity-50"
       )}
@@ -68,6 +67,7 @@ export function UnifiedListRow<T extends UnifiedListItemData>({
         fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
         WebkitFontSmoothing: "antialiased",
         MozOsxFontSmoothing: "grayscale",
+        willChange: "transform, opacity",
       }}
     >
       {/* DOT — Toggle Done (LEFT) */}

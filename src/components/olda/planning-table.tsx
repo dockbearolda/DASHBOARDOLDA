@@ -26,6 +26,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useSocket } from "@/hooks/useSocket";
+import { STATUS_LABELS, SECTEUR_CONFIG, DaysChip } from "@/components/ui/table-cells";
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
@@ -88,24 +89,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; style: string }> = {
   HAUTE:   { label: "Haute",   style: "bg-orange-50 text-orange-600" },
 };
 
-const STATUS_LABELS: Record<PlanningStatus, string> = {
-  A_DEVISER:           "À deviser",
-  ATTENTE_VALIDATION:  "Attente validation",
-  MAQUETTE_A_FAIRE:    "Maquette à faire",
-  ATTENTE_MARCHANDISE: "Attente marchandise",
-  A_PREPARER:          "À préparer",
-  A_PRODUIRE:          "À produire",
-  EN_PRODUCTION:       "En production",
-  A_MONTER_NETTOYER:   "À monter/nettoyer",
-  MANQUE_INFORMATION:  "Manque information",
-  TERMINE:             "Terminé",
-  PREVENIR_CLIENT:     "Prévenir client",
-  CLIENT_PREVENU:      "Client prévenu",
-  RELANCE_CLIENT:      "Relance client",
-  PRODUIT_RECUPERE:    "Produit récupéré",
-  A_FACTURER:          "À facturer",
-  FACTURE_FAITE:       "Facture faite",
-};
+// STATUS_LABELS importé depuis @/components/ui/table-cells
 
 const TEAM = [
   { key: "loic",     name: "Loïc"     },
@@ -123,33 +107,7 @@ const FAMILLE_OPTIONS = [
   "Goodies",
 ] as const;
 
-// Secteur options with pastel pills (feature 7)
-const SECTEUR_CONFIG = [
-  {
-    value: "Textiles",
-    label: "Textiles",
-    pill:  "bg-emerald-50 text-emerald-700 border-emerald-100",
-    dot:   "bg-emerald-400",
-  },
-  {
-    value: "Gravure et découpe laser",
-    label: "Gravure & Découpe",
-    pill:  "bg-violet-50 text-violet-700 border-violet-100",
-    dot:   "bg-violet-400",
-  },
-  {
-    value: "Impression UV",
-    label: "Impression UV",
-    pill:  "bg-cyan-50 text-cyan-700 border-cyan-100",
-    dot:   "bg-cyan-400",
-  },
-  {
-    value: "Goodies",
-    label: "Goodies",
-    pill:  "bg-amber-50 text-amber-700 border-amber-100",
-    dot:   "bg-amber-400",
-  },
-] as const;
+// SECTEUR_CONFIG importé depuis @/components/ui/table-cells
 
 // Type indicator config (feature 10)
 const TYPE_CONFIG = {
@@ -487,16 +445,7 @@ function StatusPicker({ value, onChange }: { value: PlanningStatus; onChange: (v
   );
 }
 
-// Jours restants — chip coloré (feature « jours restants »)
-function DaysChip({ days }: { days: number }) {
-  // Rouge  : retard ou aujourd'hui ou demain
-  if (days <= 0)   return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-100">{days === 0 ? "auj." : `${days}j`}</span>;
-  if (days === 1)  return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-100">dem.</span>;
-  // Orange : cette semaine (2–7 j)
-  if (days <= 7)   return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-orange-50 text-orange-500 border border-orange-100">+{days}j</span>;
-  // Bleu   : long terme (> 7 j)
-  return               <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">+{days}j</span>;
-}
+// DaysChip importé depuis @/components/ui/table-cells
 
 // Hybrid date input — text JJ/MM + calendar icon (feature 6)
 function HybridDateInput({

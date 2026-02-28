@@ -2,12 +2,14 @@
 
 /**
  * ClientProTable — Base de données clients professionnels.
+ * Utilise OrderTable (table-shell) + atomes de table-cells.
  *
  * Features :
- *  1. Recherche glassmorphism par nom / téléphone
- *  2. Tableau : Nom | Téléphone | Nb commandes | Date ajout
+ *  1. Recherche glassmorphism par nom / téléphone  (TableSearchBar)
+ *  2. Tableau : Avatar | Nom | Téléphone | Nb commandes | Date ajout
  *  3. Ligne cliquable → expand fiche avec historique planning
  *  4. Ajout / édition inline / suppression
+ *  5. Badges d'état unifiés via StatusBadge + SecteurPill
  */
 
 import {
@@ -15,11 +17,15 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus, Search, X, Trash2, Phone, ChevronDown, ChevronUp, User, Edit2, Check,
+  Plus, X, Trash2, Phone, ChevronDown, ChevronUp, User, Edit2, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OrderTable } from "@/components/ui/table-shell";
+import {
+  STATUS_LABELS, StatusBadge, SecteurPill, TableSearchBar,
+} from "@/components/ui/table-cells";
 
-// ── Types ───────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────────
 
 interface PlanningHistoryItem {
   id:          string;
@@ -32,52 +38,14 @@ interface PlanningHistoryItem {
 }
 
 export interface ClientItem {
-  id:           string;
-  nom:          string;
-  telephone:    string;
-  createdAt:    string;
+  id:            string;
+  nom:           string;
+  telephone:     string;
+  createdAt:     string;
   planningItems: PlanningHistoryItem[];
 }
 
-// ── Status labels (same as planning) ────────────────────────────────────────────
-
-const STATUS_LABELS: Record<string, string> = {
-  A_DEVISER:           "À deviser",
-  ATTENTE_VALIDATION:  "Attente validation",
-  MAQUETTE_A_FAIRE:    "Maquette à faire",
-  ATTENTE_MARCHANDISE: "Attente marchandise",
-  A_PREPARER:          "À préparer",
-  A_PRODUIRE:          "À produire",
-  EN_PRODUCTION:       "En production",
-  A_MONTER_NETTOYER:   "À monter/nettoyer",
-  MANQUE_INFORMATION:  "Manque information",
-  TERMINE:             "Terminé",
-  PREVENIR_CLIENT:     "Prévenir client",
-  CLIENT_PREVENU:      "Client prévenu",
-  RELANCE_CLIENT:      "Relance client",
-  PRODUIT_RECUPERE:    "Produit récupéré",
-  A_FACTURER:          "À facturer",
-  FACTURE_FAITE:       "Facture faite",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  TERMINE:        "bg-emerald-50 text-emerald-700 border-emerald-100",
-  FACTURE_FAITE:  "bg-emerald-50 text-emerald-700 border-emerald-100",
-  PRODUIT_RECUPERE: "bg-blue-50 text-blue-700 border-blue-100",
-  EN_PRODUCTION:  "bg-indigo-50 text-indigo-700 border-indigo-100",
-  A_DEVISER:      "bg-slate-50 text-slate-600 border-slate-100",
-  MANQUE_INFORMATION: "bg-red-50 text-red-600 border-red-100",
-  RELANCE_CLIENT: "bg-orange-50 text-orange-700 border-orange-100",
-};
-
-const SECTEUR_COLORS: Record<string, string> = {
-  "Textiles":               "bg-emerald-50 text-emerald-700 border-emerald-100",
-  "Gravure et découpe laser": "bg-violet-50 text-violet-700 border-violet-100",
-  "Impression UV":          "bg-cyan-50 text-cyan-700 border-cyan-100",
-  "Goodies":                "bg-amber-50 text-amber-700 border-amber-100",
-};
-
-// ── Helpers ─────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -89,67 +57,34 @@ function formatDeadline(iso: string | null): string {
   return formatDate(iso);
 }
 
-// ── SearchBar ────────────────────────────────────────────────────────────────────
-
-function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className={cn(
-      "flex items-center gap-2.5 h-9 px-3.5 rounded-xl w-full",
-      "bg-white/60 backdrop-blur-md border border-slate-200/80 shadow-sm",
-      "transition-all duration-200",
-      "focus-within:bg-white focus-within:border-blue-200 focus-within:shadow-blue-50",
-    )}>
-      <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Rechercher par nom, téléphone…"
-        className="flex-1 text-[13px] text-slate-800 bg-transparent focus:outline-none placeholder:text-slate-300"
-      />
-      {value && (
-        <button
-          onClick={() => onChange("")}
-          className="text-slate-300 hover:text-slate-500 transition-colors duration-100"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── History row ──────────────────────────────────────────────────────────────────
+// ── History row ───────────────────────────────────────────────────────────────────
 
 function HistoryRow({ item }: { item: PlanningHistoryItem }) {
-  const statusLabel  = STATUS_LABELS[item.status] ?? item.status;
-  const statusStyle  = STATUS_COLORS[item.status] ?? "bg-slate-50 text-slate-600 border-slate-100";
-  const secteurStyle = SECTEUR_COLORS[item.color] ?? "";
-
   return (
-    <div className="grid gap-2 px-4 py-2.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors duration-100"
+    <div
+      className="grid gap-2 px-4 py-2.5 border-b border-slate-50 last:border-0 hover:bg-slate-50/60 transition-colors duration-100"
       style={{ gridTemplateColumns: "1fr 90px 90px 80px 100px" }}
     >
       <span className="text-[12px] text-slate-700 font-medium truncate">
         {item.designation || <span className="text-slate-300 italic">Sans désignation</span>}
       </span>
-      <span className="text-[11px] tabular-nums text-slate-500 text-center">{item.quantity} unité{item.quantity > 1 ? "s" : ""}</span>
+      <span className="text-[11px] tabular-nums text-slate-500 text-center">
+        {item.quantity} unité{item.quantity > 1 ? "s" : ""}
+      </span>
       {item.color ? (
-        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border self-center text-center truncate", secteurStyle)}>
-          {item.color}
-        </span>
-      ) : <span />}
+        <SecteurPill secteur={item.color} className="self-center justify-center" />
+      ) : (
+        <span />
+      )}
       <span className="text-[11px] text-slate-400 text-center self-center tabular-nums">
         {formatDeadline(item.deadline)}
       </span>
-      <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border self-center text-center truncate", statusStyle)}>
-        {statusLabel}
-      </span>
+      <StatusBadge status={item.status} className="self-center justify-center" />
     </div>
   );
 }
 
-// ── Client row ───────────────────────────────────────────────────────────────────
+// ── Client row ────────────────────────────────────────────────────────────────────
 
 function ClientRow({
   client,
@@ -160,11 +95,11 @@ function ClientRow({
   onUpdate: (id: string, nom: string, telephone: string) => Promise<void>;
   onDelete: (id: string) => void;
 }) {
-  const [expanded,  setExpanded]  = useState(false);
-  const [editing,   setEditing]   = useState(false);
-  const [nomVal,    setNomVal]    = useState(client.nom);
-  const [telVal,    setTelVal]    = useState(client.telephone);
-  const [saving,    setSaving]    = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [editing,  setEditing]  = useState(false);
+  const [nomVal,   setNomVal]   = useState(client.nom);
+  const [telVal,   setTelVal]   = useState(client.telephone);
+  const [saving,   setSaving]   = useState(false);
 
   const count = client.planningItems.length;
 
@@ -199,7 +134,10 @@ function ClientRow({
             autoFocus
             value={nomVal}
             onChange={(e) => setNomVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+              if (e.key === "Escape") setEditing(false);
+            }}
             className="h-8 px-2.5 text-[13px] font-semibold text-slate-900 bg-white rounded-lg border border-blue-300 ring-2 ring-blue-100/70 shadow-sm focus:outline-none"
           />
         ) : (
@@ -216,7 +154,10 @@ function ClientRow({
           <input
             value={telVal}
             onChange={(e) => setTelVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+              if (e.key === "Escape") setEditing(false);
+            }}
             placeholder="06 00 00 00 00"
             className="h-8 px-2.5 text-[13px] text-slate-700 bg-white rounded-lg border border-blue-300 ring-2 ring-blue-100/70 shadow-sm focus:outline-none"
           />
@@ -241,10 +182,12 @@ function ClientRow({
 
         {/* Nb commandes */}
         <div className="text-center">
-          <span className={cn(
-            "px-2 py-0.5 rounded-full text-[11px] font-semibold",
-            count > 0 ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400",
-          )}>
+          <span
+            className={cn(
+              "px-2 py-0.5 rounded-full text-[11px] font-semibold",
+              count > 0 ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-400",
+            )}
+          >
             {count} cmd{count !== 1 ? "s" : ""}
           </span>
         </div>
@@ -267,7 +210,11 @@ function ClientRow({
           ) : (
             <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity duration-150">
               <button
-                onClick={() => { setEditing(true); setNomVal(client.nom); setTelVal(client.telephone); }}
+                onClick={() => {
+                  setEditing(true);
+                  setNomVal(client.nom);
+                  setTelVal(client.telephone);
+                }}
                 className="p-1.5 rounded-md text-slate-300 hover:text-blue-400 hover:bg-blue-50 transition-colors duration-100"
               >
                 <Edit2 className="h-3.5 w-3.5" />
@@ -328,14 +275,17 @@ function ClientRow({
   );
 }
 
-// ── Add form ─────────────────────────────────────────────────────────────────────
+// ── Add form ──────────────────────────────────────────────────────────────────────
 
-function AddClientForm({ onAdd, onCancel }: {
+function AddClientForm({
+  onAdd,
+  onCancel,
+}: {
   onAdd:    (nom: string, telephone: string) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [nom, setNom]       = useState("");
-  const [tel, setTel]       = useState("");
+  const [nom,    setNom]    = useState("");
+  const [tel,    setTel]    = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -396,7 +346,7 @@ function AddClientForm({ onAdd, onCancel }: {
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────────
 
 interface ClientProTableProps {
   clients:         ClientItem[];
@@ -404,8 +354,8 @@ interface ClientProTableProps {
 }
 
 export function ClientProTable({ clients, onClientsChange }: ClientProTableProps) {
-  const [search,    setSearch]    = useState("");
-  const [showAdd,   setShowAdd]   = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [showAdd,     setShowAdd]     = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const displayClients = useMemo(() => {
@@ -418,11 +368,11 @@ export function ClientProTable({ clients, onClientsChange }: ClientProTableProps
     );
   }, [clients, search]);
 
-  // ── API ────────────────────────────────────────────────────────────────────
+  // ── API ───────────────────────────────────────────────────────────────────
 
   const handleAdd = useCallback(async (nom: string, telephone: string) => {
     try {
-      const res  = await fetch("/api/clients", {
+      const res = await fetch("/api/clients", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ nom, telephone }),
@@ -438,14 +388,14 @@ export function ClientProTable({ clients, onClientsChange }: ClientProTableProps
 
   const handleUpdate = useCallback(async (id: string, nom: string, telephone: string) => {
     try {
-      const res  = await fetch(`/api/clients/${id}`, {
+      const res = await fetch(`/api/clients/${id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ nom, telephone }),
       });
       if (!res.ok) return;
       onClientsChange(
-        clients.map((c) => c.id === id ? { ...c, nom, telephone } : c)
+        clients.map((c) => c.id === id ? { ...c, nom, telephone } : c),
       );
     } catch (e) {
       console.error("Failed to update client:", e);
@@ -466,16 +416,12 @@ export function ClientProTable({ clients, onClientsChange }: ClientProTableProps
     }
   }, [clients, onClientsChange]);
 
-  return (
-    <div
-      className="flex flex-col rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden"
-      style={{
-        fontFamily:          "'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
-        WebkitFontSmoothing: "antialiased",
-      }}
-    >
-      {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-white">
+  // ── Slots OrderTable ──────────────────────────────────────────────────────
+
+  const toolbar = (
+    <>
+      {/* Barre d'actions */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-black/[0.04]">
         <button
           onClick={() => setShowAdd((v) => !v)}
           className={cn(
@@ -487,18 +433,21 @@ export function ClientProTable({ clients, onClientsChange }: ClientProTableProps
           <Plus className="h-3.5 w-3.5" />
           <span>Ajouter un client</span>
         </button>
-
         <span className="text-[12px] text-slate-400 font-medium tabular-nums">
           {clients.length} client{clients.length !== 1 ? "s" : ""}
         </span>
       </div>
 
-      {/* ── Search ───────────────────────────────────────────────────────────── */}
-      <div className="px-4 py-2.5 border-b border-slate-100 bg-white">
-        <SearchBar value={search} onChange={setSearch} />
+      {/* Barre de recherche */}
+      <div className="px-4 py-2.5 border-b border-black/[0.04]">
+        <TableSearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Rechercher par nom, téléphone…"
+        />
       </div>
 
-      {/* ── Add form ─────────────────────────────────────────────────────────── */}
+      {/* Formulaire d'ajout */}
       <AnimatePresence initial={false}>
         {showAdd && (
           <AddClientForm
@@ -507,63 +456,67 @@ export function ClientProTable({ clients, onClientsChange }: ClientProTableProps
           />
         )}
       </AnimatePresence>
+    </>
+  );
 
-      {/* ── Column headers ───────────────────────────────────────────────────── */}
-      <div
-        className="grid px-4 py-2.5 bg-slate-50/70 border-b border-slate-100 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400"
-        style={{ gridTemplateColumns: "32px 1fr 140px 80px 100px 36px" }}
-      >
-        <span />
-        <span>Nom</span>
-        <span>Téléphone</span>
-        <span className="text-center">Commandes</span>
-        <span className="text-center">Ajouté le</span>
-        <span />
-      </div>
-
-      {/* ── Rows ─────────────────────────────────────────────────────────────── */}
-      <div className="overflow-y-auto">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {displayClients.map((client) => (
-            <motion.div
-              key={client.id}
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: deletingIds.has(client.id) ? 0.25 : 1, y: 0 }}
-              exit={{ opacity: 0, x: 24, transition: { duration: 0.15 } }}
-              transition={{ type: "spring", stiffness: 500, damping: 42 }}
-              className={cn(deletingIds.has(client.id) && "pointer-events-none")}
-            >
-              <ClientRow
-                client={client}
-                onUpdate={handleUpdate}
-                onDelete={handleDelete}
-              />
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {/* Empty state */}
-        {displayClients.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center select-none">
-            <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
-              <User className="h-5 w-5 text-slate-200" />
-            </div>
-            <p className="text-[13px] text-slate-400">
-              {search
-                ? `Aucun résultat pour « ${search} »`
-                : "Aucun client pro enregistré"}
-            </p>
-            {!search && (
-              <button
-                onClick={() => setShowAdd(true)}
-                className="mt-2 text-[12px] text-blue-500 hover:underline transition-colors"
-              >
-                Ajouter le premier client
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+  const headers = (
+    <div
+      className="grid px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400"
+      style={{ gridTemplateColumns: "32px 1fr 140px 80px 100px 36px" }}
+    >
+      <span />
+      <span>Nom</span>
+      <span>Téléphone</span>
+      <span className="text-center">Commandes</span>
+      <span className="text-center">Ajouté le</span>
+      <span />
     </div>
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <OrderTable toolbar={toolbar} headers={headers}>
+      <AnimatePresence mode="popLayout" initial={false}>
+        {displayClients.map((client) => (
+          <motion.div
+            key={client.id}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: deletingIds.has(client.id) ? 0.25 : 1, y: 0 }}
+            exit={{ opacity: 0, x: 24, transition: { duration: 0.15 } }}
+            transition={{ type: "spring", stiffness: 500, damping: 42 }}
+            className={cn(deletingIds.has(client.id) && "pointer-events-none")}
+          >
+            <ClientRow
+              client={client}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* Empty state */}
+      {displayClients.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center select-none">
+          <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
+            <User className="h-5 w-5 text-slate-200" />
+          </div>
+          <p className="text-[13px] text-slate-400">
+            {search
+              ? `Aucun résultat pour « ${search} »`
+              : "Aucun client pro enregistré"}
+          </p>
+          {!search && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="mt-2 text-[12px] text-blue-500 hover:underline transition-colors"
+            >
+              Ajouter le premier client
+            </button>
+          )}
+        </div>
+      )}
+    </OrderTable>
   );
 }

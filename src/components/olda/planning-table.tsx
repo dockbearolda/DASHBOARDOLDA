@@ -20,7 +20,7 @@ import {
   useState, useCallback, useMemo, useRef, useEffect, type CSSProperties,
 } from "react";
 import {
-  Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X, User,
+  Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X, User, Eye,
   AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Package, Shirt, Scissors, Printer,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -489,10 +489,13 @@ function StatusPicker({ value, onChange }: { value: PlanningStatus; onChange: (v
 
 // Jours restants — chip coloré (feature « jours restants »)
 function DaysChip({ days }: { days: number }) {
-  if (days === 0)  return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100">auj.</span>;
-  if (days === 1)  return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100">dem.</span>;
-  if (days > 0)    return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">+{days}j</span>;
-  /* dépassée */   return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-100">{days}j</span>;
+  // Rouge  : retard ou aujourd'hui ou demain
+  if (days <= 0)   return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-100">{days === 0 ? "auj." : `${days}j`}</span>;
+  if (days === 1)  return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-100">dem.</span>;
+  // Orange : cette semaine (2–7 j)
+  if (days <= 7)   return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-orange-50 text-orange-500 border border-orange-100">+{days}j</span>;
+  // Bleu   : long terme (> 7 j)
+  return               <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">+{days}j</span>;
 }
 
 // Hybrid date input — text JJ/MM + calendar icon (feature 6)
@@ -548,7 +551,7 @@ function HybridDateInput({
         onChange={handleTextChange}
         onFocus={() => setFocus(true)}
         onBlur={handleTextBlur}
-        placeholder="JJ/MM/AA"
+        placeholder="—"
         maxLength={8}
         className={cn(
           "w-[82px] shrink-0 h-8 px-2 text-[12px] rounded-lg border bg-transparent",
@@ -758,6 +761,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
   const [savingIds,       setSavingIds]       = useState<Set<string>>(new Set());
   const [deletingIds,     setDeletingIds]     = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [detailId,        setDetailId]        = useState<string | null>(null);
   const [sortConfig,      setSortConfig]      = useState<{ col: SortableCol; dir: "asc" | "desc" } | null>(null);
   const [filterUrgent,    setFilterUrgent]    = useState(false);
   const [newRowId,        setNewRowId]        = useState<string | null>(null);
@@ -1064,7 +1068,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
   return (
     <div
-      className="flex flex-col rounded-2xl bg-white overflow-hidden"
+      className="flex flex-col rounded-2xl bg-white overflow-hidden h-full"
       style={{
         fontFamily:          "'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
         WebkitFontSmoothing: "antialiased",
@@ -1186,11 +1190,11 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="overflow-x-auto">
+      <div className="overflow-auto flex-1">
         <div style={{ minWidth: "1050px" }}>
 
-          {/* Column headers */}
-          <div className="grid bg-[#f9f9fb] border-b border-black/[0.04] border-l-4 border-l-transparent" style={GRID_STYLE}>
+          {/* Column headers — sticky */}
+          <div className="grid bg-[#f9f9fb] border-b border-black/[0.06] border-l-4 border-l-transparent sticky top-0 z-10" style={GRID_STYLE}>
             {COL_HEADERS.map(({ label, align, sortKey }, i) => {
               const isSorted = sortConfig?.col === sortKey;
               return (
@@ -1206,7 +1210,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                     "flex items-center gap-1",
                     align === "center" ? "justify-center" : "",
                     sortKey ? "cursor-pointer select-none hover:text-slate-600 transition-colors duration-[80ms]" : "",
-                    isSorted ? "text-blue-500" : "text-slate-400",
+                    isSorted ? "text-blue-500" : "text-slate-500",
                   )}
                 >
                   {label}
@@ -1458,6 +1462,21 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         </div>
                       </div>
 
+                      {/* 9b · Détails — bouton overlay visible au hover */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDetailId(item.id); }}
+                        className={cn(
+                          "absolute top-1/2 -translate-y-1/2 right-[48px] z-10",
+                          "opacity-0 group-hover:opacity-100",
+                          "p-1 rounded-md text-slate-300 hover:text-blue-500 hover:bg-blue-50",
+                          "transition-[opacity,color,background-color] duration-100",
+                        )}
+                        title="Voir les détails"
+                        type="button"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+
                       {/* 10 · Supprimer (2 clics pour confirmer) */}
                       <div className="h-full flex items-center justify-center">
                         <button
@@ -1576,6 +1595,190 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
         </div>
       </div>
+
+      {/* ── Slide-over détails ───────────────────────────────────────────────── */}
+      <PlanningDetailPanel
+        item={items.find((i) => i.id === detailId) ?? null}
+        itemType={detailId ? (types[detailId] ?? "") : ""}
+        onClose={() => setDetailId(null)}
+      />
+
     </div>
+  );
+}
+
+// ── PlanningDetailPanel — panneau latéral Apple-style ────────────────────────
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.07em] text-slate-400">{label}</span>
+      <div className="text-[13px] text-slate-700">{children}</div>
+    </div>
+  );
+}
+
+function PlanningDetailPanel({
+  item,
+  itemType,
+  onClose,
+}: {
+  item:      PlanningItem | null;
+  itemType?: string;
+  onClose:   () => void;
+}) {
+  // Fermer sur Escape
+  useEffect(() => {
+    if (!item) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [item, onClose]);
+
+  const secteurCfg  = SECTEUR_CONFIG.find((s) => s.value === item?.color);
+  const priorityCfg = PRIORITY_CONFIG[item?.priority ?? "MOYENNE"];
+  const statusLabel = item ? STATUS_LABELS[item.status] : "";
+  const statusDot   = item ? STATUS_CONFIG[item.status] : "bg-slate-300";
+  const days        = daysUntil(item?.deadline ?? null);
+  const responsible = TEAM.find((p) => p.key === item?.responsible);
+
+  return (
+    <AnimatePresence>
+      {item && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-40"
+            onClick={onClose}
+          />
+
+          {/* Panneau */}
+          <motion.aside
+            key="panel"
+            initial={{ x: "100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "100%", opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 40, mass: 0.9 }}
+            className="fixed right-0 top-0 h-full w-[400px] max-w-[96vw] bg-white z-50 flex flex-col"
+            style={{ boxShadow: "-2px 0 32px rgba(0,0,0,0.12), -1px 0 0 rgba(0,0,0,0.04)" }}
+          >
+            {/* Header panneau */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-black/[0.06] shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={cn("w-2 h-2 rounded-full shrink-0", statusDot)} />
+                <h2 className="text-[14px] font-semibold text-slate-800 truncate max-w-[280px]">
+                  {item.clientName || "Nouvelle commande"}
+                </h2>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors duration-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Corps scrollable */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+              {/* Client */}
+              <DetailRow label="Client">
+                <div className="flex items-center gap-1.5">
+                  {item.clientId && <User className="h-3.5 w-3.5 text-blue-400 shrink-0" />}
+                  <span className="font-semibold text-slate-800">{item.clientName || "—"}</span>
+                </div>
+              </DetailRow>
+
+              {/* Type + Priorité */}
+              <div className="grid grid-cols-2 gap-4">
+                <DetailRow label="Type">
+                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold", (TYPE_CONFIG[itemType as keyof typeof TYPE_CONFIG] ?? TYPE_CONFIG[""]).badge)}>
+                    {(TYPE_CONFIG[itemType as keyof typeof TYPE_CONFIG] ?? TYPE_CONFIG[""]).label}
+                  </span>
+                </DetailRow>
+                <DetailRow label="Priorité">
+                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold", priorityCfg.style)}>
+                    {priorityCfg.label}
+                  </span>
+                </DetailRow>
+              </div>
+
+              {/* Secteur + Quantité */}
+              <div className="grid grid-cols-2 gap-4">
+                <DetailRow label="Secteur">
+                  {secteurCfg ? (
+                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border", secteurCfg.pill)}>
+                      <span className={cn("w-1.5 h-1.5 rounded-full", secteurCfg.dot)} />
+                      {secteurCfg.label}
+                    </span>
+                  ) : <span className="text-slate-300">—</span>}
+                </DetailRow>
+                <DetailRow label="Quantité">
+                  <span className="font-semibold tabular-nums">{item.quantity ?? "—"}</span>
+                </DetailRow>
+              </div>
+
+              {/* Échéance */}
+              <DetailRow label="Échéance">
+                <div className="flex items-center gap-2">
+                  <span className={cn("tabular-nums font-medium", item.deadline ? "text-slate-800" : "text-slate-300")}>
+                    {item.deadline ? formatDDMM(item.deadline) : "—"}
+                  </span>
+                  {days !== null && <DaysChip days={days} />}
+                </div>
+              </DetailRow>
+
+              {/* État */}
+              <DetailRow label="État">
+                <div className="flex items-center gap-2">
+                  <span className={cn("w-2 h-2 rounded-full shrink-0", statusDot)} />
+                  <span>{statusLabel}</span>
+                </div>
+              </DetailRow>
+
+              {/* Responsable */}
+              <DetailRow label="Responsable interne">
+                {responsible ? (
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                      {responsible.name[0]}
+                    </span>
+                    <span className="font-medium">{responsible.name}</span>
+                  </div>
+                ) : <span className="text-slate-300">—</span>}
+              </DetailRow>
+
+              {/* Note */}
+              <DetailRow label="Note / Précisions">
+                {item.note ? (
+                  <p className="whitespace-pre-wrap text-slate-600 leading-relaxed bg-slate-50 rounded-xl px-3 py-2.5 text-[13px]">
+                    {item.note}
+                  </p>
+                ) : (
+                  <span className="text-slate-300 italic">Aucune note</span>
+                )}
+              </DetailRow>
+
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 px-5 py-3 border-t border-black/[0.06] flex items-center justify-between bg-slate-50/70">
+              <span className="text-[11px] text-slate-400 font-mono truncate">#{item.id.slice(-8)}</span>
+              <button
+                onClick={onClose}
+                className="text-[12px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

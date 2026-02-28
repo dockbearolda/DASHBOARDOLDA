@@ -171,7 +171,7 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
 // Grip | Type | Priorité | Client | Secteur | Qté | Note | Échéance | État | Interne | ×
 
 const GRID_COLS =
-  "32px 76px 94px 175px 158px 64px minmax(78px,1fr) 165px 172px 108px 40px";
+  "32px 76px 94px 175px 158px 64px minmax(100px,180px) 165px 172px 108px 40px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
 const COL_HEADERS = [
@@ -1062,7 +1062,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
         <div className="h-4 w-px bg-slate-200 shrink-0" />
 
-        <SearchBar value={search} onChange={setSearch} className="flex-1 min-w-0" />
+        <SearchBar value={search} onChange={setSearch} className="flex-1 min-w-0 max-w-[260px]" />
 
         {/* Filtre personne actif */}
         {filterPerson && (

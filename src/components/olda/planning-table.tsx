@@ -21,6 +21,7 @@ import {
 } from "react";
 import {
   Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X, User,
+  AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Package, Shirt, Scissors, Printer,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,8 @@ interface PlanningTableProps {
 // ── Constants ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_RANK = { HAUTE: 2, MOYENNE: 1, BASSE: 0 } as const;
+
+type SortableCol = "priority" | "clientName" | "deadline" | "status";
 
 const PRIORITY_CONFIG: Record<string, { label: string; style: string }> = {
   BASSE:   { label: "Basse",   style: "bg-slate-100 text-slate-500"  },
@@ -171,22 +174,22 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
 // Grip | Type | Priorité | Client | Secteur | Qté | Note | Échéance | État | Interne | ×
 
 const GRID_COLS =
-  "32px 76px 94px 175px 158px 64px minmax(100px,180px) 165px 172px 108px 40px";
+  "32px 76px 94px minmax(140px,1fr) 150px 56px minmax(90px,160px) 160px 168px 100px 40px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
-const COL_HEADERS = [
+const COL_HEADERS: Array<{ label: string; align: string; sortKey?: SortableCol }> = [
   { label: "",         align: "center" },
   { label: "Type",     align: "center" },
-  { label: "Priorité", align: "center" },
-  { label: "Client",   align: "left"   },
+  { label: "Priorité", align: "center", sortKey: "priority"   },
+  { label: "Client",   align: "left",   sortKey: "clientName" },
   { label: "Secteur",  align: "left"   },
   { label: "Qté",      align: "center" },
   { label: "Note",     align: "left"   },
-  { label: "Échéance", align: "left"   },
-  { label: "État",     align: "left"   },
+  { label: "Échéance", align: "left",   sortKey: "deadline"   },
+  { label: "État",     align: "left",   sortKey: "status"     },
   { label: "Interne",  align: "left"   },
   { label: "",         align: "center" },
-] as const;
+];
 
 // ── Shared styles ───────────────────────────────────────────────────────────────
 
@@ -754,6 +757,9 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
   const [savingIds,       setSavingIds]       = useState<Set<string>>(new Set());
   const [deletingIds,     setDeletingIds]     = useState<Set<string>>(new Set());
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [sortConfig,      setSortConfig]      = useState<{ col: SortableCol; dir: "asc" | "desc" } | null>(null);
+  const [filterUrgent,    setFilterUrgent]    = useState(false);
+  const [newRowId,        setNewRowId]        = useState<string | null>(null);
   const confirmDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Ref vers l'état d'édition courant, accessible dans les handlers socket/polling
@@ -826,19 +832,37 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
     return sorted.filter((i) => i.color === tab.secteur);
   }, [activeTab, generalSorted, sorted]);
 
-  // Search + person filter
+  // Search + person + urgent filter + column sort
   const displayItems = useMemo(() => {
     let result = tabItems;
     if (filterPerson) result = result.filter((i) => i.responsible === filterPerson);
-    if (!search.trim()) return result;
-    const q = search.toLowerCase();
-    return result.filter(
-      (i) =>
-        i.clientName.toLowerCase().includes(q) ||
-        i.designation.toLowerCase().includes(q) ||
-        i.note.toLowerCase().includes(q),
-    );
-  }, [tabItems, search, filterPerson]);
+    if (filterUrgent) result = result.filter((i) => isUrgent(i.deadline) || i.priority === "HAUTE");
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (i) =>
+          i.clientName.toLowerCase().includes(q) ||
+          i.designation.toLowerCase().includes(q) ||
+          i.note.toLowerCase().includes(q),
+      );
+    }
+    if (sortConfig) {
+      const dir = sortConfig.dir === "asc" ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        switch (sortConfig.col) {
+          case "priority":   return dir * (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+          case "clientName": return dir * a.clientName.localeCompare(b.clientName, "fr");
+          case "deadline": {
+            const aD = a.deadline ?? "9999"; const bD = b.deadline ?? "9999";
+            return dir * aD.localeCompare(bD);
+          }
+          case "status": return dir * a.status.localeCompare(b.status);
+          default: return 0;
+        }
+      });
+    }
+    return result;
+  }, [tabItems, search, filterPerson, filterUrgent, sortConfig]);
 
   // Tab counts — filtré par personne si un filtre est actif
   const tabCounts = useMemo((): Record<TabKey, number> => {
@@ -945,6 +969,8 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
     };
     onItemsChange?.([...items, newItem]);
     setEditing(`${newId}:clientName`);
+    setNewRowId(newId);
+    setTimeout(() => setNewRowId(null), 1400);
     fetch("/api/planning", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -1061,23 +1087,60 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
         </button>
 
         <div className="h-4 w-px bg-slate-200 shrink-0" />
+        <SearchBar value={search} onChange={setSearch} className="flex-1 min-w-0 max-w-[240px]" />
+        <div className="h-4 w-px bg-slate-200 shrink-0" />
 
-        <SearchBar value={search} onChange={setSearch} className="flex-1 min-w-0 max-w-[260px]" />
+        {/* Avatars équipe — filtre rapide */}
+        <div className="flex items-center gap-1 shrink-0">
+          {TEAM.map((person) => (
+            <button
+              key={person.key}
+              onClick={() => setFilterPerson((p) => p === person.key ? "" : person.key)}
+              title={person.name}
+              className={cn(
+                "h-6 w-6 rounded-full text-[10px] font-bold transition-all duration-[80ms]",
+                filterPerson === person.key
+                  ? "bg-blue-500 text-white scale-110 shadow-sm shadow-blue-300/60"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+              )}
+            >
+              {person.name[0]}
+            </button>
+          ))}
+        </div>
 
-        {/* Filtre personne actif */}
-        {filterPerson && (
-          <button
-            onClick={() => setFilterPerson("")}
-            className={cn(
-              "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0",
-              "bg-blue-50 text-blue-600 border border-blue-200",
-              "hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors duration-[80ms]",
-            )}
-          >
-            {TEAM.find((p) => p.key === filterPerson)?.name}
-            <X className="h-3 w-3" />
-          </button>
-        )}
+        <div className="h-4 w-px bg-slate-200 shrink-0" />
+
+        {/* Bouton urgences */}
+        <button
+          onClick={() => setFilterUrgent((p) => !p)}
+          title="Filtrer les urgences (HAUTE + deadline proche)"
+          className={cn(
+            "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-[80ms]",
+            filterUrgent
+              ? "bg-orange-50 text-orange-600 border border-orange-200"
+              : "bg-slate-100/80 text-slate-500 hover:bg-orange-50 hover:text-orange-500 border border-transparent",
+          )}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Urgences
+        </button>
+
+        {/* Indicateur de sauvegarde global */}
+        <AnimatePresence>
+          {savingIds.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: 6 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 6 }}
+              transition={{ duration: 0.15 }}
+              className="flex items-center gap-1.5 text-[11px] text-amber-500 font-medium ml-auto shrink-0"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Sauvegarde…
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── Tabs ─────────────────────────────────────────────────────────────── */}
@@ -1127,17 +1190,35 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
           {/* Column headers */}
           <div className="grid bg-[#f9f9fb] border-b border-black/[0.04] border-l-4 border-l-transparent" style={GRID_STYLE}>
-            {COL_HEADERS.map(({ label, align }, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400",
-                  align === "center" ? "flex items-center justify-center" : "",
-                )}
-              >
-                {label}
-              </div>
-            ))}
+            {COL_HEADERS.map(({ label, align, sortKey }, i) => {
+              const isSorted = sortConfig?.col === sortKey;
+              return (
+                <div
+                  key={i}
+                  onClick={sortKey ? () => setSortConfig((prev) =>
+                    prev?.col === sortKey
+                      ? prev.dir === "asc" ? { col: sortKey, dir: "desc" } : null
+                      : { col: sortKey, dir: "asc" }
+                  ) : undefined}
+                  className={cn(
+                    "px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                    "flex items-center gap-1",
+                    align === "center" ? "justify-center" : "",
+                    sortKey ? "cursor-pointer select-none hover:text-slate-600 transition-colors duration-[80ms]" : "",
+                    isSorted ? "text-blue-500" : "text-slate-400",
+                  )}
+                >
+                  {label}
+                  {sortKey && (
+                    isSorted
+                      ? sortConfig?.dir === "asc"
+                        ? <ArrowUp className="h-2.5 w-2.5" />
+                        : <ArrowDown className="h-2.5 w-2.5" />
+                      : <ArrowUpDown className="h-2.5 w-2.5 opacity-30" />
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Rows — layout animé + indicateur de position fluide */}
@@ -1149,11 +1230,14 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
               {displayItems.map((item) => {
                 if (!item?.id) return null;
                 const isDeleting  = deletingIds.has(item.id);
-                const isSaving    = savingIds.has(item.id);
                 const urgent      = isUrgent(item.deadline);
                 const itemType    = (types[item.id] ?? "") as ItemType;
                 const typeConfig  = TYPE_CONFIG[itemType] ?? TYPE_CONFIG[""];
-                const rowBg = urgent
+                const isDone      = item.status === "TERMINE" || item.status === "FACTURE_FAITE";
+                const isNew       = newRowId === item.id;
+                const rowBg = isDone
+                  ? "bg-[#fafafa] hover:bg-[#f7f7f7]"
+                  : urgent
                   ? "bg-red-50/70 hover:bg-red-50"
                   : "bg-white hover:bg-[#f5f5f7]/60";
                 const isDragging = dragId === item.id;
@@ -1163,6 +1247,8 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                   <motion.div
                     key={item.id}
                     layout
+                    initial={isNew ? { opacity: 0, y: -6 } : false}
+                    animate={{ opacity: isDragging ? 0.38 : 1, y: 0 }}
                     transition={{ type: "spring", stiffness: 400, damping: 38, mass: 0.85 }}
                     draggable
                     onDragStart={(e) => onDragStart(e as unknown as React.DragEvent, item.id)}
@@ -1170,7 +1256,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                     onDrop={(e) => onDrop(e as unknown as React.DragEvent, item.id)}
                     onDragEnd={onDragEnd}
                     className="relative"
-                    style={{ opacity: isDragging ? 0.38 : 1 }}
                   >
                     {/* Ligne indicatrice de dépôt — avant */}
                     <AnimatePresence>
@@ -1201,23 +1286,21 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                     <div
                       className={cn(
                         "grid w-full border-b border-black/[0.04] group relative",
-                        "transition-colors duration-[80ms]",
-                        "border-l-4", typeConfig.border,
+                        "transition-[background-color,opacity,filter] duration-[80ms]",
+                        "border-l-4", isDone ? "border-l-slate-200" : typeConfig.border,
                         "min-h-[52px]",
                         rowBg,
+                        isDone && "saturate-[0.4]",
+                        isNew && "ring-1 ring-inset ring-blue-300/40",
                         isDeleting && "pointer-events-none",
                       )}
                       style={{
                         ...GRID_STYLE,
-                        opacity: isDeleting ? 0.25 : 1,
-                        transition: "opacity 0.1s, background-color 0.1s",
+                        opacity: isDeleting ? 0.25 : isDone ? 0.6 : 1,
+                        transition: "opacity 0.1s, background-color 0.08s, filter 0.08s",
                       }}
                     >
 
-                      {/* Save indicator — CSS pur, aucun JS d'animation */}
-                      {isSaving && (
-                        <span className="absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse z-10 pointer-events-none" />
-                      )}
 
                       {/* 0 · Grip */}
                       <div className="h-full flex items-center justify-center cursor-grab active:cursor-grabbing">
@@ -1445,27 +1528,72 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
             </button>
           )}
 
-          {/* Empty state */}
-          {displayItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-center select-none">
-              <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
-                <Search className="h-5 w-5 text-slate-200" />
+          {/* Empty state — contextualisé par onglet */}
+          {displayItems.length === 0 && (() => {
+            const TAB_EMPTY: Record<TabKey, { icon: React.ReactNode; label: string }> = {
+              general:          { icon: <Package className="h-5 w-5 text-slate-300" />,  label: "Aucune commande" },
+              textiles:         { icon: <Shirt className="h-5 w-5 text-emerald-200" />,  label: "Aucune commande Textiles" },
+              gravure:          { icon: <Scissors className="h-5 w-5 text-violet-200" />, label: "Aucune commande Gravure & Découpe" },
+              "impression-uv":  { icon: <Printer className="h-5 w-5 text-cyan-200" />,   label: "Aucune commande Impression UV" },
+              goodies:          { icon: <Package className="h-5 w-5 text-amber-200" />,  label: "Aucune commande Goodies" },
+            };
+            const ctx = search ? null : TAB_EMPTY[activeTab];
+            return (
+              <div className="flex flex-col items-center justify-center py-16 text-center select-none gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center">
+                  {search ? <Search className="h-5 w-5 text-slate-200" /> : ctx?.icon}
+                </div>
+                <p className="text-[13px] text-slate-400">
+                  {search ? `Aucun résultat pour « ${search} »` : (filterUrgent ? "Aucune urgence pour cette vue" : ctx?.label)}
+                </p>
+                {search && (
+                  <button onClick={() => setSearch("")} className="text-[12px] text-blue-500 hover:underline transition-colors">
+                    Effacer la recherche
+                  </button>
+                )}
+                {!search && !filterUrgent && (
+                  <button
+                    onClick={addRow}
+                    className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors duration-[80ms]"
+                  >
+                    <Plus className="h-3 w-3" /> Ajouter une commande
+                  </button>
+                )}
               </div>
-              <p className="text-[13px] text-slate-400">
-                {search
-                  ? `Aucun résultat pour « ${search} »`
-                  : "Aucune commande dans cette vue"}
-              </p>
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  className="mt-2 text-[12px] text-blue-500 hover:underline transition-colors"
-                >
-                  Effacer la recherche
-                </button>
-              )}
-            </div>
-          )}
+            );
+          })()}
+
+          {/* Footer stats */}
+          {displayItems.length > 0 && (() => {
+            const urgentCount = displayItems.filter((i) => isUrgent(i.deadline) || i.priority === "HAUTE").length;
+            const doneCount   = displayItems.filter((i) => i.status === "TERMINE" || i.status === "FACTURE_FAITE").length;
+            return (
+              <div className="flex items-center gap-4 px-4 py-2 border-t border-black/[0.04] bg-[#f9f9fb]">
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {displayItems.length} commande{displayItems.length > 1 ? "s" : ""}
+                </span>
+                {urgentCount > 0 && (
+                  <span className="flex items-center gap-1 text-[11px] text-orange-500 font-medium">
+                    <AlertTriangle className="h-2.5 w-2.5" />
+                    {urgentCount} urgente{urgentCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {doneCount > 0 && (
+                  <span className="text-[11px] text-green-600 font-medium">
+                    {doneCount} terminée{doneCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {sortConfig && (
+                  <button
+                    onClick={() => setSortConfig(null)}
+                    className="ml-auto text-[11px] text-blue-500 hover:text-blue-700 hover:underline transition-colors duration-[80ms]"
+                  >
+                    Réinitialiser le tri
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
         </div>
       </div>

@@ -690,9 +690,9 @@ function ClientNameCell({
       <div
         onClick={onStartEdit}
         className={cn(
-          "w-full h-8 px-2.5 text-[12px] rounded-lg cursor-text font-medium",
+          "w-full h-8 px-2.5 text-[13px] rounded-lg cursor-text font-semibold tracking-[-0.01em]",
           "flex items-center gap-1.5 hover:bg-black/[0.03] transition-colors duration-100 select-none truncate",
-          value ? "text-slate-800" : EMPTY_CLS,
+          value ? "text-slate-900" : EMPTY_CLS,
         )}
       >
         {clientId && (

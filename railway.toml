@@ -1,11 +1,10 @@
 [build]
-# Génère le client Prisma + compile Next.js
 buildCommand = "npm ci && npx prisma generate && npm run build"
 
 [deploy]
-# ⚠️  Séparé avec ";" et non "&&" — le serveur démarre même si les migrations échouent
-# Les migrations qui échouent sont loggées dans /api/health sans bloquer le démarrage
-startCommand = "npx prisma migrate deploy; tsx server.ts"
+# Migrations séparées du démarrage — évite le hang si PostgreSQL n'est pas encore prêt
+releaseCommand = "npx prisma migrate deploy"
+startCommand = "tsx server.ts"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

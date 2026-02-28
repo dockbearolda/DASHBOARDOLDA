@@ -2,8 +2,6 @@
 buildCommand = "npm ci && npx prisma generate && npm run build"
 
 [deploy]
-# Migrations séparées du démarrage — évite le hang si PostgreSQL n'est pas encore prêt
-releaseCommand = "npx prisma migrate deploy"
 startCommand = "node_modules/.bin/tsx server.ts"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300

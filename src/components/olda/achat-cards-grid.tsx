@@ -425,12 +425,21 @@ function AchatCard({
   const [noteSaved,  setNoteSaved]  = useState(false);
   const noteTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pickerAnchor = useRef<HTMLDivElement>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
 
   const editInputRef = useRef<HTMLInputElement>(null);
   const addInputRef  = useRef<HTMLInputElement>(null);
   const clickTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setLocalNote(note); }, [note]);
+
+  // Auto-resize — colle exactement au contenu, invisible quand vide
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [localNote]);
 
   useEffect(() => () => {
     if (clickTimer.current) clearTimeout(clickTimer.current);
@@ -602,13 +611,19 @@ function AchatCard({
       {/* ── Note libre ─────────────────────────────────────────────────────── */}
       <div className="mb-2 relative">
         <textarea
+          ref={textareaRef}
           value={localNote}
           onChange={(e) => handleNoteInput(e.target.value)}
           onBlur={handleNoteBlur}
-          placeholder={`Note ${zoneName}…`}
-          rows={2}
-          className="w-full resize-none border-none outline-none bg-transparent text-[12px] leading-relaxed text-gray-700 placeholder:text-gray-300"
-          style={{ fontFamily: "inherit", letterSpacing: "-0.005em", caretColor: preset.from }}
+          placeholder="Note…"
+          rows={1}
+          className="w-full resize-none border-none outline-none bg-transparent text-[12px] leading-relaxed text-gray-600 placeholder:text-gray-300/60"
+          style={{
+            fontFamily: "inherit",
+            letterSpacing: "-0.005em",
+            caretColor: preset.from,
+            overflow: "hidden",
+          }}
         />
         <AnimatePresence>
           {noteSaved && (

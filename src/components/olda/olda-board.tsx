@@ -23,6 +23,7 @@ import { PRTManager } from "./prt-manager";
 import { PlanningTable, type PlanningItem } from "./planning-table";
 import { ThemeSwitcher } from "./theme-switcher";
 import { ClientProTable, type ClientItem } from "./client-pro-table";
+import { AchatTextileTable } from "./achat-textile-table";
 
 interface PRTItem {
   id: string;
@@ -427,7 +428,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat_textile'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
   // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
@@ -789,7 +790,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
-            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow'] as const).map((v) => (
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat_textile'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => handleTabChange(v)}
@@ -801,7 +802,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {v === 'flux' ? 'Flux' : v === 'planning' ? 'Planning' : v === 'clients_pro' ? 'Clients Pro' : v === 'demande_prt' ? 'Demande de DTF' : v === 'production_dtf' ? 'Production' : 'Gestion d\'atelier'}
+                {v === 'flux' ? 'Flux' : v === 'planning' ? 'Planning' : v === 'clients_pro' ? 'Clients Pro' : v === 'demande_prt' ? 'Demande de DTF' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : 'Achat Textile'}
                 {v === 'flux' && fluxHasNotif && (
                   <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
                 )}
@@ -877,6 +878,11 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             clients={clientItems}
             onClientsChange={setClientItems}
           />
+        </div>
+
+        {/* ══ VUE ACHAT TEXTILE — Tableau des commandes textile ════════════════ */}
+        <div className={cn(viewTab !== 'achat_textile' && 'hidden', 'h-full')}>
+          <AchatTextileTable activeUser={session.name} />
         </div>
 
 

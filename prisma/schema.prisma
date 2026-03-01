@@ -182,6 +182,26 @@ model Client {
   @@map("clients")
 }
 
+// ── Achat Textile ─────────────────────────────────────────────────────────────
+model AchatTextile {
+  id          String   @id @default(cuid())
+  client      String   @default("")
+  fournisseur String   @default("")
+  marque      String   @default("-")   // "-" | "Native" | "Kariban" | "Pro Act"
+  genre       String   @default("")    // "H" | "F" | "E" | "B" | "P" | "L"
+  designation String   @default("")
+  reference   String   @default("")
+  couleur     String   @default("")
+  taille      String   @default("")
+  quantite    Int      @default(1)
+  livraison   String   @default("")    // "chronopost" | "maritime" | "sas_us"
+  sessionUser String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("achat_textile")
+}
+
 model PlanningItem {
   id          String           @id @default(cuid())
   priority    PlanningPriority @default(MOYENNE)

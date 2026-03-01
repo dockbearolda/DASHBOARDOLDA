@@ -1189,11 +1189,18 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                 const typeConfig  = TYPE_CONFIG[itemType] ?? TYPE_CONFIG[""];
                 const isDone      = item.status === "TERMINE" || item.status === "FACTURE_FAITE";
                 const isNew       = newRowId === item.id;
+                const SECTEUR_ROW: Record<string, { bg: string; hover: string }> = {
+                  "Textiles":                 { bg: "#FAF0F3", hover: "#F5E6EC" },
+                  "Gravure et découpe laser": { bg: "#EFF3F8", hover: "#E4EBF5" },
+                  "Impression UV":            { bg: "#F3EFF9", hover: "#EAE2F5" },
+                  "Goodies":                  { bg: "#F7F0E8", hover: "#F0E6D8" },
+                };
+                const secteurRow = !isDone && !urgent ? SECTEUR_ROW[item.color ?? ""] : undefined;
                 const rowBg = isDone
                   ? "bg-[#fafafa] hover:bg-[#f7f7f7]"
                   : urgent
                   ? "bg-red-50/70 hover:bg-red-50"
-                  : "bg-white hover:bg-[#f5f5f7]/60";
+                  : secteurRow ? "" : "bg-white hover:bg-[#f5f5f7]/60";
                 const isDragging = dragId === item.id;
                 const isTarget   = dropTarget?.id === item.id;
 
@@ -1250,9 +1257,12 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                       )}
                       style={{
                         ...GRID_STYLE,
+                        backgroundColor: secteurRow ? secteurRow.bg : undefined,
                         opacity: isDeleting ? 0.25 : isDone ? 0.6 : 1,
                         transition: "opacity 0.1s, background-color 0.08s, filter 0.08s",
                       }}
+                      onMouseEnter={secteurRow ? (e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = secteurRow.hover; } : undefined}
+                      onMouseLeave={secteurRow ? (e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = secteurRow.bg; } : undefined}
                     >
 
 

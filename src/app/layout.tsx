@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Architects_Daughter } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import "./globals.css";
@@ -30,6 +30,13 @@ const fontMono = JetBrains_Mono({
   display: "swap",
 });
 
+const fontHandwritten = Architects_Daughter({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-handwritten",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "OLDA",
   description: "Dashboard de gestion des commandes OLDA Studio",
@@ -49,7 +56,7 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <body
-        className={`${fontSans.variable} ${fontMono.variable} antialiased font-sans`}
+        className={`${fontSans.variable} ${fontMono.variable} ${fontHandwritten.variable} antialiased font-sans`}
       >
         <ThemeProvider
           attribute="class"

@@ -659,18 +659,17 @@ function ReminderCard({
       </div>
 
       {/* ── Zone de note libre ───────────────────────────────────────────────── */}
-      <div className="mb-2 relative">
+      <div className="mb-2 relative rounded-lg px-2 py-1.5" style={{ background: `${preset.from}18`, borderLeft: `3px solid ${preset.from}` }}>
+        <p className="text-[9px] font-bold uppercase tracking-widest mb-0.5" style={{ color: preset.from }}>Informations importantes</p>
         <textarea
           ref={textareaRef}
           value={localNote}
           onChange={(e) => handleNoteInput(e.target.value)}
           onBlur={handleNoteBlur}
-          placeholder={`Note…`}
+          placeholder="Ajouter une information…"
           rows={1}
-          className="w-full resize-none border-none outline-none bg-transparent text-[12px] leading-relaxed text-gray-600 placeholder:text-gray-300/60"
+          className="w-full resize-none border-none outline-none bg-transparent text-[13px] leading-relaxed text-gray-800 placeholder:text-gray-400/70 font-[family-name:var(--font-handwritten)]"
           style={{
-            fontFamily: "inherit",
-            letterSpacing: "-0.005em",
             caretColor: preset.from,
             overflow: "hidden",
           }}
@@ -708,7 +707,7 @@ function ReminderCard({
               }}
               onBlur={() => { commitDraft(); setIsAdding(false); }}
               placeholder="Nouvelle tâche..."
-              className="flex-1 text-[13px] text-gray-700 placeholder:text-gray-400 bg-transparent outline-none"
+              className="flex-1 text-[14px] text-gray-700 placeholder:text-gray-400 bg-transparent outline-none font-[family-name:var(--font-handwritten)]"
             />
           </div>
         ) : (
@@ -769,14 +768,14 @@ function ReminderCard({
                     if (e.key === "Escape") { setEditingId(null); setEditText(""); }
                   }}
                   onBlur={commitEdit}
-                  className="flex-1 text-[13px] font-medium text-gray-900 bg-transparent outline-none border-b"
+                  className="flex-1 text-[14px] text-gray-900 bg-transparent outline-none border-b font-[family-name:var(--font-handwritten)]"
                   style={{ borderColor: preset.from }}
                 />
               ) : (
                 <span
                   onClick={() => handleItemClick(todo)}
                   className={cn(
-                    "flex-1 text-[13px] font-medium select-none cursor-text transition-colors duration-150",
+                    "flex-1 text-[14px] select-none cursor-text transition-colors duration-150 font-[family-name:var(--font-handwritten)]",
                     todo.done ? "line-through text-gray-400" : "text-gray-900 hover:text-gray-700"
                   )}
                 >

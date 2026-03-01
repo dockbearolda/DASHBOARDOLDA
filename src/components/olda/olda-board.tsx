@@ -429,7 +429,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'achat' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat_textile'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat' | 'achat_textile'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
   // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
@@ -791,7 +791,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
-            {(['flux', 'achat', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat_textile'] as const).map((v) => (
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat', 'achat_textile'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => handleTabChange(v)}

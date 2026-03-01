@@ -30,13 +30,14 @@ interface PRTItem {
 interface PRTManagerProps {
   items: PRTItem[];
   onItemsChange?: (items: PRTItem[]) => void;
+  onNewRequest?: () => void;
 }
 
 // Grid : [checkbox] [client] [dimensions] [design] [couleur] [qté] [actions]
 const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_80px_80px]";
 const CELL_CLASS = "px-3 py-3 truncate";
 
-export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
+export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerProps) {
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
@@ -142,12 +143,13 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
       });
       const data = await res.json();
       onItemsChange?.([data.item, ...items]);
+      onNewRequest?.();
     } catch (err) {
       console.error("Failed to create PRT:", err);
     } finally {
       setTimeout(() => setIsAddingNew(false), 300);
     }
-  }, [items, onItemsChange]);
+  }, [items, onItemsChange, onNewRequest]);
 
   // ── Toolbar ───────────────────────────────────────────────────────────────────
 
@@ -168,9 +170,6 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
         <Plus className="h-3.5 w-3.5" />
         <span>Demande de DTF</span>
       </button>
-      <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-        Demandes PRT
-      </h2>
     </div>
   );
 
@@ -400,13 +399,14 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
 
                         {/* Quantité (80px) */}
                         <input
-                          type="number"
-                          min="1"
+                          type="text"
+                          inputMode="numeric"
                           value={item.quantity}
                           onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "");
                             const updated = items.map((i) =>
                               i.id === item.id
-                                ? { ...i, quantity: parseInt(e.target.value) || 1 }
+                                ? { ...i, quantity: parseInt(val) || 1 }
                                 : i,
                             );
                             onItemsChange?.(updated);

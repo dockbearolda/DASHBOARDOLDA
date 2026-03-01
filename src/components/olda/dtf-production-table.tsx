@@ -146,9 +146,6 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
         <span>Ajouter une production</span>
       </button>
-      <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-        Production DTF
-      </h3>
       <div className="flex-1" />
       {rows.some((r) => r.status === "termine") && (
         <button

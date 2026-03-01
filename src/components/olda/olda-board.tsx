@@ -430,6 +430,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
+  // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
+  const [prtHasNotif, setPrtHasNotif] = useState(false);
+  const prtCountRef = useRef<number>(0);
   // Ref pour connaître l'onglet courant dans les callbacks SSE (évite les stale closures)
   const viewTabRef = useRef(viewTab);
   useEffect(() => { viewTabRef.current = viewTab; }, [viewTab]);
@@ -621,7 +624,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
-  // ── PRT items ────────────────────────────────────────────────────────────────
+  // ── PRT items + polling badge DTF (toutes les 15 s pour loic et charlie) ────
 
   useEffect(() => {
     fetch("/api/prt-requests")
@@ -630,8 +633,31 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         const items = data.items ?? [];
         setPrtItems(items);
         setAllPrtItems(items);
+        prtCountRef.current = items.length;
       })
       .catch(() => {});
+  }, []);
+
+  // Polling léger : détecte les nouvelles demandes DTF pour loic et charlie
+  useEffect(() => {
+    const id = setInterval(() => {
+      const sess = sessionRef.current;
+      if (!sess) return;
+      if (sess.name !== "loic" && sess.name !== "charlie") return;
+      if (viewTabRef.current === "demande_prt") return; // déjà visible
+      fetch("/api/prt-requests")
+        .then((r) => r.json())
+        .then((data) => {
+          const count = (data.items ?? []).length;
+          if (count > prtCountRef.current) {
+            setPrtHasNotif(true);
+            setAllPrtItems(data.items ?? []);
+          }
+          prtCountRef.current = count;
+        })
+        .catch(() => {});
+    }, 15_000);
+    return () => clearInterval(id);
   }, []);
 
   // ── Planning items ─────────────────────────────────────────────────────────
@@ -689,10 +715,21 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     setFluxHasNotif(true);
   }, []);
 
-  // Changement d'onglet : efface le badge quand l'utilisateur retourne sur Flux
+  // Changement d'onglet : efface le badge quand l'utilisateur retourne sur l'onglet concerné
   const handleTabChange = useCallback((tab: typeof viewTab) => {
     setViewTab(tab);
     if (tab === 'flux') setFluxHasNotif(false);
+    if (tab === 'demande_prt') setPrtHasNotif(false);
+  }, []);
+
+  // Appelé depuis PRTManager quand une nouvelle demande est créée
+  const handleNewPrtRequest = useCallback(() => {
+    prtCountRef.current += 1;
+    const sess = sessionRef.current;
+    if (!sess) return;
+    if (sess.name !== "loic" && sess.name !== "charlie") return;
+    if (viewTabRef.current === "demande_prt") return;
+    setPrtHasNotif(true);
   }, []);
 
   // ── Connexion / Déconnexion ────────────────────────────────────────────────
@@ -768,6 +805,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                 {v === 'flux' && fluxHasNotif && (
                   <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
                 )}
+                {v === 'demande_prt' && prtHasNotif && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-orange-400 border border-white" />
+                )}
               </button>
             ))}
           </div>
@@ -806,7 +846,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
+          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} onNewRequest={handleNewPrtRequest} />
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}

@@ -25,10 +25,10 @@ import type { TodoItem } from "./person-note-modal";
 // ── Config équipe ───────────────────────────────────────────────────────────────
 
 const PEOPLE = [
-  { key: "loic",     name: "Loïc",     initial: "L" },
-  { key: "charlie",  name: "Charlie",  initial: "C" },
-  { key: "melina",   name: "Mélina",   initial: "M" },
-  { key: "amandine", name: "Amandine", initial: "A" },
+  { key: "loic",     name: "Loïc",     initial: "L", defaultColor: "blue"   },
+  { key: "charlie",  name: "Charlie",  initial: "C", defaultColor: "pink"   },
+  { key: "melina",   name: "Mélina",   initial: "M", defaultColor: "purple" },
+  { key: "amandine", name: "Amandine", initial: "A", defaultColor: "gold"   },
 ] as const;
 
 type PersonKey = typeof PEOPLE[number]["key"];
@@ -46,14 +46,14 @@ interface ColorPreset {
 
 const COLOR_PRESETS: ColorPreset[] = [
   { key: "slate",  label: "Graphite", from: "#3a3a3c", to: "#1c1c1e", cardBg: "rgba(58,58,60,0.04)",  border: "rgba(58,58,60,0.18)" },
-  { key: "blue",   label: "Bleu",     from: "#0a84ff", to: "#0055d4", cardBg: "rgba(10,132,255,0.05)", border: "rgba(10,132,255,0.22)" },
+  { key: "blue",   label: "Bleu",     from: "#0a84ff", to: "#0055d4", cardBg: "rgba(10,132,255,0.09)", border: "rgba(10,132,255,0.22)" },
   { key: "teal",   label: "Teal",     from: "#5ac8fa", to: "#0a7ea4", cardBg: "rgba(90,200,250,0.06)", border: "rgba(90,200,250,0.28)" },
-  { key: "purple", label: "Violet",   from: "#bf5af2", to: "#9a42c8", cardBg: "rgba(191,90,242,0.05)", border: "rgba(191,90,242,0.22)" },
-  { key: "pink",   label: "Rose",     from: "#ff375f", to: "#c91f3e", cardBg: "rgba(255,55,95,0.05)",  border: "rgba(255,55,95,0.22)" },
+  { key: "purple", label: "Violet",   from: "#bf5af2", to: "#9a42c8", cardBg: "rgba(191,90,242,0.09)", border: "rgba(191,90,242,0.22)" },
+  { key: "pink",   label: "Rose",     from: "#ff375f", to: "#c91f3e", cardBg: "rgba(255,55,95,0.09)",  border: "rgba(255,55,95,0.22)" },
   { key: "orange", label: "Orange",   from: "#ff9f0a", to: "#d4700a", cardBg: "rgba(255,159,10,0.05)", border: "rgba(255,159,10,0.22)" },
   { key: "green",  label: "Vert",     from: "#34c759", to: "#1a9e3f", cardBg: "rgba(52,199,89,0.05)",  border: "rgba(52,199,89,0.22)" },
   { key: "indigo", label: "Indigo",   from: "#5e5ce6", to: "#3634a3", cardBg: "rgba(94,92,230,0.05)",  border: "rgba(94,92,230,0.22)" },
-  { key: "gold",   label: "Or",       from: "#ffd60a", to: "#b59300", cardBg: "rgba(255,214,10,0.05)", border: "rgba(255,214,10,0.22)" },
+  { key: "gold",   label: "Or",       from: "#ffd60a", to: "#b59300", cardBg: "rgba(255,214,10,0.09)", border: "rgba(255,214,10,0.22)" },
 ];
 
 const DEFAULT_PRESET = COLOR_PRESETS[0]; // slate
@@ -553,7 +553,7 @@ function ReminderCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border p-3 flex flex-col gap-0",
+        "rounded-3xl border p-4 flex flex-col gap-0",
         "transition-all duration-300",
         isActive   ? "shadow-md" : "",
         isDragOver ? "shadow-md" : ""
@@ -657,7 +657,7 @@ function ReminderCard({
           onBlur={handleNoteBlur}
           placeholder={`Note pour ${personName}…`}
           rows={2}
-          className="w-full resize-none border-none outline-none bg-transparent text-[12px] leading-relaxed text-gray-600 placeholder:text-gray-300"
+          className="w-full resize-none border-none outline-none bg-transparent text-[12px] leading-relaxed text-gray-700 placeholder:text-gray-300"
           style={{ fontFamily: "inherit", letterSpacing: "-0.005em", caretColor: preset.from }}
         />
         <AnimatePresence>
@@ -676,7 +676,36 @@ function ReminderCard({
       </div>
 
       {/* ── Séparateur ──────────────────────────────────────────────────────── */}
-      <div className="h-px mb-2" style={{ backgroundColor: preset.border }} />
+      <div className="h-px mb-3" style={{ backgroundColor: preset.border }} />
+
+      {/* ── Bouton Ajouter (haut à gauche, style primary) ───────────────────── */}
+      <div className="mb-3">
+        {isAdding ? (
+          <div className="flex items-center gap-3 h-8 px-3 rounded-lg bg-gray-50 border border-gray-200">
+            <span className="shrink-0 h-4 w-4 rounded-full border-2 border-gray-200" />
+            <input
+              ref={addInputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter")  { e.preventDefault(); commitDraft(); }
+                if (e.key === "Escape") { setIsAdding(false); setDraft(""); }
+              }}
+              onBlur={() => { commitDraft(); setIsAdding(false); }}
+              placeholder="Nouvelle tâche..."
+              className="flex-1 text-[13px] text-gray-700 placeholder:text-gray-400 bg-transparent outline-none"
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => { setIsAdding(true); setTimeout(() => addInputRef.current?.focus(), 30); }}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Ajouter</span>
+          </button>
+        )}
+      </div>
 
       {/* ── Liste des todos ──────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col gap-1.5">
@@ -695,8 +724,9 @@ function ReminderCard({
               onDragStart={(e) => { if (editingId === todo.id) return; handleDragStart(e as unknown as React.DragEvent, todo); }}
               style={{ willChange: "transform, opacity" }}
               className={cn(
-                "flex items-center gap-2 w-full rounded-xl px-2.5 py-2 bg-white/70 border border-white",
-                "transition-colors duration-150",
+                "flex items-center gap-3 w-full rounded-xl px-3 py-2.5 bg-white border border-gray-100/80",
+                "shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-colors duration-150",
+                todo.done && "opacity-50",
                 editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:border-gray-200/80 group",
               )}
             >
@@ -753,34 +783,6 @@ function ReminderCard({
         </AnimatePresence>
       </div>
 
-      {/* ── Ajout rapide ────────────────────────────────────────────────────── */}
-      <div className="mt-auto pt-2" style={{ borderTop: `1px solid ${preset.border}` }}>
-        {isAdding ? (
-          <div className="flex items-center gap-2">
-            <span className="shrink-0 h-4 w-4 rounded-full border-2 border-gray-200" />
-            <input
-              ref={addInputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter")  { e.preventDefault(); commitDraft(); }
-                if (e.key === "Escape") { setIsAdding(false); setDraft(""); }
-              }}
-              onBlur={() => { commitDraft(); setIsAdding(false); }}
-              placeholder="Nouvelle tâche..."
-              className="flex-1 text-[13px] text-gray-700 placeholder:text-gray-400 bg-transparent outline-none"
-            />
-          </div>
-        ) : (
-          <button
-            onClick={() => { setIsAdding(true); setTimeout(() => addInputRef.current?.focus(), 30); }}
-            className="flex items-center gap-2 w-full text-[12px] font-medium text-gray-400 hover:text-gray-600 px-2 py-1.5 rounded-xl hover:bg-white/60 transition-colors duration-150"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Ajouter
-          </button>
-        )}
-      </div>
     </div>
   );
 }
@@ -930,7 +932,7 @@ export function RemindersGrid({
           note={notesContent[p.key] ?? ""}
           mood={profiles[p.key]?.mood ?? ""}
           photoLink={profiles[p.key]?.profilePhotoLink ?? null}
-          cardColor={profiles[p.key]?.cardColor ?? ""}
+          cardColor={profiles[p.key]?.cardColor || p.defaultColor}
           isActive={p.key === activeUser}
           onUpdate={(next) => handleUpdate(p.key, next)}
           onReceiveTodo={(fromKey, todoId) => handleReceiveTodo(fromKey, p.key, todoId)}

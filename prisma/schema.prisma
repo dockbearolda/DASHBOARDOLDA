@@ -172,14 +172,33 @@ model TeamNote {
 }
 
 model Client {
-  id            String         @id @default(cuid())
-  nom           String
-  telephone     String         @default("")
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id            String           @id @default(cuid())
+  nom           String           // Société
+  codePostal    String           @default("")
+  ville         String           @default("")
+  telephone     String           @default("") // kept for backward compat
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   planningItems PlanningItem[]
+  contacts      ClientContact[]
 
   @@map("clients")
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  nom       String   @default("")
+  fonction  String   @default("")
+  telephone String   @default("")
+  email     String   @default("")
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_contacts")
+  @@index([clientId])
 }
 
 // ── Achat Textile ─────────────────────────────────────────────────────────────

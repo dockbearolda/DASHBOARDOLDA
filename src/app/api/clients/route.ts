@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/clients — list all clients, or search with ?search=xxx
+const CONTACT_SELECT = {
+  id: true, nom: true, fonction: true, telephone: true, email: true, position: true,
+};
+
+const PLANNING_SELECT = {
+  id: true, designation: true, status: true, deadline: true, quantity: true, color: true, createdAt: true,
+};
+
+// GET /api/clients
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -9,22 +17,18 @@ export async function GET(req: NextRequest) {
 
     const clients = await prisma.client.findMany({
       where: search
-        ? { nom: { contains: search, mode: "insensitive" } }
+        ? {
+            OR: [
+              { nom:       { contains: search, mode: "insensitive" } },
+              { ville:     { contains: search, mode: "insensitive" } },
+              { telephone: { contains: search, mode: "insensitive" } },
+            ],
+          }
         : undefined,
       orderBy: { nom: "asc" },
       include: {
-        planningItems: {
-          orderBy: { createdAt: "desc" },
-          select: {
-            id: true,
-            designation: true,
-            status: true,
-            deadline: true,
-            quantity: true,
-            color: true,
-            createdAt: true,
-          },
-        },
+        contacts:      { select: CONTACT_SELECT, orderBy: { position: "asc" } },
+        planningItems: { select: PLANNING_SELECT, orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -35,20 +39,26 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/clients — create a new client
+// POST /api/clients — créer un nouveau client
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { nom, telephone } = body;
+    const { nom, codePostal = "", ville = "", telephone = "" } = body;
 
     if (!nom?.trim()) {
-      return NextResponse.json({ error: "Le nom est requis" }, { status: 400 });
+      return NextResponse.json({ error: "La société est requise" }, { status: 400 });
     }
 
     const client = await prisma.client.create({
       data: {
-        nom: nom.trim(),
-        telephone: telephone?.trim() ?? "",
+        nom:       nom.trim(),
+        codePostal: codePostal.trim(),
+        ville:     ville.trim(),
+        telephone: telephone.trim(),
+      },
+      include: {
+        contacts:      { select: CONTACT_SELECT, orderBy: { position: "asc" } },
+        planningItems: { select: PLANNING_SELECT, orderBy: { createdAt: "desc" } },
       },
     });
 

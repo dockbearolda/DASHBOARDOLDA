@@ -13,6 +13,7 @@ export async function PATCH(
     const {
       priority,
       clientName,
+      clientId,
       quantity,
       designation,
       note,
@@ -27,6 +28,7 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
     if (priority !== undefined) updateData.priority = priority;
     if (clientName !== undefined) updateData.clientName = clientName;
+    if (clientId !== undefined) updateData.clientId = clientId;
     if (quantity !== undefined) updateData.quantity = quantity;
     if (designation !== undefined) updateData.designation = designation;
     if (note !== undefined) updateData.note = note;

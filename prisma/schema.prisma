@@ -148,19 +148,46 @@ model DtfRow {
 }
 
 model UserProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique // e.g. "loic", "charlie", "melina", "amandine"
-  profilePhotoLink String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String   @unique // "loic" | "charlie" | "melina" | "amandine"
+  profilePhotoLink String?           // URL https://… ou "emoji:🦁"
+  mood             String   @default("")
+  cardColor        String   @default("") // preset: "blue" | "purple" | "teal" | etc.
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("user_profiles")
+}
+
+// ── Onglet Team — Notes & humeur par collaborateur ────────────────────────────
+model TeamNote {
+  id        String   @id @default(cuid())
+  person    String   @unique // "loic" | "melina" | "amandine" | "renaud"
+  note      String   @default("")
+  mood      String   @default("")
+  updatedBy String   @default("")
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("team_notes")
+}
+
+model Client {
+  id            String         @id @default(cuid())
+  nom           String
+  telephone     String         @default("")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  planningItems PlanningItem[]
+
+  @@map("clients")
 }
 
 model PlanningItem {
   id          String           @id @default(cuid())
   priority    PlanningPriority @default(MOYENNE)
   clientName  String           @default("")
+  clientId    String?          @map("client_id")
+  client      Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
   quantity    Float            @default(1)
   designation String           @default("")
   note        String           @default("")

@@ -22,6 +22,7 @@ import { WorkflowListsGrid } from "./workflow-list";
 import { PRTManager } from "./prt-manager";
 import { PlanningTable, type PlanningItem } from "./planning-table";
 import { ThemeSwitcher } from "./theme-switcher";
+import { ClientProTable, type ClientItem } from "./client-pro-table";
 
 interface PRTItem {
   id: string;
@@ -426,18 +427,23 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow'>('flux');
+  // Badge de notification sur l'onglet Flux
+  const [fluxHasNotif, setFluxHasNotif] = useState(false);
+  // Ref pour connaître l'onglet courant dans les callbacks SSE (évite les stale closures)
+  const viewTabRef = useRef(viewTab);
+  useEffect(() => { viewTabRef.current = viewTab; }, [viewTab]);
   const [workflowItems, setWorkflowItems] = useState<WorkflowItem[]>([]);
   const [prtItems, setPrtItems] = useState<PRTItem[]>([]);
   const [allPrtItems, setAllPrtItems] = useState<PRTItem[]>([]);
   const [planningItems, setPlanningItems] = useState<PlanningItem[]>([]);
+  const [clientItems, setClientItems] = useState<ClientItem[]>([]);
 
   const addOrder = async () => {
     const res = await fetch("/api/orders/manual", { method: "POST" });
     if (!res.ok) return;
     const { order } = await res.json();
     setOrders((prev) => [order, ...prev]);
-    setViewTab("commandes");
   };
 
   // ── Session temporelle ────────────────────────────────────────────────────
@@ -652,6 +658,43 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     return () => clearInterval(id);
   }, [fetchPlanning]);
 
+  // ── Client Pro items ───────────────────────────────────────────────────────
+  const fetchClients = useCallback(() => {
+    fetch("/api/clients")
+      .then((r) => r.json())
+      .then((data) => { setClientItems(data.clients ?? []); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+
+  // Refresh clients when switching to the clients_pro tab
+  useEffect(() => {
+    if (viewTab === "clients_pro") fetchClients();
+  }, [viewTab, fetchClients]);
+
+  // ── Notification badge Flux ────────────────────────────────────────────────
+  // Appelé depuis RemindersGrid quand une note SSE arrive.
+  // Si la note concerne l'utilisateur actif ET qu'il n'est pas sur l'onglet Flux
+  // → on allume le badge.
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  const handleNoteChangedForNotif = useCallback((person: string) => {
+    if (!sessionRef.current) return;
+    if (person !== sessionRef.current.name) return;
+    if (viewTabRef.current === 'flux') return; // déjà visible → pas de badge
+    setFluxHasNotif(true);
+  }, []);
+
+  // Changement d'onglet : efface le badge quand l'utilisateur retourne sur Flux
+  const handleTabChange = useCallback((tab: typeof viewTab) => {
+    setViewTab(tab);
+    if (tab === 'flux') setFluxHasNotif(false);
+  }, []);
+
   // ── Connexion / Déconnexion ────────────────────────────────────────────────
   const handleLogin = useCallback((name: string) => {
     const s = saveSession(name);
@@ -705,36 +748,29 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     >
 
       {/* ── Header : tabs centrés · user à gauche · indicateur live à droite ─ */}
-      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 relative flex items-center justify-center border-b border-border">
+      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 relative flex items-center justify-center border-b border-black/[0.06] dark:border-border bg-white/80 dark:bg-card/80 backdrop-blur-xl">
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
-          <div className="flex gap-1 p-1 rounded-xl bg-muted/80 overflow-x-auto">
-            {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning'] as const).map((v) => (
+          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow'] as const).map((v) => (
               <button
                 key={v}
-                onClick={() => setViewTab(v)}
+                onClick={() => handleTabChange(v)}
                 className={cn(
-                  "px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
+                  "relative px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
                   "[touch-action:manipulation]",
                   viewTab === v
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : 'Planning'}
+                {v === 'flux' ? 'Flux' : v === 'planning' ? 'Planning' : v === 'clients_pro' ? 'Clients Pro' : v === 'demande_prt' ? 'Demande de DTF' : v === 'production_dtf' ? 'Production' : 'Gestion d\'atelier'}
+                {v === 'flux' && fluxHasNotif && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
+                )}
               </button>
             ))}
           </div>
-          {/* Bouton + commande — visible sur l'onglet commandes */}
-          {viewTab === 'commandes' && (
-            <button
-              onClick={addOrder}
-              className="flex items-center justify-center w-6 h-6 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-150 shrink-0"
-              aria-label="Ajouter une commande"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          )}
         </div>
         {/* Utilisateur + déconnexion — positionné à gauche en absolu */}
         <div className="absolute left-4 sm:left-6">
@@ -761,25 +797,14 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       </div>
 
       {/* ── Contenu principal ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
-        {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}
-        <div className={cn(viewTab !== 'commandes' && 'hidden')}>
-          <KanbanBoard
-            columns={TSHIRT_COLUMNS}
-            orders={tshirt}
-            newOrderIds={newOrderIds}
-            onUpdateOrder={handleUpdateOrder}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        </div>
-
-        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
+        {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
           <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
         </div>
@@ -805,6 +830,15 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
           />
         </div>
+
+        {/* ══ VUE CLIENTS PRO — Base de données clients ═══════════════════════ */}
+        <div className={cn(viewTab !== 'clients_pro' && 'hidden', 'h-full')}>
+          <ClientProTable
+            clients={clientItems}
+            onClientsChange={setClientItems}
+          />
+        </div>
+
 
       </div>
 

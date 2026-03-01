@@ -45,15 +45,15 @@ interface ColorPreset {
 }
 
 const COLOR_PRESETS: ColorPreset[] = [
-  { key: "slate",  label: "Graphite", from: "#3a3a3c", to: "#1c1c1e", cardBg: "rgba(58,58,60,0.04)",  border: "rgba(58,58,60,0.18)" },
-  { key: "blue",   label: "Bleu",     from: "#0a84ff", to: "#0055d4", cardBg: "rgba(10,132,255,0.09)", border: "rgba(10,132,255,0.22)" },
-  { key: "teal",   label: "Teal",     from: "#5ac8fa", to: "#0a7ea4", cardBg: "rgba(90,200,250,0.06)", border: "rgba(90,200,250,0.28)" },
-  { key: "purple", label: "Violet",   from: "#bf5af2", to: "#9a42c8", cardBg: "rgba(191,90,242,0.09)", border: "rgba(191,90,242,0.22)" },
-  { key: "pink",   label: "Rose",     from: "#ff375f", to: "#c91f3e", cardBg: "rgba(255,55,95,0.09)",  border: "rgba(255,55,95,0.22)" },
-  { key: "orange", label: "Orange",   from: "#ff9f0a", to: "#d4700a", cardBg: "rgba(255,159,10,0.05)", border: "rgba(255,159,10,0.22)" },
-  { key: "green",  label: "Vert",     from: "#34c759", to: "#1a9e3f", cardBg: "rgba(52,199,89,0.05)",  border: "rgba(52,199,89,0.22)" },
-  { key: "indigo", label: "Indigo",   from: "#5e5ce6", to: "#3634a3", cardBg: "rgba(94,92,230,0.05)",  border: "rgba(94,92,230,0.22)" },
-  { key: "gold",   label: "Or",       from: "#ffd60a", to: "#b59300", cardBg: "rgba(255,214,10,0.09)", border: "rgba(255,214,10,0.22)" },
+  { key: "slate",  label: "Graphite", from: "#3a3a3c", to: "#1c1c1e", cardBg: "#f2f2f4",  border: "rgba(58,58,60,0.18)" },
+  { key: "blue",   label: "Bleu",     from: "#0a84ff", to: "#0055d4", cardBg: "#e8f2ff",  border: "rgba(10,132,255,0.22)" },
+  { key: "teal",   label: "Teal",     from: "#5ac8fa", to: "#0a7ea4", cardBg: "#e5f7fd",  border: "rgba(90,200,250,0.28)" },
+  { key: "purple", label: "Violet",   from: "#bf5af2", to: "#9a42c8", cardBg: "#f2e8fd",  border: "rgba(191,90,242,0.22)" },
+  { key: "pink",   label: "Rose",     from: "#ff375f", to: "#c91f3e", cardBg: "#ffe8ed",  border: "rgba(255,55,95,0.22)" },
+  { key: "orange", label: "Orange",   from: "#ff9f0a", to: "#d4700a", cardBg: "#fff3e0",  border: "rgba(255,159,10,0.22)" },
+  { key: "green",  label: "Vert",     from: "#34c759", to: "#1a9e3f", cardBg: "#e8faf0",  border: "rgba(52,199,89,0.22)" },
+  { key: "indigo", label: "Indigo",   from: "#5e5ce6", to: "#3634a3", cardBg: "#ecebff",  border: "rgba(94,92,230,0.22)" },
+  { key: "gold",   label: "Or",       from: "#ffd60a", to: "#b59300", cardBg: "#fffbe0",  border: "rgba(255,214,10,0.22)" },
 ];
 
 const DEFAULT_PRESET = COLOR_PRESETS[0]; // slate
@@ -681,7 +681,7 @@ function ReminderCard({
       {/* ── Bouton Ajouter (haut à gauche, style primary) ───────────────────── */}
       <div className="mb-3">
         {isAdding ? (
-          <div className="flex items-center gap-3 h-8 px-3 rounded-lg bg-gray-50 border border-gray-200">
+          <div className="flex items-center gap-3 h-8 px-3 rounded-lg bg-white/70 border border-white/80">
             <span className="shrink-0 h-4 w-4 rounded-full border-2 border-gray-200" />
             <input
               ref={addInputRef}
@@ -724,10 +724,10 @@ function ReminderCard({
               onDragStart={(e) => { if (editingId === todo.id) return; handleDragStart(e as unknown as React.DragEvent, todo); }}
               style={{ willChange: "transform, opacity" }}
               className={cn(
-                "flex items-center gap-3 w-full rounded-xl px-3 py-2.5 bg-white border border-gray-100/80",
-                "shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-colors duration-150",
+                "flex items-center gap-3 w-full rounded-xl px-3 py-2.5 bg-white/75 border border-white/80",
+                "shadow-[0_1px_4px_rgba(0,0,0,0.06)] transition-colors duration-150",
                 todo.done && "opacity-50",
-                editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:border-gray-200/80 group",
+                editingId !== todo.id && "cursor-grab active:cursor-grabbing hover:bg-white/90 group",
               )}
             >
               <motion.button

@@ -22,8 +22,9 @@ import {
 import {
   Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X, User,
   AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Package, Shirt, Scissors, Printer,
-  Archive, ShoppingCart, RotateCcw, Loader2,
+  Archive, ShoppingCart, RotateCcw, Loader2, QrCode, MessageSquare,
 } from "lucide-react";
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useSocket } from "@/hooks/useSocket";
@@ -32,19 +33,22 @@ import { STATUS_LABELS, SECTEUR_CONFIG, DaysChip } from "@/components/ui/table-c
 // ── Types ───────────────────────────────────────────────────────────────────────
 
 export interface PlanningItem {
-  id: string;
-  priority:    "BASSE" | "MOYENNE" | "HAUTE";
-  clientName:  string;
-  clientId:    string | null;
-  designation: string;   // mapped to « Famille » in UI
-  quantity:    number;
-  note:        string;
-  unitPrice:   number;   // kept for backward-compat, not displayed
-  deadline:    string | null;
-  status:      PlanningStatus;
-  responsible: string;
-  color:       string;   // stores secteur value
-  position:    number;
+  id:             string;
+  priority:       "BASSE" | "MOYENNE" | "HAUTE";
+  clientName:     string;
+  clientId:       string | null;
+  clientPhone:    string | null;   // Numéro WhatsApp (format international)
+  designation:    string;          // mapped to « Famille » in UI
+  quantity:       number;
+  note:           string;
+  unitPrice:      number;          // kept for backward-compat, not displayed
+  deadline:       string | null;
+  status:         PlanningStatus;
+  responsible:    string;
+  color:          string;          // stores secteur value
+  position:       number;
+  trackingId:     string | null;   // UUID pour le lien de suivi
+  whatsappSentAt: string | null;   // Horodatage d'envoi WhatsApp
 }
 
 export interface ClientSuggestion {
@@ -717,6 +721,9 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
   const [sortConfig,      setSortConfig]      = useState<{ col: SortableCol; dir: "asc" | "desc" } | null>(null);
   const [filterUrgent,    setFilterUrgent]    = useState(false);
   const [newRowId,        setNewRowId]        = useState<string | null>(null);
+  const [qrItem,          setQrItem]          = useState<PlanningItem | null>(null);
+  const [waItem,          setWaItem]          = useState<PlanningItem | null>(null);
+  const [waPhone,         setWaPhone]         = useState("");
   const confirmDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Inline quick-add ─────────────────────────────────────────────────────
@@ -961,12 +968,13 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
     // Pré-remplir l'onglet actif et la personne filtrée
     const tab     = TABS.find((t) => t.key === activeTab);
     const newItem: PlanningItem = {
-      id: newId, priority: "MOYENNE", clientName, clientId: null, quantity: 1,
+      id: newId, priority: "MOYENNE", clientName, clientId: null, clientPhone: null, quantity: 1,
       designation: "", note: "", unitPrice: 0, deadline: null,
       status: "A_DEVISER",
       responsible: filterPerson || "",
       color: tab?.secteur ?? "",
       position,
+      trackingId: null, whatsappSentAt: null,
     };
     onItemsChange?.([...items, newItem]);
     // N'ouvrir l'édition inline que si le clientName est vide (sinon déjà rempli)
@@ -1598,8 +1606,54 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                       </div>
 
 
-                      {/* 10 · Actions : Achat Textile (Textiles) + Archiver + Supprimer */}
+                      {/* 10 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
                       <div className="h-full flex items-center justify-center gap-0.5">
+                        {/* Bouton QR code — génère un trackingId si absent */}
+                        <button
+                          onClick={async () => {
+                            if (!item.trackingId) {
+                              // Générer un UUID et le sauvegarder en base
+                              const newId = crypto.randomUUID();
+                              saveNow(item.id, "trackingId", newId);
+                              setQrItem({ ...item, trackingId: newId });
+                            } else {
+                              setQrItem(item);
+                            }
+                          }}
+                          title="Voir le QR code et le lien de suivi"
+                          className={cn(
+                            "p-1.5 rounded-md transition-[color,background-color] duration-150",
+                            "opacity-0 group-hover:opacity-100",
+                            "text-slate-300 hover:text-blue-500 hover:bg-blue-50",
+                          )}
+                          aria-label="QR code de suivi"
+                        >
+                          <QrCode className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Bouton WhatsApp */}
+                        <button
+                          onClick={() => {
+                            setWaPhone(item.clientPhone ?? "");
+                            setWaItem(item);
+                          }}
+                          title={
+                            item.whatsappSentAt
+                              ? `Lien envoyé le ${new Date(item.whatsappSentAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                              : "Envoyer le lien de suivi sur WhatsApp"
+                          }
+                          className={cn(
+                            "p-1.5 rounded-md transition-[color,background-color] duration-150",
+                            "opacity-0 group-hover:opacity-100",
+                            item.whatsappSentAt
+                              ? "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
+                              : "text-slate-300 hover:text-emerald-500 hover:bg-emerald-50",
+                          )}
+                          aria-label="Envoyer WhatsApp"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </button>
+
                         {/* Bouton commande Achat Textile — seulement pour les lignes Textiles */}
                         {item.color === "Textiles" && (
                           <button
@@ -1752,6 +1806,220 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
         itemType={detailId ? (types[detailId] ?? "") : ""}
         onClose={() => setDetailId(null)}
       />
+
+      {/* ── Modal QR Code ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {qrItem && (
+          <motion.div
+            key="qr-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={() => setQrItem(null)}
+          >
+            <motion.div
+              key="qr-panel"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-5 w-full max-w-xs"
+            >
+              <div className="text-center">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">QR Code de suivi</p>
+                <p className="text-[15px] font-semibold text-slate-900 leading-tight">
+                  {qrItem.clientName || "Client"}
+                </p>
+                <p className="text-[13px] text-slate-500 truncate max-w-[200px]">
+                  {qrItem.designation || "Commande"}
+                </p>
+              </div>
+
+              {qrItem.trackingId && (
+                <>
+                  <div className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                    <QRCodeSVG
+                      value={`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem.trackingId}`}
+                      size={180}
+                      bgColor="#FFFFFF"
+                      fgColor="#1D1D1F"
+                      level="M"
+                    />
+                  </div>
+
+                  <div className="w-full">
+                    <p className="text-[10px] text-slate-400 mb-1.5 text-center">Lien de suivi</p>
+                    <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                      <span className="text-[11px] text-slate-600 truncate flex-1 font-mono">
+                        {`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem.trackingId}`}
+                      </span>
+                      <button
+                        onClick={() => {
+                          const url = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem!.trackingId}`;
+                          navigator.clipboard.writeText(url).catch(() => {});
+                        }}
+                        className="text-[11px] font-medium text-blue-500 hover:text-blue-700 shrink-0 transition-colors"
+                      >
+                        Copier
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      // Télécharger le QR code via le canvas caché
+                      const canvas = document.getElementById("qr-dl-canvas") as HTMLCanvasElement | null;
+                      if (!canvas) return;
+                      const link = document.createElement("a");
+                      link.download = `qr-${qrItem!.clientName || "commande"}.png`;
+                      link.href = canvas.toDataURL("image/png");
+                      link.click();
+                    }}
+                    className={cn(
+                      "w-full h-9 rounded-xl text-[13px] font-medium",
+                      "bg-slate-900 text-white hover:bg-slate-700 active:scale-[0.98]",
+                      "transition-all duration-150",
+                    )}
+                  >
+                    Télécharger PNG
+                  </button>
+                </>
+              )}
+
+              <button
+                onClick={() => setQrItem(null)}
+                className="text-[13px] text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Fermer
+              </button>
+
+              {/* Canvas caché pour le téléchargement PNG haute résolution */}
+              <div className="hidden">
+                {qrItem.trackingId && (
+                  <QRCodeCanvas
+                    id="qr-dl-canvas"
+                    value={`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem.trackingId}`}
+                    size={400}
+                    bgColor="#FFFFFF"
+                    fgColor="#1D1D1F"
+                    level="M"
+                  />
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal WhatsApp ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {waItem && (
+          <motion.div
+            key="wa-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={() => setWaItem(null)}
+          >
+            <motion.div
+              key="wa-panel"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl p-6 flex flex-col gap-5 w-full max-w-sm"
+            >
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Envoyer via WhatsApp</p>
+                <p className="text-[15px] font-semibold text-slate-900">
+                  {waItem.clientName || "Client"}
+                </p>
+              </div>
+
+              {/* Numéro de téléphone */}
+              <div>
+                <label className="block text-[12px] font-medium text-slate-500 mb-1.5">
+                  Numéro WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                  placeholder="+33612345678"
+                  className={cn(
+                    "w-full h-10 px-3 text-[14px] rounded-xl",
+                    "border border-slate-200 focus:border-blue-300 focus:ring-2 focus:ring-blue-100",
+                    "focus:outline-none text-slate-900 font-mono transition-all",
+                  )}
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Format international (ex: +33612345678)</p>
+              </div>
+
+              {/* Aperçu du message */}
+              <div className="bg-emerald-50 rounded-xl p-3.5 border border-emerald-100">
+                <p className="text-[11px] font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Aperçu du message</p>
+                <p className="text-[13px] text-slate-700 leading-relaxed">
+                  Bonjour {waItem.clientName || ""},<br />
+                  votre commande est en cours de préparation chez Olda Studio ! 🎨<br /><br />
+                  Suivez l&apos;avancement en temps réel ici :<br />
+                  <span className="text-blue-600 font-mono text-[11px]">
+                    {`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId ?? "..."}`}
+                  </span>
+                </p>
+              </div>
+
+              {/* Boutons */}
+              <div className="flex gap-2.5">
+                <button
+                  onClick={() => setWaItem(null)}
+                  className={cn(
+                    "flex-1 h-10 rounded-xl text-[13px] font-medium",
+                    "bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-[0.98]",
+                    "transition-all duration-150",
+                  )}
+                >
+                  Annuler
+                </button>
+                <button
+                  disabled={!waPhone.trim()}
+                  onClick={() => {
+                    if (!waItem || !waPhone.trim()) return;
+                    const phone = waPhone.replace(/\D/g, "");
+                    const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId}`;
+                    const msg = encodeURIComponent(
+                      `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement en temps réel ici :\n${trackingUrl}`
+                    );
+                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                    // Enregistrer l'horodatage d'envoi
+                    const sentAt = new Date().toISOString();
+                    saveNow(waItem.id, "whatsappSentAt", sentAt);
+                    // Sauvegarder le numéro si modifié
+                    if (waPhone !== waItem.clientPhone) {
+                      saveNow(waItem.id, "clientPhone", waPhone.trim());
+                    }
+                    setWaItem(null);
+                  }}
+                  className={cn(
+                    "flex-1 h-10 rounded-xl text-[13px] font-medium",
+                    "transition-all duration-150 active:scale-[0.98]",
+                    waPhone.trim()
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                  )}
+                >
+                  Ouvrir WhatsApp ↗
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

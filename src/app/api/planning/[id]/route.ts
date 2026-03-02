@@ -14,6 +14,7 @@ export async function PATCH(
       priority,
       clientName,
       clientId,
+      clientPhone,
       quantity,
       designation,
       note,
@@ -24,12 +25,15 @@ export async function PATCH(
       color,
       position,
       archived,
+      whatsappSentAt,
+      trackingId,
     } = body;
 
     const updateData: Record<string, unknown> = {};
     if (priority !== undefined) updateData.priority = priority;
     if (clientName !== undefined) updateData.clientName = clientName;
     if (clientId !== undefined) updateData.clientId = clientId;
+    if (clientPhone !== undefined) updateData.clientPhone = clientPhone || null;
     if (quantity !== undefined) updateData.quantity = quantity;
     if (designation !== undefined) updateData.designation = designation;
     if (note !== undefined) updateData.note = note;
@@ -40,6 +44,8 @@ export async function PATCH(
     if (color !== undefined) updateData.color = color;
     if (position !== undefined) updateData.position = position;
     if (archived !== undefined) updateData.archived = archived;
+    if (whatsappSentAt !== undefined) updateData.whatsappSentAt = whatsappSentAt ? new Date(whatsappSentAt) : null;
+    if (trackingId !== undefined) updateData.trackingId = trackingId || null;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });

@@ -9,17 +9,18 @@
  * ─ Design Apple : Inter, 18px radius, antialiased, ombres légères
  */
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { motion, Reorder, AnimatePresence, useDragControls } from "framer-motion";
-import { Trash2, Plus, GripVertical } from "lucide-react";
+import { Trash2, Plus, GripVertical, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkflowItem } from "@/types/order";
 
+// Palettes pastel (calquées sur AchatCardsGrid)
 const LIST_CONFIGS = {
-  ACHAT: { title: "ACHAT", color: "bg-blue-50", dotColor: "bg-blue-500", borderColor: "border-blue-100" },
-  STANDARD: { title: "STANDARD", color: "bg-amber-50", dotColor: "bg-amber-500", borderColor: "border-amber-100" },
-  ATELIER: { title: "ATELIER", color: "bg-purple-50", dotColor: "bg-purple-500", borderColor: "border-purple-100" },
-  DTF: { title: "DTF", color: "bg-rose-50", dotColor: "bg-rose-500", borderColor: "border-rose-100" },
+  ACHAT:    { title: "ACHAT",    from: "#0a84ff", border: "rgba(10,132,255,0.20)" },
+  STANDARD: { title: "STANDARD", from: "#ff9f0a", border: "rgba(255,159,10,0.20)" },
+  ATELIER:  { title: "ATELIER",  from: "#bf5af2", border: "rgba(191,90,242,0.20)" },
+  DTF:      { title: "DTF",      from: "#ff375f", border: "rgba(255,55,95,0.20)"  },
 } as const;
 
 interface WorkflowListProps {
@@ -196,54 +197,73 @@ function DraggableWorkflowItem({
 }
 
 /* ─────────────────────────────────────────────
-   AddItemInput
+   AddItemInput — pill → inline (style AchatCard)
 ───────────────────────────────────────────── */
 function AddItemInput({
+  accentColor,
   onCreate,
 }: {
   listType: WorkflowItem["listType"];
+  accentColor: string;
   onCreate: (title: string) => Promise<void>;
   isCreating: boolean;
 }) {
-  const [value, setValue] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isAdding, setIsAdding]   = useState(false);
+  const [draft,    setDraft]      = useState("");
+  const [loading,  setLoading]    = useState(false);
+  const inputRef                  = useRef<HTMLInputElement>(null);
 
-  const handleCreate = useCallback(async () => {
-    if (!value.trim()) return;
-    setIsLoading(true);
-    try {
-      await onCreate(value.trim());
-      setValue("");
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
-  }, [value, onCreate]);
+  useEffect(() => { if (isAdding) setTimeout(() => inputRef.current?.focus(), 30); }, [isAdding]);
+
+  const commit = useCallback(async () => {
+    const text = draft.trim();
+    if (!text) { setIsAdding(false); setDraft(""); return; }
+    setLoading(true);
+    try { await onCreate(text); setDraft(""); } catch { /* ignore */ } finally { setLoading(false); }
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, [draft, onCreate]);
+
+  if (!isAdding) {
+    return (
+      <button
+        onClick={() => setIsAdding(true)}
+        className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        <span>Ajouter</span>
+      </button>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2 px-3.5 py-2 rounded-[14px] bg-gray-50 border border-gray-100 hover:bg-gray-100 transition-colors">
-      <Plus className="h-4 w-4 text-gray-400 shrink-0" />
+    <div className="flex items-center gap-2 h-8 px-3 rounded-lg bg-white/70 border border-white/80">
+      <span className="shrink-0 h-4 w-4 rounded-full border-2 border-gray-200" />
       <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && !isLoading && handleCreate()}
-        placeholder="Ajouter une tâche..."
-        disabled={isLoading}
-        className="flex-1 text-sm text-gray-700 bg-transparent border-none focus:outline-none placeholder-gray-400 disabled:opacity-50"
-        style={{
-          fontFamily:
-            "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-          WebkitFontSmoothing: "antialiased",
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter")  { e.preventDefault(); commit(); }
+          if (e.key === "Escape") { setIsAdding(false); setDraft(""); }
         }}
+        onBlur={() => { commit(); setIsAdding(false); }}
+        disabled={loading}
+        placeholder="Nouvelle tâche..."
+        className="flex-1 text-[13px] text-gray-700 placeholder:text-gray-400 bg-transparent outline-none disabled:opacity-50"
+        style={{ caretColor: accentColor }}
       />
+      <button
+        onMouseDown={(e) => { e.preventDefault(); setIsAdding(false); setDraft(""); }}
+        className="shrink-0 text-gray-300 hover:text-gray-500 transition-colors"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────
-   WorkflowListColumn
+   WorkflowListColumn — style AchatCard (carte blanche unifiée)
 ───────────────────────────────────────────── */
 export function WorkflowListColumn({
   items,
@@ -274,51 +294,71 @@ export function WorkflowListColumn({
 
   const handleUpdateItem = useCallback(
     async (id: string, title: string) => {
-      try {
-        await onUpdate(id, title);
-      } catch {
-        // ignore
-      }
+      try { await onUpdate(id, title); } catch { /* ignore */ }
     },
     [onUpdate]
   );
 
   const handleCreate = useCallback(
     async (title: string) => {
-      try {
-        await onCreate(title, listType);
-      } catch {
-        // ignore
-      }
+      try { await onCreate(title, listType); } catch { /* ignore */ }
     },
     [onCreate, listType]
   );
 
   return (
-    <div className="flex-1 min-w-[300px] max-w-[400px] flex flex-col gap-3">
-      {/* Header */}
-      <div className={cn("rounded-[18px] px-4 py-3 flex items-center justify-between", config.color)}>
-        <div className="flex items-center gap-2.5">
-          <span className={cn("h-2.5 w-2.5 rounded-full", config.dotColor)} />
+    /* ── Carte blanche unifiée (AchatCard style) ── */
+    <div
+      className="flex-1 min-w-[300px] max-w-[400px] rounded-3xl border p-4 flex flex-col gap-0"
+      style={{
+        fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
+        WebkitFontSmoothing: "antialiased",
+        backgroundColor: "#ffffff",
+        borderColor: config.border,
+        boxShadow: "0 1px 4px 0 rgba(0,0,0,0.05)",
+      }}
+    >
+      {/* ── En-tête : dot + titre pastel + badge ── */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
           <span
-            className="text-xs font-bold text-gray-900 uppercase tracking-wider"
-            style={{
-              fontFamily:
-                "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-              WebkitFontSmoothing: "antialiased",
-              letterSpacing: "0.05em",
-            }}
+            className="h-1.5 w-1.5 rounded-full shrink-0"
+            style={{ backgroundColor: config.from }}
+          />
+          <span
+            className="text-[11px] font-bold uppercase tracking-wider truncate"
+            style={{ color: config.from, letterSpacing: "0.08em" }}
           >
             {config.title}
           </span>
         </div>
-        <span className="text-xs font-semibold text-gray-600 px-2.5 py-1 rounded-full bg-white/40">
+        <span
+          className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0"
+          style={{
+            backgroundColor: config.from + "18",
+            color: config.from,
+            border: `1px solid ${config.border}`,
+          }}
+        >
           {items.length}
         </span>
       </div>
 
-      {/* Items container */}
-      <div className="flex-1 flex flex-col gap-2 rounded-[18px] p-3 bg-white/50 border border-gray-100 min-h-[200px]">
+      {/* ── Séparateur ── */}
+      <div className="h-px mb-3" style={{ backgroundColor: config.border }} />
+
+      {/* ── Bouton Ajouter ── */}
+      <div className="mb-3">
+        <AddItemInput
+          listType={listType}
+          accentColor={config.from}
+          onCreate={handleCreate}
+          isCreating={false}
+        />
+      </div>
+
+      {/* ── Liste des items ── */}
+      <div className="flex-1 flex flex-col gap-1.5 min-h-[120px]">
         <Reorder.Group
           axis="y"
           values={items}
@@ -332,7 +372,7 @@ export function WorkflowListColumn({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex items-center justify-center py-8 text-gray-300 text-sm flex-1"
+                className="flex items-center justify-center py-6 text-gray-300 text-xs italic flex-1"
               >
                 Aucune tâche
               </motion.div>
@@ -349,8 +389,6 @@ export function WorkflowListColumn({
             )}
           </AnimatePresence>
         </Reorder.Group>
-
-        <AddItemInput listType={listType} onCreate={handleCreate} isCreating={false} />
       </div>
     </div>
   );

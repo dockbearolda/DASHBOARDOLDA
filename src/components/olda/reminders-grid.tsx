@@ -16,7 +16,7 @@
  *   • Toggle ✓/⊘ · ajout rapide
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Trash2, Check, Link } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -211,12 +211,12 @@ function AvatarPicker({
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, scale: 0.92, y: -6 }}
+      initial={{ opacity: 0, scale: 0.95, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.92, y: -6 }}
-      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      exit={{ opacity: 0, scale: 0.95, y: -4 }}
+      transition={{ duration: 0.1, ease: [0.16, 1, 0.3, 1] }}
       className="absolute left-0 top-full mt-2 z-50 w-[248px] rounded-2xl bg-white border border-gray-100 p-3"
-      style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.13), 0 2px 6px rgba(0,0,0,0.06)" }}
+      style={{ boxShadow: "0 12px 36px rgba(0,0,0,0.13), 0 2px 6px rgba(0,0,0,0.06)", willChange: "transform, opacity" }}
     >
       {/* Prévisualisation */}
       <div className="flex items-center gap-2.5 mb-3 p-2 rounded-xl bg-gray-50/70">
@@ -397,7 +397,7 @@ function MoodButton({ current, onChange }: { current: string; onChange: (emoji: 
 
 // ── ReminderCard ───────────────────────────────────────────────────────────────
 
-function ReminderCard({
+const ReminderCard = memo(function ReminderCard({
   personKey,
   personName,
   personInitial,
@@ -671,7 +671,7 @@ function ReminderCard({
           onBlur={handleNoteBlur}
           placeholder="Ajouter une information…"
           rows={1}
-          className="w-full resize-none border-none outline-none bg-transparent text-[13px] leading-relaxed text-gray-800 placeholder:text-gray-400/70"
+          className="w-full resize-none border-none outline-none bg-transparent text-[13px] leading-relaxed text-red-600 font-semibold placeholder:text-gray-400/70"
           style={{
             caretColor: preset.from,
             overflow: "hidden",
@@ -801,7 +801,7 @@ function ReminderCard({
 
     </div>
   );
-}
+});
 
 // ── RemindersGrid ──────────────────────────────────────────────────────────────
 
@@ -932,14 +932,20 @@ export function RemindersGrid({
     apiSaveProfile(key, { mood: emoji });
   }, []);
 
+  const profileSaveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const handlePhotoChange = useCallback((key: string, link: string | null) => {
     setProfiles(prev => ({ ...prev, [key]: { ...(prev[key] ?? { userId: key, profilePhotoLink: null, mood: "", cardColor: "" }), profilePhotoLink: link } }));
-    apiSaveProfile(key, { profilePhotoLink: link });
+    const t = `photo_${key}`;
+    if (profileSaveTimers.current[t]) clearTimeout(profileSaveTimers.current[t]);
+    profileSaveTimers.current[t] = setTimeout(() => apiSaveProfile(key, { profilePhotoLink: link }), 400);
   }, []);
 
   const handleColorChange = useCallback((key: string, colorKey: string) => {
     setProfiles(prev => ({ ...prev, [key]: { ...(prev[key] ?? { userId: key, profilePhotoLink: null, mood: "", cardColor: "" }), cardColor: colorKey } }));
-    apiSaveProfile(key, { cardColor: colorKey });
+    const t = `color_${key}`;
+    if (profileSaveTimers.current[t]) clearTimeout(profileSaveTimers.current[t]);
+    profileSaveTimers.current[t] = setTimeout(() => apiSaveProfile(key, { cardColor: colorKey }), 400);
   }, []);
 
   return (

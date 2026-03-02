@@ -1608,10 +1608,11 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
                       {/* 10 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
                       <div className="h-full flex items-center justify-center gap-0.5">
-                        {/* Bouton QR code de suivi */}
+                        {/* Bouton QR code — génère un trackingId si absent */}
                         <button
                           onClick={async () => {
                             if (!item.trackingId) {
+                              // Générer un UUID et le sauvegarder en base
                               const newId = crypto.randomUUID();
                               saveNow(item.id, "trackingId", newId);
                               setQrItem({ ...item, trackingId: newId });

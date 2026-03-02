@@ -140,7 +140,7 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
 // Note prend le 1fr → toutes les notes visibles ; Client capé à 190px
 
 const GRID_COLS =
-  "32px 76px 94px minmax(100px,190px) 155px 56px minmax(108px,1fr) 165px 168px 100px 112px";
+  "32px 76px 94px minmax(100px,190px) 155px 56px minmax(60px,1fr) 165px 168px 100px 148px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
 const COL_HEADERS: Array<{ label: string; align: string; sortKey?: SortableCol }> = [
@@ -1607,7 +1607,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
 
                       {/* 10 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
-                      <div className="h-full flex items-center justify-center gap-0.5">
+                      <div className="h-full flex items-center justify-center gap-0.5 overflow-visible">
                         {/* Bouton QR code — génère un trackingId si absent */}
                         <button
                           onClick={async () => {
@@ -1975,45 +1975,74 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
               </div>
 
               {/* Boutons */}
-              <div className="flex gap-2.5">
+              <div className="flex flex-col gap-2">
+                {/* Ligne 1 : App Desktop + Web */}
+                <div className="flex gap-2">
+                  {/* Ouvrir l'app WhatsApp (Mac / PC) via deep link whatsapp:// */}
+                  <button
+                    disabled={!waPhone.trim()}
+                    onClick={() => {
+                      if (!waItem || !waPhone.trim()) return;
+                      const phone = waPhone.replace(/\D/g, "");
+                      const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId}`;
+                      const msg = encodeURIComponent(
+                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${trackingUrl}`
+                      );
+                      // Protocole whatsapp:// → ouvre l'app desktop sur Mac et Windows
+                      window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
+                      // Enregistrer
+                      saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
+                      if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
+                      setTimeout(() => setWaItem(null), 300);
+                    }}
+                    className={cn(
+                      "flex-1 h-10 rounded-xl text-[13px] font-medium",
+                      "transition-all duration-150 active:scale-[0.98]",
+                      waPhone.trim()
+                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                    )}
+                  >
+                    💻 App WhatsApp
+                  </button>
+
+                  {/* Ouvrir WhatsApp Web dans le navigateur */}
+                  <button
+                    disabled={!waPhone.trim()}
+                    onClick={() => {
+                      if (!waItem || !waPhone.trim()) return;
+                      const phone = waPhone.replace(/\D/g, "");
+                      const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId}`;
+                      const msg = encodeURIComponent(
+                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${trackingUrl}`
+                      );
+                      window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                      saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
+                      if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
+                      setWaItem(null);
+                    }}
+                    className={cn(
+                      "flex-1 h-10 rounded-xl text-[13px] font-medium",
+                      "transition-all duration-150 active:scale-[0.98]",
+                      waPhone.trim()
+                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                        : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                    )}
+                  >
+                    🌐 WhatsApp Web ↗
+                  </button>
+                </div>
+
+                {/* Ligne 2 : Annuler */}
                 <button
                   onClick={() => setWaItem(null)}
                   className={cn(
-                    "flex-1 h-10 rounded-xl text-[13px] font-medium",
-                    "bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-[0.98]",
+                    "w-full h-9 rounded-xl text-[13px] font-medium",
+                    "bg-slate-100 text-slate-500 hover:bg-slate-200 active:scale-[0.98]",
                     "transition-all duration-150",
                   )}
                 >
                   Annuler
-                </button>
-                <button
-                  disabled={!waPhone.trim()}
-                  onClick={() => {
-                    if (!waItem || !waPhone.trim()) return;
-                    const phone = waPhone.replace(/\D/g, "");
-                    const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId}`;
-                    const msg = encodeURIComponent(
-                      `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement en temps réel ici :\n${trackingUrl}`
-                    );
-                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-                    // Enregistrer l'horodatage d'envoi
-                    const sentAt = new Date().toISOString();
-                    saveNow(waItem.id, "whatsappSentAt", sentAt);
-                    // Sauvegarder le numéro si modifié
-                    if (waPhone !== waItem.clientPhone) {
-                      saveNow(waItem.id, "clientPhone", waPhone.trim());
-                    }
-                    setWaItem(null);
-                  }}
-                  className={cn(
-                    "flex-1 h-10 rounded-xl text-[13px] font-medium",
-                    "transition-all duration-150 active:scale-[0.98]",
-                    waPhone.trim()
-                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                      : "bg-slate-100 text-slate-300 cursor-not-allowed",
-                  )}
-                >
-                  Ouvrir WhatsApp ↗
                 </button>
               </div>
             </motion.div>

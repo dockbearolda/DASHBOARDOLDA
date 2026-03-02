@@ -33,7 +33,7 @@ export interface AchatTextileRow {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const FOURNISSEURS = ["-", "Toptex", "Kariban", "S&S Activewear"] as const;
+const FOURNISSEURS = ["-", "Toptex", "S&S Activewear"] as const;
 const MARQUES      = ["-", "Native", "Kariban", "Pro Act"]        as const;
 const GENRES       = ["", "H", "F", "E", "B", "P", "L"]          as const;
 

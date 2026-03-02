@@ -29,15 +29,16 @@ interface PRTItem {
 
 interface PRTManagerProps {
   items: PRTItem[];
-  onItemsChange?: (items: PRTItem[]) => void;
+  onItemsChange?: (value: PRTItem[] | ((prev: PRTItem[]) => PRTItem[])) => void;
   onNewRequest?: () => void;
+  onEditingChange?: (isEditing: boolean) => void;
 }
 
 // Grid : [checkbox] [client] [dimensions] [design] [couleur] [qté] [actions]
 const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_80px_80px]";
 const CELL_CLASS = "px-3 py-3 truncate";
 
-export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerProps) {
+export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange }: PRTManagerProps) {
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
@@ -63,10 +64,9 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
       if (!file || !id) return;
 
       const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-      const updated = items.map((i) =>
+      onItemsChange?.((prev) => prev.map((i) =>
         i.id === id ? { ...i, design: nameWithoutExt } : i,
-      );
-      onItemsChange?.(updated);
+      ));
 
       try {
         await fetch(`/api/prt-requests/${id}`, {
@@ -81,7 +81,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
       e.target.value        = "";
       pickingForIdRef.current = null;
     },
-    [items, onItemsChange],
+    [onItemsChange],
   );
 
   const sortedItems = useMemo(() => {
@@ -90,28 +90,26 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
   }, [items]);
 
   const handleToggleDone = useCallback(
-    async (id: string) => {
-      const updated = items.map((item) =>
-        item.id === id ? { ...item, done: !item.done } : item,
-      );
-      onItemsChange?.(updated);
+    async (id: string, currentDone: boolean) => {
+      const newDone = !currentDone;
+      onItemsChange?.((prev) => prev.map((i) => i.id === id ? { ...i, done: newDone } : i));
       try {
         await fetch(`/api/prt-requests/${id}`, {
           method:  "PATCH",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ done: !items.find((i) => i.id === id)?.done }),
+          body:    JSON.stringify({ done: newDone }),
         });
       } catch (err) {
         console.error("Failed to update PRT:", err);
       }
     },
-    [items, onItemsChange],
+    [onItemsChange],
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
       setIsDeletingIds((prev) => new Set([...prev, id]));
-      onItemsChange?.(items.filter((i) => i.id !== id));
+      onItemsChange?.((prev) => prev.filter((i) => i.id !== id));
       try {
         await fetch(`/api/prt-requests/${id}`, { method: "DELETE" });
       } catch (err) {
@@ -121,22 +119,23 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
         onItemsChange?.(data.items ?? []);
       }
     },
-    [items, onItemsChange],
+    [onItemsChange],
   );
 
   const handleDeleteSelected = useCallback(async () => {
+    const idsToDelete = new Set(selectedIds);
     try {
       await Promise.all(
-        Array.from(selectedIds).map((id) =>
+        Array.from(idsToDelete).map((id) =>
           fetch(`/api/prt-requests/${id}`, { method: "DELETE" }),
         ),
       );
-      onItemsChange?.(items.filter((i) => !selectedIds.has(i.id)));
+      onItemsChange?.((prev) => prev.filter((i) => !idsToDelete.has(i.id)));
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Failed to delete multiple PRTs:", err);
     }
-  }, [selectedIds, items, onItemsChange]);
+  }, [selectedIds, onItemsChange]);
 
   const handleAddNew = useCallback(async (clientName: string = "") => {
     setIsAddingNew(true);
@@ -146,15 +145,18 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ clientName, dimensions: "", design: "", color: "", quantity: 1 }),
       });
+      if (!res.ok) throw new Error("API error");
       const data = await res.json();
-      onItemsChange?.([data.item, ...items]);
+      if (data.item) {
+        onItemsChange?.((prev) => [data.item, ...prev]);
+      }
       onNewRequest?.();
     } catch (err) {
       console.error("Failed to create PRT:", err);
     } finally {
       setTimeout(() => setIsAddingNew(false), 300);
     }
-  }, [items, onItemsChange, onNewRequest]);
+  }, [onItemsChange, onNewRequest]);
 
   // ── Toolbar ───────────────────────────────────────────────────────────────────
 
@@ -261,11 +263,10 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                 ...item,
                 position: idx,
               }));
-              onItemsChange?.(
-                items
-                  .filter((i) => !reorderedItems.some((r) => r.id === i.id))
-                  .concat(reorderedItems),
-              );
+              onItemsChange?.((prev) => {
+                const reorderedIds = new Set(reorderedItems.map((r) => r.id));
+                return [...reorderedItems, ...prev.filter((i) => !reorderedIds.has(i.id))];
+              });
               Promise.all(
                 reorderedItems.map((item) =>
                   fetch(`/api/prt-requests/${item.id}`, {
@@ -327,13 +328,15 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                         <input
                           type="text"
                           value={item.clientName}
+                          onFocus={() => onEditingChange?.(true)}
                           onChange={(e) => {
-                            const updated = items.map((i) =>
-                              i.id === item.id ? { ...i, clientName: e.target.value } : i,
-                            );
-                            onItemsChange?.(updated);
+                            const val = e.target.value;
+                            onItemsChange?.((prev) => prev.map((i) =>
+                              i.id === item.id ? { ...i, clientName: val } : i,
+                            ));
                           }}
                           onBlur={async () => {
+                            onEditingChange?.(false);
                             try {
                               await fetch(`/api/prt-requests/${item.id}`, {
                                 method:  "PATCH",
@@ -355,13 +358,15 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                         <input
                           type="text"
                           value={item.dimensions}
+                          onFocus={() => onEditingChange?.(true)}
                           onChange={(e) => {
-                            const updated = items.map((i) =>
-                              i.id === item.id ? { ...i, dimensions: e.target.value } : i,
-                            );
-                            onItemsChange?.(updated);
+                            const val = e.target.value;
+                            onItemsChange?.((prev) => prev.map((i) =>
+                              i.id === item.id ? { ...i, dimensions: val } : i,
+                            ));
                           }}
                           onBlur={async () => {
+                            onEditingChange?.(false);
                             try {
                               await fetch(`/api/prt-requests/${item.id}`, {
                                 method:  "PATCH",
@@ -384,13 +389,15 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                           <input
                             type="text"
                             value={item.design}
+                            onFocus={() => onEditingChange?.(true)}
                             onChange={(e) => {
-                              const updated = items.map((i) =>
-                                i.id === item.id ? { ...i, design: e.target.value } : i,
-                              );
-                              onItemsChange?.(updated);
+                              const val = e.target.value;
+                              onItemsChange?.((prev) => prev.map((i) =>
+                                i.id === item.id ? { ...i, design: val } : i,
+                              ));
                             }}
                             onBlur={async () => {
+                              onEditingChange?.(false);
                               try {
                                 await fetch(`/api/prt-requests/${item.id}`, {
                                   method:  "PATCH",
@@ -419,13 +426,15 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                         <input
                           type="text"
                           value={item.color}
+                          onFocus={() => onEditingChange?.(true)}
                           onChange={(e) => {
-                            const updated = items.map((i) =>
-                              i.id === item.id ? { ...i, color: e.target.value } : i,
-                            );
-                            onItemsChange?.(updated);
+                            const val = e.target.value;
+                            onItemsChange?.((prev) => prev.map((i) =>
+                              i.id === item.id ? { ...i, color: val } : i,
+                            ));
                           }}
                           onBlur={async () => {
+                            onEditingChange?.(false);
                             try {
                               await fetch(`/api/prt-requests/${item.id}`, {
                                 method:  "PATCH",
@@ -448,16 +457,15 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                           type="text"
                           inputMode="numeric"
                           value={item.quantity}
+                          onFocus={() => onEditingChange?.(true)}
                           onChange={(e) => {
                             const val = e.target.value.replace(/\D/g, "");
-                            const updated = items.map((i) =>
-                              i.id === item.id
-                                ? { ...i, quantity: parseInt(val) || 1 }
-                                : i,
-                            );
-                            onItemsChange?.(updated);
+                            onItemsChange?.((prev) => prev.map((i) =>
+                              i.id === item.id ? { ...i, quantity: parseInt(val) || 1 } : i,
+                            ));
                           }}
                           onBlur={async () => {
+                            onEditingChange?.(false);
                             try {
                               await fetch(`/api/prt-requests/${item.id}`, {
                                 method:  "PATCH",
@@ -477,7 +485,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
                         {/* Actions (80px) — Done + Delete */}
                         <div className="flex items-center justify-end gap-0.5 py-3 pr-2">
                           <motion.button
-                            onClick={() => handleToggleDone(item.id)}
+                            onClick={() => handleToggleDone(item.id, item.done)}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.95 }}
                             className={cn(

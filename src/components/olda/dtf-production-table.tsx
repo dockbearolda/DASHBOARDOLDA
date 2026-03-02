@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -37,6 +37,11 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
 
+  // ── Inline quick-add ─────────────────────────────────────────────────────
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+  const [quickDraft,    setQuickDraft]    = useState("");
+  const quickAddRef = useRef<HTMLInputElement>(null);
+
   // Debounce timers par row.id pour les champs texte
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -59,14 +64,14 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
   }, [activeUser]);
 
   // ── Ajouter une ligne ─────────────────────────────────────────────────────
-  const addRow = useCallback(async () => {
+  const addRow = useCallback(async (name: string = "") => {
     if (!activeUser || saving) return;
     setSaving(true);
     try {
       const res = await fetch("/api/dtf-production", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ user: activeUser, name: "", status: "en_cours" }),
+        body:    JSON.stringify({ user: activeUser, name, status: "en_cours" }),
       });
       if (!res.ok) return;
       const { row } = await res.json();
@@ -138,14 +143,55 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
 
   const toolbar = (
     <div className="flex items-center gap-3 px-4 py-3">
-      <button
-        onClick={addRow}
-        disabled={saving}
-        className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0"
-      >
-        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-        <span>Ajouter une production</span>
-      </button>
+      {isQuickAdding ? (
+        <div className="flex items-center gap-2 h-8 px-3 rounded-lg bg-white border border-blue-200 ring-1 ring-blue-100 shadow-sm min-w-[200px] shrink-0">
+          <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+          <input
+            ref={quickAddRef}
+            value={quickDraft}
+            onChange={(e) => setQuickDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const text = quickDraft.trim();
+                if (text) {
+                  addRow(text);
+                  setQuickDraft("");
+                  setTimeout(() => quickAddRef.current?.focus(), 0);
+                } else {
+                  setIsQuickAdding(false);
+                  setQuickDraft("");
+                }
+              }
+              if (e.key === "Escape") { setIsQuickAdding(false); setQuickDraft(""); }
+            }}
+            onBlur={() => {
+              const text = quickDraft.trim();
+              if (text) addRow(text);
+              setIsQuickAdding(false);
+              setQuickDraft("");
+            }}
+            placeholder="Nom de la production…"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+          />
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { setIsQuickAdding(false); setQuickDraft(""); }}
+            className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
+          disabled={saving}
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          <span>Ajouter une production</span>
+        </button>
+      )}
       <div className="flex-1" />
       {rows.some((r) => r.status === "termine") && (
         <button

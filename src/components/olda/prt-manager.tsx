@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
-import { Trash2, Plus, Check, FolderOpen } from "lucide-react";
+import { Trash2, Plus, Check, FolderOpen, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -41,6 +41,11 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
+
+  // ── Inline quick-add ─────────────────────────────────────────────────────
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+  const [quickDraft,    setQuickDraft]    = useState("");
+  const quickAddRef = useRef<HTMLInputElement>(null);
 
   // File picker — un seul input caché partagé entre toutes les lignes
   const fileInputRef    = useRef<HTMLInputElement>(null);
@@ -133,13 +138,13 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
     }
   }, [selectedIds, items, onItemsChange]);
 
-  const handleAddNew = useCallback(async () => {
+  const handleAddNew = useCallback(async (clientName: string = "") => {
     setIsAddingNew(true);
     try {
       const res  = await fetch("/api/prt-requests", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ clientName: "", dimensions: "", design: "", color: "", quantity: 1 }),
+        body:    JSON.stringify({ clientName, dimensions: "", design: "", color: "", quantity: 1 }),
       });
       const data = await res.json();
       onItemsChange?.([data.item, ...items]);
@@ -162,14 +167,55 @@ export function PRTManager({ items, onItemsChange, onNewRequest }: PRTManagerPro
         className="hidden"
         onChange={handleFileChange}
       />
-      <button
-        onClick={handleAddNew}
-        disabled={isAddingNew}
-        className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        <span>Demande de DTF</span>
-      </button>
+      {isQuickAdding ? (
+        <div className="flex items-center gap-2 h-8 px-3 rounded-lg bg-white border border-blue-200 ring-1 ring-blue-100 shadow-sm min-w-[200px] shrink-0">
+          <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+          <input
+            ref={quickAddRef}
+            value={quickDraft}
+            onChange={(e) => setQuickDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const text = quickDraft.trim();
+                if (text) {
+                  handleAddNew(text);
+                  setQuickDraft("");
+                  setTimeout(() => quickAddRef.current?.focus(), 0);
+                } else {
+                  setIsQuickAdding(false);
+                  setQuickDraft("");
+                }
+              }
+              if (e.key === "Escape") { setIsQuickAdding(false); setQuickDraft(""); }
+            }}
+            onBlur={() => {
+              const text = quickDraft.trim();
+              if (text) handleAddNew(text);
+              setIsQuickAdding(false);
+              setQuickDraft("");
+            }}
+            placeholder="Nom du client…"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+          />
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { setIsQuickAdding(false); setQuickDraft(""); }}
+            className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
+          disabled={isAddingNew}
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>Demande de DTF</span>
+        </button>
+      )}
     </div>
   );
 

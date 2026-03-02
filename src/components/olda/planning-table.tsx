@@ -716,6 +716,11 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
   const [newRowId,        setNewRowId]        = useState<string | null>(null);
   const confirmDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Inline quick-add ─────────────────────────────────────────────────────
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+  const [quickDraft,    setQuickDraft]    = useState("");
+  const quickAddRef = useRef<HTMLInputElement>(null);
+
   // Ref vers l'état d'édition courant, accessible dans les handlers socket/polling
   const editingRef = useRef(editing);
   editingRef.current = editing;
@@ -906,7 +911,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
 
-  const addRow = useCallback(() => {
+  const addRow = useCallback((clientName: string = "") => {
     const newId  = `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
     // Insérer EN HAUT : position = minPos - 1 (ou -1 si liste vide)
     const minPos   = sorted.length > 0 ? Math.min(...sorted.map((s) => s.position)) : 0;
@@ -914,7 +919,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
     // Pré-remplir l'onglet actif et la personne filtrée
     const tab     = TABS.find((t) => t.key === activeTab);
     const newItem: PlanningItem = {
-      id: newId, priority: "MOYENNE", clientName: "", clientId: null, quantity: 1,
+      id: newId, priority: "MOYENNE", clientName, clientId: null, quantity: 1,
       designation: "", note: "", unitPrice: 0, deadline: null,
       status: "A_DEVISER",
       responsible: filterPerson || "",
@@ -922,7 +927,8 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
       position,
     };
     onItemsChange?.([...items, newItem]);
-    setEditing(`${newId}:clientName`);
+    // N'ouvrir l'édition inline que si le clientName est vide (sinon déjà rempli)
+    if (!clientName) setEditing(`${newId}:clientName`);
     setNewRowId(newId);
     setTimeout(() => setNewRowId(null), 1400);
     fetch("/api/planning", {
@@ -1027,18 +1033,59 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
       {/* ── Toolbar unifiée ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-black/[0.06] bg-white/80 backdrop-blur-sm">
-        <button
-          onClick={addRow}
-          className={cn(
-            "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-semibold shrink-0",
-            "bg-blue-500 text-white hover:bg-blue-600 active:scale-95",
-            "transition-[background-color,transform] duration-[80ms] shadow-sm shadow-blue-200/60",
-          )}
-          aria-label="Ajouter une ligne"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Ajouter</span>
-        </button>
+        {isQuickAdding ? (
+          <div className="flex items-center gap-2 h-8 px-3 rounded-lg bg-white border border-blue-200 ring-1 ring-blue-100 shadow-sm min-w-[180px] shrink-0">
+            <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+            <input
+              ref={quickAddRef}
+              value={quickDraft}
+              onChange={(e) => setQuickDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const text = quickDraft.trim();
+                  if (text) {
+                    addRow(text);
+                    setQuickDraft("");
+                    setTimeout(() => quickAddRef.current?.focus(), 0);
+                  } else {
+                    setIsQuickAdding(false);
+                    setQuickDraft("");
+                  }
+                }
+                if (e.key === "Escape") { setIsQuickAdding(false); setQuickDraft(""); }
+              }}
+              onBlur={() => {
+                const text = quickDraft.trim();
+                if (text) addRow(text);
+                setIsQuickAdding(false);
+                setQuickDraft("");
+              }}
+              placeholder="Nom du client…"
+              className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+            />
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { setIsQuickAdding(false); setQuickDraft(""); }}
+              className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
+            className={cn(
+              "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-semibold shrink-0",
+              "bg-blue-500 text-white hover:bg-blue-600 active:scale-95",
+              "transition-[background-color,transform] duration-[80ms] shadow-sm shadow-blue-200/60",
+            )}
+            aria-label="Ajouter une ligne"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Ajouter</span>
+          </button>
+        )}
 
         <div className="h-4 w-px bg-slate-200 shrink-0" />
         <SearchBar value={search} onChange={setSearch} className="flex-1 min-w-0 max-w-[240px]" />
@@ -1460,7 +1507,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
           {/* Ghost row — ajouter rapidement en bas de liste */}
           {displayItems.length > 0 && !search && !filterPerson && (
             <button
-              onClick={addRow}
+              onClick={() => addRow()}
               className={cn(
                 "w-full flex items-center gap-2 px-4 py-2.5 text-[12px] font-medium",
                 "text-slate-300 hover:text-blue-400 hover:bg-blue-50/40",
@@ -1498,7 +1545,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                 )}
                 {!search && !filterUrgent && (
                   <button
-                    onClick={addRow}
+                    onClick={() => addRow()}
                     className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors duration-[80ms]"
                   >
                     <Plus className="h-3 w-3" /> Ajouter une commande

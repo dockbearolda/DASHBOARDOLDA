@@ -35,6 +35,7 @@ interface PRTItem {
   quantity: number;
   done: boolean;
   position: number;
+  note: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { broadcast } from "@/lib/socket-server";
 
-// GET /api/planning — return all planning items
-export async function GET() {
+// GET /api/planning — return planning items (?archived=true for archive view)
+export async function GET(req: NextRequest) {
   try {
+    const archived = req.nextUrl.searchParams.get("archived") === "true";
     const items = await prisma.planningItem.findMany({
+      where: { archived },
       orderBy: { position: "asc" },
     });
     return NextResponse.json({ items });

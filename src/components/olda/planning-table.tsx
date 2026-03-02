@@ -22,6 +22,7 @@ import {
 import {
   Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X, User,
   AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Package, Shirt, Scissors, Printer,
+  Archive, ShoppingCart, RotateCcw, Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,8 @@ interface PlanningTableProps {
   onItemsChange?:   (items: PlanningItem[]) => void;
   /** Appelé quand l'état d'édition change (true = en cours, false = terminé) */
   onEditingChange?: (isEditing: boolean) => void;
+  /** Appelé quand l'utilisateur veut créer une commande Achat Textile depuis Planning */
+  onCreateAchatFromPlanning?: (item: PlanningItem) => void;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────────
@@ -133,7 +136,7 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
 // Note prend le 1fr → toutes les notes visibles ; Client capé à 190px
 
 const GRID_COLS =
-  "32px 76px 94px minmax(100px,190px) 155px 56px minmax(108px,1fr) 165px 168px 100px 40px";
+  "32px 76px 94px minmax(100px,190px) 155px 56px minmax(108px,1fr) 165px 168px 100px 112px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
 const COL_HEADERS: Array<{ label: string; align: string; sortKey?: SortableCol }> = [
@@ -705,7 +708,7 @@ function ClientNameCell({
 
 // ── Main component ──────────────────────────────────────────────────────────────
 
-export function PlanningTable({ items, onItemsChange, onEditingChange }: PlanningTableProps) {
+export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateAchatFromPlanning }: PlanningTableProps) {
   const [editing,         setEditing]         = useState<string | null>(null);
   const [savingIds,       setSavingIds]       = useState<Set<string>>(new Set());
   const [deletingIds,     setDeletingIds]     = useState<Set<string>>(new Set());
@@ -720,6 +723,45 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
   const [isQuickAdding, setIsQuickAdding] = useState(false);
   const [quickDraft,    setQuickDraft]    = useState("");
   const quickAddRef = useRef<HTMLInputElement>(null);
+
+  // ── Archive ───────────────────────────────────────────────────────────────
+  const [showArchived,   setShowArchived]   = useState(false);
+  const [archiveItems,   setArchiveItems]   = useState<PlanningItem[]>([]);
+  const [loadingArchive, setLoadingArchive] = useState(false);
+
+  const fetchArchived = useCallback(async () => {
+    setLoadingArchive(true);
+    try {
+      const res  = await fetch("/api/planning?archived=true");
+      const data = await res.json();
+      setArchiveItems(data.items ?? []);
+    } catch { /* ignore */ }
+    finally { setLoadingArchive(false); }
+  }, []);
+
+  const archiveItem = useCallback(async (id: string) => {
+    onItemsChange?.(items.filter((i) => i.id !== id));
+    try {
+      await fetch(`/api/planning/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ archived: true }),
+      });
+    } catch { /* ignore */ }
+  }, [items, onItemsChange]);
+
+  const restoreItem = useCallback(async (id: string) => {
+    setArchiveItems((prev) => prev.filter((i) => i.id !== id));
+    try {
+      const res  = await fetch(`/api/planning/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ archived: false }),
+      });
+      const data = await res.json();
+      if (data.item) onItemsChange?.([data.item, ...items]);
+    } catch { /* ignore */ }
+  }, [archiveItems, items, onItemsChange]);
 
   // Ref vers l'état d'édition courant, accessible dans les handlers socket/polling
   const editingRef = useRef(editing);
@@ -1113,18 +1155,41 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
         <div className="h-4 w-px bg-slate-200 shrink-0" />
 
         {/* Bouton urgences */}
+        {!showArchived && (
+          <button
+            onClick={() => setFilterUrgent((p) => !p)}
+            title="Filtrer les urgences (HAUTE + deadline proche)"
+            className={cn(
+              "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-[80ms]",
+              filterUrgent
+                ? "bg-orange-50 text-orange-600 border border-orange-200"
+                : "bg-slate-100/80 text-slate-500 hover:bg-orange-50 hover:text-orange-500 border border-transparent",
+            )}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            Urgences
+          </button>
+        )}
+
+        {/* Bouton Archives */}
         <button
-          onClick={() => setFilterUrgent((p) => !p)}
-          title="Filtrer les urgences (HAUTE + deadline proche)"
+          onClick={() => {
+            if (showArchived) {
+              setShowArchived(false);
+            } else {
+              setShowArchived(true);
+              fetchArchived();
+            }
+          }}
           className={cn(
             "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-[80ms]",
-            filterUrgent
-              ? "bg-orange-50 text-orange-600 border border-orange-200"
-              : "bg-slate-100/80 text-slate-500 hover:bg-orange-50 hover:text-orange-500 border border-transparent",
+            showArchived
+              ? "bg-amber-50 text-amber-600 border border-amber-200"
+              : "bg-slate-100/80 text-slate-500 hover:bg-amber-50 hover:text-amber-500 border border-transparent",
           )}
         >
-          <AlertTriangle className="h-3 w-3" />
-          Urgences
+          <Archive className="h-3 w-3" />
+          Archives
         </button>
 
         {/* Indicateur de sauvegarde global */}
@@ -1144,8 +1209,8 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
         </AnimatePresence>
       </div>
 
-      {/* ── Tabs ─────────────────────────────────────────────────────────────── */}
-      <div className="bg-white overflow-x-auto">
+      {/* ── Tabs (masqués en vue archives) ───────────────────────────────────── */}
+      <div className={cn("bg-white overflow-x-auto", showArchived && "hidden")}>
         <div className="flex justify-start items-stretch gap-0 px-4 min-w-max">
           {TABS.map((tab) => {
             const active = activeTab === tab.key;
@@ -1186,8 +1251,70 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
       </div>
       <div className="h-px bg-black/[0.06] ml-[10%]" />
 
+      {/* ── Vue Archives ────────────────────────────────────────────────────── */}
+      {showArchived && (
+        <div className="overflow-auto flex-1">
+          <div style={{ minWidth: "1050px" }}>
+            {loadingArchive ? (
+              <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Chargement…
+              </div>
+            ) : archiveItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center select-none">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center">
+                  <Archive className="h-5 w-5 text-slate-300" />
+                </div>
+                <p className="text-[13px] text-slate-400">Aucun élément archivé</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {archiveItems.map((item) => {
+                  const cfg    = SECTEUR_CONFIG[item.color as keyof typeof SECTEUR_CONFIG] as { dotHex?: string; label?: string } | undefined;
+                  const status = STATUS_LABELS[item.status as keyof typeof STATUS_LABELS];
+                  return (
+                    <div key={item.id} className="grid items-center bg-amber-50/30 hover:bg-amber-50/60 transition-colors group" style={GRID_STYLE}>
+                      <div />
+                      <div />
+                      <div className="px-2.5 py-3 text-[11px] text-slate-400">{item.priority}</div>
+                      <div className="px-2.5 py-3 text-[13px] font-medium text-slate-600 truncate">{item.clientName || <span className="text-slate-300 italic">—</span>}</div>
+                      <div className="px-2.5 py-3">
+                        {cfg ? (
+                          <span className="flex items-center gap-1.5 text-[12px]">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: cfg.dotHex }} />
+                            <span className="text-slate-500">{item.color}</span>
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-500 text-center">{item.quantity}</div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400 italic truncate">{item.note || "—"}</div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400">{item.deadline ? item.deadline.toString().slice(0, 10) : "—"}</div>
+                      <div className="px-2.5 py-3">
+                        {status ? <span className="text-[11px] text-slate-500">{status}</span> : null}
+                      </div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400">{item.responsible || "—"}</div>
+                      {/* Restaurer */}
+                      <div className="h-full flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => restoreItem(item.id)}
+                          title="Restaurer"
+                          className="flex items-center gap-1 p-1.5 rounded-md text-[11px] font-semibold text-amber-600 hover:bg-amber-100 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Restaurer</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="overflow-auto flex-1">
+      <div className={cn("overflow-auto flex-1", showArchived && "hidden")}>
         <div style={{ minWidth: "1050px" }}>
 
           {/* Column headers — sticky */}
@@ -1471,8 +1598,37 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                       </div>
 
 
-                      {/* 10 · Supprimer (2 clics pour confirmer) */}
-                      <div className="h-full flex items-center justify-center">
+                      {/* 10 · Actions : Achat Textile (Textiles) + Archiver + Supprimer */}
+                      <div className="h-full flex items-center justify-center gap-0.5">
+                        {/* Bouton commande Achat Textile — seulement pour les lignes Textiles */}
+                        {item.color === "Textiles" && (
+                          <button
+                            onClick={() => onCreateAchatFromPlanning?.(item)}
+                            title="Passer commande fournisseur"
+                            className={cn(
+                              "p-1.5 rounded-md transition-[color,background-color] duration-150",
+                              "opacity-0 group-hover:opacity-100",
+                              "text-slate-300 hover:text-emerald-600 hover:bg-emerald-50",
+                            )}
+                            aria-label="Commande Achat Textile"
+                          >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {/* Bouton Archiver */}
+                        <button
+                          onClick={() => archiveItem(item.id)}
+                          title="Archiver"
+                          className={cn(
+                            "p-1.5 rounded-md transition-[color,background-color] duration-150",
+                            "opacity-0 group-hover:opacity-100",
+                            "text-slate-300 hover:text-amber-500 hover:bg-amber-50",
+                          )}
+                          aria-label="Archiver"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                        </button>
+                        {/* Bouton Supprimer (2 clics pour confirmer) */}
                         <button
                           onClick={() => {
                             if (confirmDeleteId === item.id) {

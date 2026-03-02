@@ -540,7 +540,7 @@ function AchatCard({
       style={{
         fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
         WebkitFontSmoothing: "antialiased",
-        backgroundColor: preset.cardBg,
+        backgroundColor: "#ffffff",
         borderColor: isDragOver ? preset.from + "44" : preset.border,
         boxShadow: isDragOver
           ? `0 2px 10px 0 ${preset.from}18`
@@ -585,8 +585,12 @@ function AchatCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <span
+              className="h-1.5 w-1.5 rounded-full shrink-0"
+              style={{ backgroundColor: preset.from }}
+            />
+            <span
               className="text-[11px] font-bold uppercase tracking-wider truncate"
-              style={{ color: preset.to }}
+              style={{ color: preset.from }}
             >
               {zoneName}
             </span>
@@ -600,7 +604,7 @@ function AchatCard({
 
         <span
           className="text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0"
-          style={{ backgroundColor: preset.cardBg, color: preset.from, border: `1px solid ${preset.border}` }}
+          style={{ backgroundColor: preset.from + "18", color: preset.from, border: `1px solid ${preset.border}` }}
         >
           {todos.length}
         </span>

@@ -9,17 +9,17 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { clientName, dimensions, design, designFileLink, color, quantity, done, position } = body;
+    const { clientName, dimensions, design, color, quantity, done, position, note } = body;
 
     const updateData: Record<string, unknown> = {};
     if (clientName !== undefined) updateData.clientName = clientName;
     if (dimensions !== undefined) updateData.dimensions = dimensions;
     if (design !== undefined) updateData.design = design;
-    if (designFileLink !== undefined) updateData.designFileLink = designFileLink;
     if (color !== undefined) updateData.color = color;
     if (quantity !== undefined) updateData.quantity = quantity;
     if (done !== undefined) updateData.done = done;
     if (position !== undefined) updateData.position = position;
+    if (note !== undefined) updateData.note = note;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });

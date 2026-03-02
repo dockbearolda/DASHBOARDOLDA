@@ -33,8 +33,9 @@ export interface AchatTextileRow {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const MARQUES  = ["-", "Native", "Kariban", "Pro Act"] as const;
-const GENRES   = ["", "H", "F", "E", "B", "P", "L"]   as const;
+const FOURNISSEURS = ["-", "Toptex", "Kariban", "S&S Activewear"] as const;
+const MARQUES      = ["-", "Native", "Kariban", "Pro Act"]        as const;
+const GENRES       = ["", "H", "F", "E", "B", "P", "L"]          as const;
 
 interface LivraisonOption {
   value: string;
@@ -189,6 +190,8 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
           designation: row.designation,
           reference:   row.reference,
           couleur:     row.couleur,
+          taille:      row.taille,
+          quantite:    row.quantite,
           livraison:   row.livraison,
         }),
       });
@@ -431,12 +434,15 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                 />
 
                 {/* Fournisseur */}
-                <input
-                  value={row.fournisseur}
-                  onChange={e => updateText(row.id, "fournisseur", e.target.value)}
-                  placeholder="Fournisseur…"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-300 w-full truncate")}
-                />
+                <div className={CELL}>
+                  <select
+                    value={FOURNISSEURS.includes(row.fournisseur as typeof FOURNISSEURS[number]) ? row.fournisseur : "-"}
+                    onChange={e => updateField(row.id, "fournisseur", e.target.value)}
+                    className="w-full text-[13px] text-slate-900 bg-transparent outline-none cursor-pointer"
+                  >
+                    {FOURNISSEURS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
 
                 {/* Marque */}
                 <div className={CELL}>

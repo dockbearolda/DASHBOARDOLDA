@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       id,
       priority,
       clientName,
+      clientPhone,
       quantity,
       designation,
       note,
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
         ...(id ? { id } : {}),
         priority: priority || "MOYENNE",
         clientName: clientName || "",
+        clientPhone: clientPhone || null,
         quantity: quantity || 1,
         designation: designation || "",
         note: note || "",
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
         responsible: responsible || "",
         color: color || "",
         position,
+        // trackingId auto-généré par Prisma (@default(uuid()))
       },
     });
 

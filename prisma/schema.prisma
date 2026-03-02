@@ -224,23 +224,26 @@ model AchatTextile {
 }
 
 model PlanningItem {
-  id          String           @id @default(cuid())
-  priority    PlanningPriority @default(MOYENNE)
-  clientName  String           @default("")
-  clientId    String?          @map("client_id")
-  client      Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  quantity    Float            @default(1)
-  designation String           @default("")
-  note        String           @default("")
-  unitPrice   Float            @default(0)
-  deadline    DateTime?
-  status      PlanningStatus   @default(A_DEVISER)
-  responsible String           @default("")
-  color       String           @default("")
-  position    Int              @default(0)
-  archived    Boolean          @default(false)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  priority       PlanningPriority @default(MOYENNE)
+  clientName     String           @default("")
+  clientId       String?          @map("client_id")
+  client         Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientPhone    String?          // Numéro WhatsApp (format international, ex: +33612345678)
+  quantity       Float            @default(1)
+  designation    String           @default("")
+  note           String           @default("")
+  unitPrice      Float            @default(0)
+  deadline       DateTime?
+  status         PlanningStatus   @default(A_DEVISER)
+  responsible    String           @default("")
+  color          String           @default("")
+  position       Int              @default(0)
+  archived       Boolean          @default(false)
+  trackingId     String?          @unique @default(uuid())
+  whatsappSentAt DateTime?        // Horodatage d'envoi WhatsApp (anti-doublon)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@map("planning_items")
 }

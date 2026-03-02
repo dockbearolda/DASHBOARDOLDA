@@ -23,6 +23,7 @@ interface PRTItem {
   quantity: number;
   done: boolean;
   position: number;
+  note: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,8 +35,8 @@ interface PRTManagerProps {
   onEditingChange?: (isEditing: boolean) => void;
 }
 
-// Grid : [checkbox] [client] [dimensions] [design] [couleur] [qté] [actions]
-const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_80px_80px]";
+// Grid : [checkbox] [client] [dimensions] [design] [couleur] [note] [qté] [actions]
+const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_1fr_80px_80px]";
 const CELL_CLASS = "px-3 py-3 truncate";
 
 export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange }: PRTManagerProps) {
@@ -243,6 +244,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
       <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Dimensions</div>
       <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Design</div>
       <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Couleur</div>
+      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Note</div>
       <div className="text-right text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Qté</div>
       <div className="text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider" />
     </div>
@@ -423,14 +425,64 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                         </div>
 
                         {/* Couleur (1fr) */}
+                        <div className={cn(CELL_CLASS, "flex items-center gap-1 min-w-0")}>
+                          <input
+                            type="text"
+                            value={item.color}
+                            onFocus={() => onEditingChange?.(true)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              onItemsChange?.((prev) => prev.map((i) =>
+                                i.id === item.id ? { ...i, color: val } : i,
+                              ));
+                            }}
+                            onBlur={async () => {
+                              onEditingChange?.(false);
+                              try {
+                                await fetch(`/api/prt-requests/${item.id}`, {
+                                  method:  "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body:    JSON.stringify({ color: item.color }),
+                                });
+                              } catch (err) {
+                                console.error("Failed to update:", err);
+                              }
+                            }}
+                            className="flex-1 min-w-0 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px] truncate"
+                            placeholder="Blanc"
+                          />
+                          {/* Raccourci Multicolore */}
+                          {item.color !== "Multicolore" && (
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                onItemsChange?.((prev) => prev.map((i) =>
+                                  i.id === item.id ? { ...i, color: "Multicolore" } : i,
+                                ));
+                                fetch(`/api/prt-requests/${item.id}`, {
+                                  method:  "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body:    JSON.stringify({ color: "Multicolore" }),
+                                }).catch(() => {});
+                              }}
+                              className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold text-slate-300 hover:text-violet-600 hover:bg-violet-50 transition-colors leading-none"
+                              title="Multicolore"
+                            >
+                              MC
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Note (1fr) */}
                         <input
                           type="text"
-                          value={item.color}
+                          value={item.note ?? ""}
                           onFocus={() => onEditingChange?.(true)}
                           onChange={(e) => {
                             const val = e.target.value;
                             onItemsChange?.((prev) => prev.map((i) =>
-                              i.id === item.id ? { ...i, color: val } : i,
+                              i.id === item.id ? { ...i, note: val } : i,
                             ));
                           }}
                           onBlur={async () => {
@@ -439,7 +491,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                               await fetch(`/api/prt-requests/${item.id}`, {
                                 method:  "PATCH",
                                 headers: { "Content-Type": "application/json" },
-                                body:    JSON.stringify({ color: item.color }),
+                                body:    JSON.stringify({ note: item.note }),
                               });
                             } catch (err) {
                               console.error("Failed to update:", err);
@@ -447,9 +499,9 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           }}
                           className={cn(
                             CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
+                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-500 text-[12px] italic",
                           )}
-                          placeholder="Blanc"
+                          placeholder="Note…"
                         />
 
                         {/* Quantité (80px) */}

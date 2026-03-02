@@ -23,17 +23,30 @@ export async function POST(req: NextRequest) {
     const {
       sessionUser = "",
       client      = "",
+      fournisseur = "-",
+      marque      = "-",
+      genre       = "",
       designation = "",
+      reference   = "",
+      couleur     = "",
+      taille      = "",
       quantite,
+      livraison   = "",
     } = body;
 
     const row = await prisma.achatTextile.create({
       data: {
         sessionUser,
         client,
+        fournisseur,
+        marque,
+        genre,
         designation,
-        quantite: quantite ? parseInt(quantite) : 0,
-        marque: "-",
+        reference,
+        couleur,
+        taille,
+        quantite: quantite !== undefined ? parseInt(quantite) : 0,
+        livraison,
       },
     });
     return NextResponse.json({ row }, { status: 201 });

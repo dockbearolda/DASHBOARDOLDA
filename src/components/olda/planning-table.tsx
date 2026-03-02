@@ -116,6 +116,15 @@ const FAMILLE_OPTIONS = [
 
 // SECTEUR_CONFIG importé depuis @/components/ui/table-cells
 
+// ── URL de suivi (domaine discret configurable) ──────────────────────────────
+const TRACKING_BASE =
+  process.env.NEXT_PUBLIC_TRACKING_BASE_URL ??
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  "https://dasholda.up.railway.app";
+
+const trackingUrl = (id: string | null | undefined): string =>
+  id ? `${TRACKING_BASE}/s/${id}` : "";
+
 // Type indicator config (feature 10)
 const TYPE_CONFIG = {
   PRO:   { label: "PRO",   badge: "bg-blue-500 text-white",     border: "border-l-blue-400"    },
@@ -135,12 +144,12 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
   { key: "goodies",       label: "Goodies",            secteur: "Goodies"                   },
 ];
 
-// ── Grid layout (11 columns) ────────────────────────────────────────────────────
-// Grip | Type | Priorité | Client | Secteur | Qté | Note | Échéance | État | Interne | ×
-// Note prend le 1fr → toutes les notes visibles ; Client capé à 190px
+// ── Grid layout (12 columns) ────────────────────────────────────────────────────
+// Grip | Type | Priorité | Client | Tél. | Secteur | Qté | Note | Échéance | État | Interne | ×
+// Note prend le 1fr → toutes les notes visibles ; Client capé à 160px
 
 const GRID_COLS =
-  "32px 76px 94px minmax(100px,190px) 155px 56px minmax(60px,1fr) 165px 168px 100px 148px";
+  "32px 76px 94px minmax(80px,160px) 108px 140px 56px minmax(60px,1fr) 165px 168px 100px 148px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
 const COL_HEADERS: Array<{ label: string; align: string; sortKey?: SortableCol }> = [
@@ -148,6 +157,7 @@ const COL_HEADERS: Array<{ label: string; align: string; sortKey?: SortableCol }
   { label: "Type",     align: "center" },
   { label: "Priorité", align: "center", sortKey: "priority"   },
   { label: "Client",   align: "left",   sortKey: "clientName" },
+  { label: "Tél.",     align: "left"                          },
   { label: "Secteur",  align: "left"   },
   { label: "Qté",      align: "center" },
   { label: "Note",     align: "left"   },
@@ -1262,7 +1272,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
       {/* ── Vue Archives ────────────────────────────────────────────────────── */}
       {showArchived && (
         <div className="overflow-auto flex-1">
-          <div style={{ minWidth: "1050px" }}>
+          <div style={{ minWidth: "1200px" }}>
             {loadingArchive ? (
               <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1286,6 +1296,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                       <div />
                       <div className="px-2.5 py-3 text-[11px] text-slate-400">{item.priority}</div>
                       <div className="px-2.5 py-3 text-[13px] font-medium text-slate-600 truncate">{item.clientName || <span className="text-slate-300 italic">—</span>}</div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400 font-mono truncate">{item.clientPhone || "—"}</div>
                       <div className="px-2.5 py-3">
                         {cfg ? (
                           <span className="flex items-center gap-1.5 text-[12px]">
@@ -1323,7 +1334,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
       <div className={cn("overflow-auto flex-1", showArchived && "hidden")}>
-        <div style={{ minWidth: "1050px" }}>
+        <div style={{ minWidth: "1200px" }}>
 
           {/* Column headers — sticky */}
           <div className="grid bg-[#f9f9fb] border-l-4 border-l-transparent sticky top-0 z-10" style={GRID_STYLE}>
@@ -1509,7 +1520,38 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         />
                       </div>
 
-                      {/* 4 · Secteur (feature 7 — juste après Client) */}
+                      {/* 4 · Tél. — numéro WhatsApp inline éditable */}
+                      <div className={CELL_WRAP}>
+                        {isEditingCell(item.id, "clientPhone") ? (
+                          <input
+                            type="tel"
+                            value={item.clientPhone ?? ""}
+                            autoFocus
+                            onChange={(e) => updateItem(item.id, "clientPhone", e.target.value)}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim() || null;
+                              setEditing(null);
+                              persist(item.id, { clientPhone: val });
+                            }}
+                            onKeyDown={(e) => handleKeyDown(e, item.id, "clientPhone")}
+                            className={cn(CELL_INPUT, "font-mono")}
+                            placeholder="+33…"
+                          />
+                        ) : (
+                          <div
+                            onClick={() => startEdit(item.id, "clientPhone", item.clientPhone ?? "")}
+                            className={cn(
+                              "w-full h-8 px-2 text-[12px] rounded-lg cursor-text font-mono",
+                              "flex items-center hover:bg-black/[0.03] transition-colors duration-100 select-none truncate",
+                              item.clientPhone ? "text-slate-700" : EMPTY_CLS,
+                            )}
+                          >
+                            {item.clientPhone || "+33…"}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 5 · Secteur (feature 7 — juste après Client) */}
                       <div className={CELL_WRAP}>
                         <SecteurPicker
                           value={item.color ?? ""}
@@ -1517,7 +1559,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         />
                       </div>
 
-                      {/* 5 · Quantité — input direct sans flèches (feature 5) */}
+                      {/* 6 · Quantité — input direct sans flèches (feature 5) */}
                       <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "quantity") ? (
                           <input
@@ -1550,7 +1592,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         )}
                       </div>
 
-                      {/* 6 · Note — textarea auto-expand, toutes les notes visibles */}
+                      {/* 7 · Note — textarea auto-expand, toutes les notes visibles */}
                       <div className="py-1 px-1.5 min-w-0 flex items-start">
                         <textarea
                           value={item.note}
@@ -1571,7 +1613,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         />
                       </div>
 
-                      {/* 7 · Échéance hybride JJ/MM + calendrier (feature 6) */}
+                      {/* 8 · Échéance hybride JJ/MM + calendrier (feature 6) */}
                       <div className={CELL_WRAP}>
                         <HybridDateInput
                           value={item.deadline}
@@ -1580,7 +1622,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         />
                       </div>
 
-                      {/* 8 · État */}
+                      {/* 9 · État */}
                       <div className={CELL_WRAP}>
                         <StatusPicker
                           value={item.status}
@@ -1588,7 +1630,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         />
                       </div>
 
-                      {/* 9 · Interne — clic droit sur le nom = filtre rapide */}
+                      {/* 10 · Interne — clic droit sur le nom = filtre rapide */}
                       <div className={CELL_WRAP}>
                         <div className="relative flex items-center gap-1">
                           <AppleSelect
@@ -1606,7 +1648,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                       </div>
 
 
-                      {/* 10 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
+                      {/* 11 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
                       <div className="h-full flex items-center justify-center gap-0.5 overflow-visible">
                         {/* Bouton QR code — génère un trackingId si absent */}
                         <button
@@ -1842,7 +1884,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 <>
                   <div className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
                     <QRCodeSVG
-                      value={`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem.trackingId}`}
+                      value={trackingUrl(qrItem.trackingId)}
                       size={180}
                       bgColor="#FFFFFF"
                       fgColor="#1D1D1F"
@@ -1854,12 +1896,11 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                     <p className="text-[10px] text-slate-400 mb-1.5 text-center">Lien de suivi</p>
                     <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
                       <span className="text-[11px] text-slate-600 truncate flex-1 font-mono">
-                        {`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem.trackingId}`}
+                        {trackingUrl(qrItem.trackingId)}
                       </span>
                       <button
                         onClick={() => {
-                          const url = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem!.trackingId}`;
-                          navigator.clipboard.writeText(url).catch(() => {});
+                          navigator.clipboard.writeText(trackingUrl(qrItem!.trackingId)).catch(() => {});
                         }}
                         className="text-[11px] font-medium text-blue-500 hover:text-blue-700 shrink-0 transition-colors"
                       >
@@ -1901,7 +1942,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 {qrItem.trackingId && (
                   <QRCodeCanvas
                     id="qr-dl-canvas"
-                    value={`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${qrItem.trackingId}`}
+                    value={trackingUrl(qrItem.trackingId)}
                     size={400}
                     bgColor="#FFFFFF"
                     fgColor="#1D1D1F"
@@ -1969,7 +2010,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                   votre commande est en cours de préparation chez Olda Studio ! 🎨<br /><br />
                   Suivez l&apos;avancement en temps réel ici :<br />
                   <span className="text-blue-600 font-mono text-[11px]">
-                    {`${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId ?? "..."}`}
+                    {trackingUrl(waItem.trackingId) || "…"}
                   </span>
                 </p>
               </div>
@@ -1984,9 +2025,9 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                     onClick={() => {
                       if (!waItem || !waPhone.trim()) return;
                       const phone = waPhone.replace(/\D/g, "");
-                      const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId}`;
+                      const url = trackingUrl(waItem.trackingId);
                       const msg = encodeURIComponent(
-                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${trackingUrl}`
+                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
                       );
                       // Protocole whatsapp:// → ouvre l'app desktop sur Mac et Windows
                       window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
@@ -2012,9 +2053,9 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                     onClick={() => {
                       if (!waItem || !waPhone.trim()) return;
                       const phone = waPhone.replace(/\D/g, "");
-                      const trackingUrl = `${process.env.NEXT_PUBLIC_BASE_URL ?? "https://dasholda.up.railway.app"}/track/${waItem.trackingId}`;
+                      const url = trackingUrl(waItem.trackingId);
                       const msg = encodeURIComponent(
-                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${trackingUrl}`
+                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
                       );
                       window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
                       saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());

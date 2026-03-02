@@ -635,52 +635,53 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
-  // ── Workflow items ──────────────────────────────────────────────────────────
+  // ── Workflow items : polling toutes les 5 s ────────────────────────────────
 
-  useEffect(() => {
+  const fetchWorkflowItems = useCallback(() => {
     fetch("/api/workflow-items")
       .then((r) => r.json())
-      .then((data) => {
-        setWorkflowItems(data.items ?? []);
-      })
+      .then((data) => { setWorkflowItems(data.items ?? []); })
       .catch(() => {});
   }, []);
 
-  // ── PRT items + polling badge DTF (toutes les 15 s pour loic et charlie) ────
-
   useEffect(() => {
+    fetchWorkflowItems();
+    const id = setInterval(fetchWorkflowItems, 5_000);
+    return () => clearInterval(id);
+  }, [fetchWorkflowItems]);
+
+  // ── PRT items : polling toutes les 5 s, pausé pendant la saisie ─────────────
+
+  const prtEditingRef = useRef(false);
+
+  const fetchPrtItems = useCallback(() => {
+    if (prtEditingRef.current) return; // pause while editing
     fetch("/api/prt-requests")
       .then((r) => r.json())
       .then((data) => {
-        const items = data.items ?? [];
-        setPrtItems(items);
-        setAllPrtItems(items);
-        prtCountRef.current = items.length;
+        if (prtEditingRef.current) return; // double-check au retour async
+        const newItems = data.items ?? [];
+        setAllPrtItems(newItems);
+        // Badge notification pour loic et charlie
+        const count = newItems.length;
+        const sess = sessionRef.current;
+        if (
+          sess &&
+          (sess.name === "loic" || sess.name === "charlie") &&
+          viewTabRef.current !== "demande_prt"
+        ) {
+          if (count > prtCountRef.current) setPrtHasNotif(true);
+        }
+        prtCountRef.current = count;
       })
       .catch(() => {});
   }, []);
 
-  // Polling léger : détecte les nouvelles demandes DTF pour loic et charlie
   useEffect(() => {
-    const id = setInterval(() => {
-      const sess = sessionRef.current;
-      if (!sess) return;
-      if (sess.name !== "loic" && sess.name !== "charlie") return;
-      if (viewTabRef.current === "demande_prt") return; // déjà visible
-      fetch("/api/prt-requests")
-        .then((r) => r.json())
-        .then((data) => {
-          const count = (data.items ?? []).length;
-          if (count > prtCountRef.current) {
-            setPrtHasNotif(true);
-            setAllPrtItems(data.items ?? []);
-          }
-          prtCountRef.current = count;
-        })
-        .catch(() => {});
-    }, 15_000);
+    fetchPrtItems();
+    const id = setInterval(fetchPrtItems, 5_000);
     return () => clearInterval(id);
-  }, []);
+  }, [fetchPrtItems]);
 
   // ── Planning items ─────────────────────────────────────────────────────────
   // Chargement initial + polling de secours toutes les 10 s.
@@ -875,7 +876,12 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} onNewRequest={handleNewPrtRequest} />
+          <PRTManager
+            items={allPrtItems}
+            onItemsChange={setAllPrtItems}
+            onNewRequest={handleNewPrtRequest}
+            onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
+          />
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}

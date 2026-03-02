@@ -399,7 +399,7 @@ export function WorkflowListColumn({
 ───────────────────────────────────────────── */
 interface WorkflowListsGridProps {
   items: WorkflowItem[];
-  onItemsChange?: (items: WorkflowItem[]) => void;
+  onItemsChange?: (value: WorkflowItem[] | ((prev: WorkflowItem[]) => WorkflowItem[])) => void;
   isLoading?: boolean;
 }
 
@@ -420,11 +420,14 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
     return groups;
   }, [items]);
 
+  // Functional updates — jamais de snapshot `items` obsolète
   const handleReorder = useCallback(
     async (listType: WorkflowItem["listType"], newItems: WorkflowItem[]) => {
       const updatedItems = newItems.map((item, idx) => ({ ...item, position: idx }));
-      const allItems = [...updatedItems, ...items.filter((i) => i.listType !== listType)];
-      onItemsChange?.(allItems);
+      onItemsChange?.((prev) => [
+        ...updatedItems,
+        ...prev.filter((i) => i.listType !== listType),
+      ]);
       try {
         await Promise.all(
           updatedItems.map((item) =>
@@ -439,12 +442,12 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
         console.error("Failed to save positions:", err);
       }
     },
-    [items, onItemsChange]
+    [onItemsChange]
   );
 
   const handleDelete = useCallback(
     async (itemId: string) => {
-      onItemsChange?.(items.filter((i) => i.id !== itemId));
+      onItemsChange?.((prev) => prev.filter((i) => i.id !== itemId));
       try {
         await fetch(`/api/workflow-items/${itemId}`, { method: "DELETE" });
       } catch {
@@ -453,12 +456,12 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
         onItemsChange?.(data.items ?? []);
       }
     },
-    [items, onItemsChange]
+    [onItemsChange]
   );
 
   const handleUpdate = useCallback(
     async (itemId: string, title: string) => {
-      onItemsChange?.(items.map((i) => (i.id === itemId ? { ...i, title } : i)));
+      onItemsChange?.((prev) => prev.map((i) => (i.id === itemId ? { ...i, title } : i)));
       try {
         await fetch(`/api/workflow-items/${itemId}`, {
           method: "PATCH",
@@ -471,7 +474,7 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
         onItemsChange?.(data.items ?? []);
       }
     },
-    [items, onItemsChange]
+    [onItemsChange]
   );
 
   const handleCreate = useCallback(
@@ -482,13 +485,17 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ listType, title }),
         });
+        if (!res.ok) throw new Error("API error");
         const data = await res.json();
-        onItemsChange?.([...items, data.item]);
+        if (data.item) {
+          // Functional update : plusieurs ajouts simultanés ne se perdent pas
+          onItemsChange?.((prev) => [...prev, data.item]);
+        }
       } catch (err) {
         console.error("Failed to create item:", err);
       }
     },
-    [items, onItemsChange]
+    [onItemsChange]
   );
 
   return (

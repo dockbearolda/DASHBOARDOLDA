@@ -5,25 +5,29 @@ import type { TrackingData } from "./page";
 
 // ── Mapping statuts → étapes visuelles ─────────────────────────────────────
 
-type StepKey = "received" | "production" | "quality" | "ready";
+type StepKey = "received" | "processing" | "production" | "done";
 
 const STATUS_TO_STEP: Record<string, StepKey> = {
+  // Commande reçue — état initial
   A_DEVISER:           "received",
-  ATTENTE_VALIDATION:  "received",
-  MAQUETTE_A_FAIRE:    "received",
-  ATTENTE_MARCHANDISE: "received",
-  MANQUE_INFORMATION:  "received",
-  A_PREPARER:          "production",
-  A_PRODUIRE:          "production",
+  // En traitement
+  ATTENTE_VALIDATION:  "processing",
+  MAQUETTE_A_FAIRE:    "processing",
+  ATTENTE_MARCHANDISE: "processing",
+  A_PREPARER:          "processing",
+  A_PRODUIRE:          "processing",
+  MANQUE_INFORMATION:  "processing",
+  // En production
   EN_PRODUCTION:       "production",
   A_MONTER_NETTOYER:   "production",
-  TERMINE:             "quality",
-  PREVENIR_CLIENT:     "quality",
-  CLIENT_PREVENU:      "ready",
-  RELANCE_CLIENT:      "ready",
-  PRODUIT_RECUPERE:    "ready",
-  A_FACTURER:          "ready",
-  FACTURE_FAITE:       "ready",
+  PREVENIR_CLIENT:     "production",
+  // Produit terminé
+  TERMINE:             "done",
+  CLIENT_PREVENU:      "done",
+  RELANCE_CLIENT:      "done",
+  PRODUIT_RECUPERE:    "done",
+  A_FACTURER:          "done",
+  FACTURE_FAITE:       "done",
 };
 
 const STEPS: { key: StepKey; label: string; sublabel: string; icon: string }[] = [
@@ -34,20 +38,20 @@ const STEPS: { key: StepKey; label: string; sublabel: string; icon: string }[] =
     icon:     "✓",
   },
   {
+    key:      "processing",
+    label:    "En traitement",
+    sublabel: "Votre commande est en cours de préparation",
+    icon:     "◷",
+  },
+  {
     key:      "production",
     label:    "En production",
     sublabel: "Votre commande est en cours de fabrication",
     icon:     "⚙",
   },
   {
-    key:      "quality",
-    label:    "Contrôle qualité",
-    sublabel: "Vérification finale avant remise",
-    icon:     "◎",
-  },
-  {
-    key:      "ready",
-    label:    "Prête à récupérer",
+    key:      "done",
+    label:    "Produit terminé",
     sublabel: "Votre commande est prête !",
     icon:     "★",
   },
@@ -55,9 +59,9 @@ const STEPS: { key: StepKey; label: string; sublabel: string; icon: string }[] =
 
 const STEP_INDEX: Record<StepKey, number> = {
   received:   0,
-  production: 1,
-  quality:    2,
-  ready:      3,
+  processing: 1,
+  production: 2,
+  done:       3,
 };
 
 function getActiveStep(status: string): number {

@@ -215,6 +215,7 @@ model AchatTextile {
   quantite    Int      @default(1)
   livraison   String   @default("")    // "chronopost" | "maritime" | "sas_us"
   sessionUser String   @default("")
+  archived    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -236,6 +237,7 @@ model PlanningItem {
   responsible String           @default("")
   color       String           @default("")
   position    Int              @default(0)
+  archived    Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 

@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, Trash2, Loader2, Copy, X } from "lucide-react";
+import { Plus, Trash2, Loader2, Copy, X, Archive, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -75,10 +75,11 @@ function fmtDate(iso: string): string {
 // ── Composant ─────────────────────────────────────────────────────────────────
 
 interface AchatTextileTableProps {
-  activeUser?: string;
+  activeUser?:     string;
+  refreshTrigger?: number;
 }
 
-export function AchatTextileTable({ activeUser }: AchatTextileTableProps) {
+export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTableProps) {
   const [rows,    setRows]    = useState<AchatTextileRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -87,6 +88,45 @@ export function AchatTextileTable({ activeUser }: AchatTextileTableProps) {
   const [isQuickAdding, setIsQuickAdding] = useState(false);
   const [quickDraft,    setQuickDraft]    = useState("");
   const quickAddRef = useRef<HTMLInputElement>(null);
+
+  // ── Archive ───────────────────────────────────────────────────────────────
+  const [showArchived,   setShowArchived]   = useState(false);
+  const [archiveRows,    setArchiveRows]    = useState<AchatTextileRow[]>([]);
+  const [loadingArchive, setLoadingArchive] = useState(false);
+
+  const fetchArchived = useCallback(async () => {
+    setLoadingArchive(true);
+    try {
+      const res  = await fetch("/api/achat-textile?archived=true");
+      const data = await res.json();
+      setArchiveRows(data.rows ?? []);
+    } catch { /* ignore */ }
+    finally { setLoadingArchive(false); }
+  }, []);
+
+  const archiveRow = useCallback(async (id: string) => {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    try {
+      await fetch(`/api/achat-textile/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ archived: true }),
+      });
+    } catch { /* ignore */ }
+  }, []);
+
+  const restoreRow = useCallback(async (id: string) => {
+    setArchiveRows((prev) => prev.filter((r) => r.id !== id));
+    try {
+      const res  = await fetch(`/api/achat-textile/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ archived: false }),
+      });
+      const data = await res.json();
+      if (data.row) setRows((prev) => [data.row, ...prev]);
+    } catch { /* ignore */ }
+  }, []);
 
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -100,6 +140,15 @@ export function AchatTextileTable({ activeUser }: AchatTextileTableProps) {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // Rafraîchir quand refreshTrigger change (ex: création depuis Planning)
+  useEffect(() => {
+    if (!refreshTrigger) return;
+    fetch("/api/achat-textile")
+      .then(r => r.json())
+      .then(d => setRows(d.rows ?? []))
+      .catch(() => {});
+  }, [refreshTrigger]);
 
   useEffect(() => {
     const refs = debounceRefs.current;
@@ -249,6 +298,29 @@ export function AchatTextileTable({ activeUser }: AchatTextileTableProps) {
           <span>Ajouter une commande</span>
         </button>
       )}
+
+      <div className="flex-1" />
+
+      {/* Bouton Archives */}
+      <button
+        onClick={() => {
+          if (showArchived) {
+            setShowArchived(false);
+          } else {
+            setShowArchived(true);
+            fetchArchived();
+          }
+        }}
+        className={cn(
+          "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-[80ms]",
+          showArchived
+            ? "bg-amber-50 text-amber-600 border border-amber-200"
+            : "bg-slate-100/80 text-slate-500 hover:bg-amber-50 hover:text-amber-500 border border-transparent",
+        )}
+      >
+        <Archive className="h-3 w-3" />
+        Archives
+      </button>
     </div>
   );
 
@@ -278,7 +350,60 @@ export function AchatTextileTable({ activeUser }: AchatTextileTableProps) {
       bodyClassName="overflow-auto flex-1 min-h-0"
       minWidth={MIN_WIDTH}
     >
-      {loading ? (
+      {/* ── Vue Archives ─────────────────────────────────────────────────── */}
+      {showArchived ? (
+        loadingArchive ? (
+          <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Chargement…
+          </div>
+        ) : archiveRows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-center select-none">
+            <Archive className="h-8 w-8 text-slate-200" />
+            <p className="text-[13px] text-slate-400">Aucune commande archivée</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-50">
+            {archiveRows.map(row => {
+              const livr = getLivraison(row.livraison);
+              return (
+                <div
+                  key={row.id}
+                  className="grid items-center bg-amber-50/30 hover:bg-amber-50/60 transition-colors group"
+                  style={{ ...GRID_STYLE, minWidth: MIN_WIDTH }}
+                >
+                  <div className={cn(CELL, "text-[13px] text-slate-500 truncate")}>{row.client || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400 truncate")}>{row.fournisseur || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400")}>{row.marque}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400")}>{row.genre || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400 truncate")}>{row.designation || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400 truncate")}>{row.reference || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400 truncate")}>{row.couleur || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400")}>{row.taille || "—"}</div>
+                  <div className={cn(CELL, "text-[13px] text-slate-400 text-center")}>{row.quantite}</div>
+                  <div className={CELL}>
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md" style={{ backgroundColor: livr.bg, color: livr.text }}>
+                      {livr.label}
+                    </span>
+                  </div>
+                  <div className={cn(CELL, "text-[12px] text-slate-400 capitalize")}>{row.sessionUser || "—"}</div>
+                  <div className={cn(CELL, "text-[12px] text-slate-400")}>{row.createdAt ? fmtDate(row.createdAt) : "—"}</div>
+                  <div className="flex items-center justify-center gap-1 px-2">
+                    <button
+                      onClick={() => restoreRow(row.id)}
+                      className="flex items-center gap-1 h-7 px-2 rounded-lg text-[11px] font-semibold text-amber-600 hover:bg-amber-100 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Restaurer"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Restaurer</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : loading ? (
         <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
           <Loader2 className="h-4 w-4 animate-spin" />
           Chargement…
@@ -405,14 +530,21 @@ export function AchatTextileTable({ activeUser }: AchatTextileTableProps) {
                   {row.createdAt ? fmtDate(row.createdAt) : "—"}
                 </div>
 
-                {/* Actions : dupliquer + supprimer */}
-                <div className="flex items-center justify-center gap-1 px-2">
+                {/* Actions : dupliquer + archiver + supprimer */}
+                <div className="flex items-center justify-center gap-0.5 px-1">
                   <button
                     onClick={() => duplicateRow(row)}
                     className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100"
                     title="Dupliquer"
                   >
                     <Copy className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => archiveRow(row.id)}
+                    className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Archiver"
+                  >
+                    <Archive className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => deleteRow(row.id)}

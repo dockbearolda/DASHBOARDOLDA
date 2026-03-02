@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/achat-textile
-export async function GET() {
+// GET /api/achat-textile — (?archived=true for archive view)
+export async function GET(req: NextRequest) {
   try {
+    const archived = req.nextUrl.searchParams.get("archived") === "true";
     const rows = await prisma.achatTextile.findMany({
+      where: { archived },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ rows });
@@ -14,14 +16,25 @@ export async function GET() {
   }
 }
 
-// POST /api/achat-textile — créer une ligne vide avec la session courante
+// POST /api/achat-textile — créer une ligne avec session et champs optionnels pré-remplis
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { sessionUser = "" } = body;
+    const {
+      sessionUser = "",
+      client      = "",
+      designation = "",
+      quantite,
+    } = body;
 
     const row = await prisma.achatTextile.create({
-      data: { sessionUser, marque: "-", quantite: 0 },
+      data: {
+        sessionUser,
+        client,
+        designation,
+        quantite: quantite ? parseInt(quantite) : 0,
+        marque: "-",
+      },
     });
     return NextResponse.json({ row }, { status: 201 });
   } catch (err) {

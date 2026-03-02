@@ -23,6 +23,7 @@ export async function PATCH(
       responsible,
       color,
       position,
+      archived,
     } = body;
 
     const updateData: Record<string, unknown> = {};
@@ -38,6 +39,7 @@ export async function PATCH(
     if (responsible !== undefined) updateData.responsible = responsible;
     if (color !== undefined) updateData.color = color;
     if (position !== undefined) updateData.position = position;
+    if (archived !== undefined) updateData.archived = archived;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });

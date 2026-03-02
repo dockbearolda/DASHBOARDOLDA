@@ -10,7 +10,7 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
 
-    const ALLOWED = ["client", "fournisseur", "marque", "genre", "designation", "reference", "couleur", "taille", "quantite", "livraison", "sessionUser"];
+    const ALLOWED = ["client", "fournisseur", "marque", "genre", "designation", "reference", "couleur", "taille", "quantite", "livraison", "sessionUser", "archived"];
     const data: Record<string, unknown> = {};
     for (const key of ALLOWED) {
       if (body[key] !== undefined) {

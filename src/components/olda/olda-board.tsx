@@ -456,6 +456,26 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [wasExpired, setWasExpired]         = useState(false);
 
+  // ── Achat Textile : trigger refresh + lien depuis Planning ────────────────
+  const [achatRefreshTrigger, setAchatRefreshTrigger] = useState(0);
+
+  const handleCreateAchatFromPlanning = useCallback(async (item: PlanningItem) => {
+    try {
+      await fetch("/api/achat-textile", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          client:      item.clientName,
+          designation: item.designation,
+          quantite:    item.quantity,
+          sessionUser: session?.name ?? "",
+        }),
+      });
+      setAchatRefreshTrigger((t) => t + 1);
+      setViewTab("achat_textile");
+    } catch { /* ignore */ }
+  }, [session]);
+
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
 
@@ -877,6 +897,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             items={planningItems}
             onItemsChange={setPlanningItems}
             onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
+            onCreateAchatFromPlanning={handleCreateAchatFromPlanning}
           />
         </div>
 
@@ -895,7 +916,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE ACHAT TEXTILE — Tableau des commandes textile ════════════════ */}
         <div className={cn(viewTab !== 'achat_textile' && 'hidden', 'h-full')}>
-          <AchatTextileTable activeUser={session.name} />
+          <AchatTextileTable activeUser={session.name} refreshTrigger={achatRefreshTrigger} />
         </div>
 
 

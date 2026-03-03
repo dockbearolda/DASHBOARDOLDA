@@ -1946,30 +1946,60 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         "focus:outline-none transition-all",
                       )}
                     />
-                    <button
-                      disabled={!qrPhone.trim()}
-                      onClick={() => {
-                        if (!qrItem || !qrPhone.trim()) return;
-                        const phone = qrPhone.replace(/\D/g, "");
-                        const url   = trackingUrl(qrItem.trackingId);
-                        const msg   = encodeURIComponent(
-                          `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
-                        );
-                        window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
-                        saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
-                        if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
-                        setTimeout(() => setQrItem(null), 300);
-                      }}
-                      className={cn(
-                        "w-full h-9 rounded-xl text-[13px] font-semibold",
-                        "transition-all duration-150 active:scale-[0.98]",
-                        qrPhone.trim()
-                          ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                          : "bg-slate-100 text-slate-300 cursor-not-allowed",
-                      )}
-                    >
-                      💬 WhatsApp
-                    </button>
+                    <div className="flex gap-2">
+                      {/* App desktop via protocole whatsapp:// — Windows */}
+                      <button
+                        disabled={!qrPhone.trim()}
+                        title="Ouvre l'application WhatsApp installée (Windows)"
+                        onClick={() => {
+                          if (!qrItem || !qrPhone.trim()) return;
+                          const phone = qrPhone.replace(/\D/g, "");
+                          const url   = trackingUrl(qrItem.trackingId);
+                          const msg   = encodeURIComponent(
+                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                          );
+                          window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
+                          saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
+                          if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
+                          setTimeout(() => setQrItem(null), 400);
+                        }}
+                        className={cn(
+                          "flex-1 h-9 rounded-xl text-[12px] font-semibold",
+                          "transition-all duration-150 active:scale-[0.98]",
+                          qrPhone.trim()
+                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                            : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                        )}
+                      >
+                        💻 App
+                      </button>
+                      {/* WhatsApp Web — universel, fonctionne sur Mac et PC */}
+                      <button
+                        disabled={!qrPhone.trim()}
+                        title="Ouvre WhatsApp Web dans le navigateur (universel)"
+                        onClick={() => {
+                          if (!qrItem || !qrPhone.trim()) return;
+                          const phone = qrPhone.replace(/\D/g, "");
+                          const url   = trackingUrl(qrItem.trackingId);
+                          const msg   = encodeURIComponent(
+                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                          );
+                          window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                          saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
+                          if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
+                          setTimeout(() => setQrItem(null), 400);
+                        }}
+                        className={cn(
+                          "flex-1 h-9 rounded-xl text-[12px] font-semibold",
+                          "transition-all duration-150 active:scale-[0.98]",
+                          qrPhone.trim()
+                            ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                            : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                        )}
+                      >
+                        🌐 Web
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

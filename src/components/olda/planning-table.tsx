@@ -732,6 +732,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
   const [filterUrgent,    setFilterUrgent]    = useState(false);
   const [newRowId,        setNewRowId]        = useState<string | null>(null);
   const [qrItem,          setQrItem]          = useState<PlanningItem | null>(null);
+  const [qrPhone,         setQrPhone]         = useState("");
   const [waItem,          setWaItem]          = useState<PlanningItem | null>(null);
   const [waPhone,         setWaPhone]         = useState("");
   const confirmDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1654,11 +1655,12 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         <button
                           onClick={async () => {
                             if (!item.trackingId) {
-                              // Générer un UUID et le sauvegarder en base
                               const newId = crypto.randomUUID();
                               saveNow(item.id, "trackingId", newId);
+                              setQrPhone(item.clientPhone ?? "");
                               setQrItem({ ...item, trackingId: newId });
                             } else {
+                              setQrPhone(item.clientPhone ?? "");
                               setQrItem(item);
                             }
                           }}
@@ -1927,6 +1929,48 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                   >
                     Télécharger PNG
                   </button>
+
+                  {/* ── Envoi WhatsApp depuis la modal QR ── */}
+                  <div className="w-full border-t border-slate-100 pt-4 flex flex-col gap-2">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">
+                      Envoyer le lien
+                    </p>
+                    <input
+                      type="tel"
+                      value={qrPhone}
+                      onChange={(e) => setQrPhone(e.target.value)}
+                      placeholder="+33612345678"
+                      className={cn(
+                        "w-full h-9 px-3 text-[13px] rounded-xl font-mono",
+                        "border border-slate-200 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100/70",
+                        "focus:outline-none transition-all",
+                      )}
+                    />
+                    <button
+                      disabled={!qrPhone.trim()}
+                      onClick={() => {
+                        if (!qrItem || !qrPhone.trim()) return;
+                        const phone = qrPhone.replace(/\D/g, "");
+                        const url   = trackingUrl(qrItem.trackingId);
+                        const msg   = encodeURIComponent(
+                          `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                        );
+                        window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
+                        saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
+                        if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
+                        setTimeout(() => setQrItem(null), 300);
+                      }}
+                      className={cn(
+                        "w-full h-9 rounded-xl text-[13px] font-semibold",
+                        "transition-all duration-150 active:scale-[0.98]",
+                        qrPhone.trim()
+                          ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                          : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                      )}
+                    >
+                      💬 WhatsApp
+                    </button>
+                  </div>
                 </>
               )}
 

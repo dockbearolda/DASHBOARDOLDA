@@ -1931,7 +1931,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         const msg   = encodeURIComponent(
                           `Bonjour,\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
                         );
-                        window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                        window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
                         saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
                         if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
                         setTimeout(() => setQrItem(null), 400);
@@ -2037,7 +2037,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
               {/* Boutons */}
               <div className="flex flex-col gap-2">
-                {/* Envoyer via wa.me (universel : iPhone, Android, Mac, WhatsApp Web) */}
+                {/* Envoyer via whatsapp:// — ouvre l'app desktop (Mac / Windows) */}
                 <button
                   disabled={!waPhone.trim()}
                   title="Envoyer sur WhatsApp"
@@ -2048,10 +2048,10 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                     const msg = encodeURIComponent(
                       `Bonjour,\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
                     );
-                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                    window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
                     saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
                     if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
-                    setWaItem(null);
+                    setTimeout(() => setWaItem(null), 400);
                   }}
                   className={cn(
                     "w-full h-10 rounded-xl text-[13px] font-medium",

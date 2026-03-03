@@ -1651,30 +1651,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
                       {/* 11 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
                       <div className="h-full flex items-center justify-center gap-0.5 overflow-visible">
-                        {/* Bouton QR code — génère un trackingId si absent */}
-                        <button
-                          onClick={async () => {
-                            if (!item.trackingId) {
-                              const newId = crypto.randomUUID();
-                              saveNow(item.id, "trackingId", newId);
-                              setQrPhone(item.clientPhone ?? "");
-                              setQrItem({ ...item, trackingId: newId });
-                            } else {
-                              setQrPhone(item.clientPhone ?? "");
-                              setQrItem(item);
-                            }
-                          }}
-                          title="Voir le QR code et le lien de suivi"
-                          className={cn(
-                            "p-1.5 rounded-md transition-[color,background-color] duration-150",
-                            "opacity-0 group-hover:opacity-100",
-                            "text-slate-300 hover:text-blue-500 hover:bg-blue-50",
-                          )}
-                          aria-label="QR code de suivi"
-                        >
-                          <QrCode className="h-3.5 w-3.5" />
-                        </button>
-
                         {/* Bouton WhatsApp */}
                         <button
                           onClick={() => {
@@ -1947,16 +1923,16 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                       )}
                     />
                     <div className="flex gap-2">
-                      {/* App desktop via protocole whatsapp:// — Windows */}
+                      {/* App PC — protocole whatsapp:// (Windows) */}
                       <button
                         disabled={!qrPhone.trim()}
-                        title="Ouvre l'application WhatsApp installée (Windows)"
+                        title="Ouvre l'application WhatsApp sur PC Windows"
                         onClick={() => {
                           if (!qrItem || !qrPhone.trim()) return;
                           const phone = qrPhone.replace(/\D/g, "");
                           const url   = trackingUrl(qrItem.trackingId);
                           const msg   = encodeURIComponent(
-                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
                           );
                           window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
                           saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
@@ -1973,16 +1949,16 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                       >
                         💻 App
                       </button>
-                      {/* WhatsApp Web — universel, fonctionne sur Mac et PC */}
+                      {/* iPhone / Mac / Web — wa.me ouvre l'app sur mobile */}
                       <button
                         disabled={!qrPhone.trim()}
-                        title="Ouvre WhatsApp Web dans le navigateur (universel)"
+                        title="Ouvre WhatsApp sur iPhone, Mac, ou dans le navigateur"
                         onClick={() => {
                           if (!qrItem || !qrPhone.trim()) return;
                           const phone = qrPhone.replace(/\D/g, "");
                           const url   = trackingUrl(qrItem.trackingId);
                           const msg   = encodeURIComponent(
-                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
                           );
                           window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
                           saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
@@ -1997,7 +1973,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                             : "bg-slate-100 text-slate-300 cursor-not-allowed",
                         )}
                       >
-                        🌐 Web
+                        📱 iPhone
                       </button>
                     </div>
                   </div>
@@ -2081,7 +2057,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 <p className="text-[11px] font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Aperçu du message</p>
                 <p className="text-[13px] text-slate-700 leading-relaxed">
                   Bonjour {waItem.clientName || ""},<br />
-                  votre commande est en cours de préparation chez Olda Studio ! 🎨<br /><br />
+                  votre commande est en cours de préparation chez Atelier OLDA !<br />
                   Suivez l&apos;avancement en temps réel ici :<br />
                   <span className="text-blue-600 font-mono text-[11px]">
                     {trackingUrl(waItem.trackingId) || "…"}
@@ -2093,19 +2069,18 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
               <div className="flex flex-col gap-2">
                 {/* Ligne 1 : App Desktop + Web */}
                 <div className="flex gap-2">
-                  {/* Ouvrir l'app WhatsApp (Mac / PC) via deep link whatsapp:// */}
+                  {/* App PC — protocole whatsapp:// (Windows avec app installée) */}
                   <button
                     disabled={!waPhone.trim()}
+                    title="Ouvre l'application WhatsApp sur PC Windows"
                     onClick={() => {
                       if (!waItem || !waPhone.trim()) return;
                       const phone = waPhone.replace(/\D/g, "");
                       const url = trackingUrl(waItem.trackingId);
                       const msg = encodeURIComponent(
-                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
                       );
-                      // Protocole whatsapp:// → ouvre l'app desktop sur Mac et Windows
                       window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
-                      // Enregistrer
                       saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
                       if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
                       setTimeout(() => setWaItem(null), 300);
@@ -2118,18 +2093,19 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         : "bg-slate-100 text-slate-300 cursor-not-allowed",
                     )}
                   >
-                    💻 App WhatsApp
+                    💻 App PC
                   </button>
 
-                  {/* Ouvrir WhatsApp Web dans le navigateur */}
+                  {/* iPhone / Mac / Web — wa.me ouvre l'app sur mobile ou WhatsApp Web */}
                   <button
                     disabled={!waPhone.trim()}
+                    title="Ouvre WhatsApp sur iPhone, Mac, ou dans le navigateur"
                     onClick={() => {
                       if (!waItem || !waPhone.trim()) return;
                       const phone = waPhone.replace(/\D/g, "");
                       const url = trackingUrl(waItem.trackingId);
                       const msg = encodeURIComponent(
-                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Olda Studio ! 🎨\n\nSuivez l'avancement ici :\n${url}`
+                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
                       );
                       window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
                       saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
@@ -2144,7 +2120,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         : "bg-slate-100 text-slate-300 cursor-not-allowed",
                     )}
                   >
-                    🌐 WhatsApp Web ↗
+                    📱 iPhone / Web
                   </button>
                 </div>
 

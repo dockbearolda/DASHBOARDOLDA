@@ -12,15 +12,23 @@ const PUBLIC_PREFIXES = [
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const token = request.cookies.get("olda-session")?.value;
+  const isLoggedIn = token ? await verifyToken(token) : false;
 
-  // Laisser passer les routes publiques
+  // Déjà connecté → rediriger /login vers le dashboard directement
+  if (pathname.startsWith("/login") && isLoggedIn) {
+    const dashboard = request.nextUrl.clone();
+    dashboard.pathname = "/dashboard/olda";
+    return NextResponse.redirect(dashboard);
+  }
+
+  // Routes publiques (suivi client, auth)
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // Vérifier le cookie de session HMAC
-  const token = request.cookies.get("olda-session")?.value;
-  if (!token || !(await verifyToken(token))) {
+  // Routes protégées — vérifier la session
+  if (!isLoggedIn) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);

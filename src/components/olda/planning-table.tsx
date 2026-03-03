@@ -1922,60 +1922,30 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         "focus:outline-none transition-all",
                       )}
                     />
-                    <div className="flex gap-2">
-                      {/* App PC — protocole whatsapp:// (Windows) */}
-                      <button
-                        disabled={!qrPhone.trim()}
-                        title="Ouvre l'application WhatsApp sur PC Windows"
-                        onClick={() => {
-                          if (!qrItem || !qrPhone.trim()) return;
-                          const phone = qrPhone.replace(/\D/g, "");
-                          const url   = trackingUrl(qrItem.trackingId);
-                          const msg   = encodeURIComponent(
-                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
-                          );
-                          window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
-                          saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
-                          if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
-                          setTimeout(() => setQrItem(null), 400);
-                        }}
-                        className={cn(
-                          "flex-1 h-9 rounded-xl text-[12px] font-semibold",
-                          "transition-all duration-150 active:scale-[0.98]",
-                          qrPhone.trim()
-                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                            : "bg-slate-100 text-slate-300 cursor-not-allowed",
-                        )}
-                      >
-                        💻 App
-                      </button>
-                      {/* iPhone / Mac / Web — wa.me ouvre l'app sur mobile */}
-                      <button
-                        disabled={!qrPhone.trim()}
-                        title="Ouvre WhatsApp sur iPhone, Mac, ou dans le navigateur"
-                        onClick={() => {
-                          if (!qrItem || !qrPhone.trim()) return;
-                          const phone = qrPhone.replace(/\D/g, "");
-                          const url   = trackingUrl(qrItem.trackingId);
-                          const msg   = encodeURIComponent(
-                            `Bonjour ${qrItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
-                          );
-                          window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-                          saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
-                          if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
-                          setTimeout(() => setQrItem(null), 400);
-                        }}
-                        className={cn(
-                          "flex-1 h-9 rounded-xl text-[12px] font-semibold",
-                          "transition-all duration-150 active:scale-[0.98]",
-                          qrPhone.trim()
-                            ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                            : "bg-slate-100 text-slate-300 cursor-not-allowed",
-                        )}
-                      >
-                        📱 iPhone
-                      </button>
-                    </div>
+                    <button
+                      disabled={!qrPhone.trim()}
+                      onClick={() => {
+                        if (!qrItem || !qrPhone.trim()) return;
+                        const phone = qrPhone.replace(/\D/g, "");
+                        const url   = trackingUrl(qrItem.trackingId);
+                        const msg   = encodeURIComponent(
+                          `Bonjour,\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
+                        );
+                        window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                        saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
+                        if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
+                        setTimeout(() => setQrItem(null), 400);
+                      }}
+                      className={cn(
+                        "w-full h-9 rounded-xl text-[13px] font-semibold",
+                        "transition-all duration-150 active:scale-[0.98]",
+                        qrPhone.trim()
+                          ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                          : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                      )}
+                    >
+                      📱 Envoyer sur WhatsApp
+                    </button>
                   </div>
                 </>
               )}
@@ -2056,7 +2026,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
               <div className="bg-emerald-50 rounded-xl p-3.5 border border-emerald-100">
                 <p className="text-[11px] font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Aperçu du message</p>
                 <p className="text-[13px] text-slate-700 leading-relaxed">
-                  Bonjour {waItem.clientName || ""},<br />
+                  Bonjour,<br />
                   votre commande est en cours de préparation chez Atelier OLDA !<br />
                   Suivez l&apos;avancement en temps réel ici :<br />
                   <span className="text-blue-600 font-mono text-[11px]">
@@ -2067,64 +2037,34 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
               {/* Boutons */}
               <div className="flex flex-col gap-2">
-                {/* Ligne 1 : App Desktop + Web */}
-                <div className="flex gap-2">
-                  {/* App PC — protocole whatsapp:// (Windows avec app installée) */}
-                  <button
-                    disabled={!waPhone.trim()}
-                    title="Ouvre l'application WhatsApp sur PC Windows"
-                    onClick={() => {
-                      if (!waItem || !waPhone.trim()) return;
-                      const phone = waPhone.replace(/\D/g, "");
-                      const url = trackingUrl(waItem.trackingId);
-                      const msg = encodeURIComponent(
-                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
-                      );
-                      window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
-                      saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
-                      if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
-                      setTimeout(() => setWaItem(null), 300);
-                    }}
-                    className={cn(
-                      "flex-1 h-10 rounded-xl text-[13px] font-medium",
-                      "transition-all duration-150 active:scale-[0.98]",
-                      waPhone.trim()
-                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                        : "bg-slate-100 text-slate-300 cursor-not-allowed",
-                    )}
-                  >
-                    💻 App PC
-                  </button>
+                {/* Envoyer via wa.me (universel : iPhone, Android, Mac, WhatsApp Web) */}
+                <button
+                  disabled={!waPhone.trim()}
+                  title="Envoyer sur WhatsApp"
+                  onClick={() => {
+                    if (!waItem || !waPhone.trim()) return;
+                    const phone = waPhone.replace(/\D/g, "");
+                    const url = trackingUrl(waItem.trackingId);
+                    const msg = encodeURIComponent(
+                      `Bonjour,\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
+                    );
+                    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+                    saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
+                    if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
+                    setWaItem(null);
+                  }}
+                  className={cn(
+                    "w-full h-10 rounded-xl text-[13px] font-medium",
+                    "transition-all duration-150 active:scale-[0.98]",
+                    waPhone.trim()
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                  )}
+                >
+                  📱 Envoyer sur WhatsApp
+                </button>
 
-                  {/* iPhone / Mac / Web — wa.me ouvre l'app sur mobile ou WhatsApp Web */}
-                  <button
-                    disabled={!waPhone.trim()}
-                    title="Ouvre WhatsApp sur iPhone, Mac, ou dans le navigateur"
-                    onClick={() => {
-                      if (!waItem || !waPhone.trim()) return;
-                      const phone = waPhone.replace(/\D/g, "");
-                      const url = trackingUrl(waItem.trackingId);
-                      const msg = encodeURIComponent(
-                        `Bonjour ${waItem.clientName || ""},\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
-                      );
-                      window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
-                      saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
-                      if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
-                      setWaItem(null);
-                    }}
-                    className={cn(
-                      "flex-1 h-10 rounded-xl text-[13px] font-medium",
-                      "transition-all duration-150 active:scale-[0.98]",
-                      waPhone.trim()
-                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                        : "bg-slate-100 text-slate-300 cursor-not-allowed",
-                    )}
-                  >
-                    📱 iPhone / Web
-                  </button>
-                </div>
-
-                {/* Ligne 2 : Annuler */}
+                {/* Annuler */}
                 <button
                   onClick={() => setWaItem(null)}
                   className={cn(

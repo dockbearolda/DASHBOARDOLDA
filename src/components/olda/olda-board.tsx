@@ -12,7 +12,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Order, OrderStatus, WorkflowItem } from "@/types/order";
-import { Inbox, Pencil, Layers, Phone, RefreshCw, Plus, LogOut } from "lucide-react";
+import { Inbox, Pencil, Layers, Phone, RefreshCw, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
@@ -59,21 +59,6 @@ interface OldaSession {
   loginAt: string;
 }
 
-/** Retourne le timestamp d'expiration selon le créneau de connexion. */
-function getExpiryTs(loginAt: Date): number {
-  const h = loginAt.getHours();
-  const d = new Date(loginAt);
-  if (h < 7) {
-    d.setHours(7, 0, 0, 0);          // nuit → expire à 07h00 ce matin
-  } else if (h < 13) {
-    d.setHours(13, 0, 0, 0);         // matin → expire à 13h00
-  } else {
-    d.setDate(d.getDate() + 1);
-    d.setHours(7, 0, 0, 0);          // après-midi → expire à 07h00 demain
-  }
-  return d.getTime();
-}
-
 function readSession(): OldaSession | null {
   if (typeof window === "undefined") return null;
   try {
@@ -82,8 +67,9 @@ function readSession(): OldaSession | null {
   } catch { return null; }
 }
 
-function isSessionExpired(s: OldaSession): boolean {
-  return Date.now() >= getExpiryTs(new Date(s.loginAt));
+/** Session permanente — pas d'expiration temporelle */
+function isSessionExpired(_s: OldaSession): boolean {
+  return false;
 }
 
 function saveSession(name: string): OldaSession {
@@ -106,7 +92,7 @@ const PERSON_DISPLAY: [string, string][] = [
 
 // ── Écran de connexion glassmorphism ──────────────────────────────────────────
 
-function LoginScreen({ onLogin, wasExpired }: { onLogin: (name: string) => void; wasExpired: boolean }) {
+function LoginScreen({ onLogin }: { onLogin: (name: string) => void }) {
   const now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
   return (
@@ -151,10 +137,7 @@ function LoginScreen({ onLogin, wasExpired }: { onLogin: (name: string) => void;
             OLDA Studio
           </p>
           <p style={{ fontSize: 17, fontWeight: 600, color: "#1d1d1f", lineHeight: 1.4, marginBottom: 4 }}>
-            {wasExpired ? "Nouvelle session de travail." : "Bonjour !"}
-          </p>
-          <p style={{ fontSize: 15, color: "#6e6e73" }}>
-            Quel est votre nom ?
+            Qui êtes-vous ?
           </p>
         </div>
 
@@ -439,10 +422,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     setViewTab("commandes");
   };
 
-  // ── Session temporelle ────────────────────────────────────────────────────
+  // ── Session ───────────────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [wasExpired, setWasExpired]         = useState(false);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -493,47 +475,20 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     const s = readSession();
     if (s && !isSessionExpired(s)) {
       setSession(s);
-    } else if (s) {
-      // Session présente mais expirée → force re-connexion
-      clearSession();
-      setWasExpired(true);
     }
     setSessionChecked(true);
   }, []); // exécuté une seule fois au montage
 
   useEffect(() => { refreshOrders(); }, [refreshOrders]);
 
-  // Vérification session + rechargement commandes au retour de mise en veille
+  // Rechargement commandes au retour de mise en veille
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        // Priorité : vérifie l'expiration temporelle avant tout refresh
-        const s = readSession();
-        if (!s || isSessionExpired(s)) {
-          clearSession();
-          setWasExpired(true);
-          setSession(null);
-          return; // ne pas rafraîchir si session invalide
-        }
-        refreshOrders();
-      }
+      if (document.visibilityState === "visible") refreshOrders();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refreshOrders]);
-
-  // Vérification périodique (60 s) — si l'onglet reste ouvert à cheval sur 07h00 ou 13h00
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const s = readSession();
-      if (s && isSessionExpired(s)) {
-        clearSession();
-        setWasExpired(true);
-        setSession(null);
-      }
-    }, 60_000);
-    return () => clearInterval(timer);
-  }, []); // pas de dépendances — stable pour toute la durée du composant
 
   // ── SSE subscription ───────────────────────────────────────────────────────
 
@@ -651,17 +606,10 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     return () => clearInterval(id);
   }, [fetchPlanning]);
 
-  // ── Connexion / Déconnexion ────────────────────────────────────────────────
+  // ── Connexion ─────────────────────────────────────────────────────────────
   const handleLogin = useCallback((name: string) => {
     const s = saveSession(name);
     setSession(s);
-    setWasExpired(false);
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    clearSession();
-    setSession(null);
-    setWasExpired(false);
   }, []);
 
   // ── Suppression d'une commande (optimistic) ───────────────────────────────
@@ -695,7 +643,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   // Attend la lecture localStorage pour éviter un flash de l'écran de connexion
   if (!sessionChecked) return null;
   // Session absente ou expirée → écran glassmorphism
-  if (!session) return <LoginScreen onLogin={handleLogin} wasExpired={wasExpired} />;
+  if (!session) return <LoginScreen onLogin={handleLogin} />;
 
   return (
     <div
@@ -735,23 +683,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             </button>
           )}
         </div>
-        {/* Utilisateur + déconnexion — positionné à gauche en absolu */}
-        <div className="absolute left-4 sm:left-6">
-          <button
-            onClick={handleLogout}
-            title="Se déconnecter"
-            className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gray-100/80 hover:bg-red-50 hover:border-red-100 border border-transparent transition-colors duration-150"
-          >
-            <span className="h-5 w-5 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-bold text-white leading-none select-none">
-              {(PERSON_DISPLAY.find(([k]) => k === session.name)?.[1] ?? session.name).charAt(0).toUpperCase()}
-            </span>
-            <span className="text-[12px] font-semibold text-gray-600 group-hover:text-red-600 transition-colors duration-150 hidden sm:block">
-              {PERSON_DISPLAY.find(([k]) => k === session.name)?.[1] ?? session.name}
-            </span>
-            <LogOut className="h-3 w-3 text-gray-400 group-hover:text-red-500 transition-colors duration-150" />
-          </button>
-        </div>
-
         {/* Indicateur live — positionné à droite en absolu */}
         <div className="absolute right-4 sm:right-6">
           <LiveIndicator connected={sseConnected} />

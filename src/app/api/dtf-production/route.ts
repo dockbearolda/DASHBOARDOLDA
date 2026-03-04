@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user, name = "", status = "en_cours" } = body;
+    const { user, name = "", clientType = "particulier", status = "en_cours" } = body;
 
     if (!user || !VALID_USERS.includes(user)) {
       return NextResponse.json({ error: "Utilisateur invalide" }, { status: 400 });
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const position = (last?.position ?? -1) + 1;
 
     const row = await prisma.dtfRow.create({
-      data: { user, name, status, position },
+      data: { user, name, clientType, status, position },
     });
     return NextResponse.json({ row }, { status: 201 });
   } catch (err) {

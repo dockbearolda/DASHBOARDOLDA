@@ -9,12 +9,13 @@ export async function PATCH(
   const { id } = await params;
   try {
     const body = await req.json();
-    const { name, status, problem } = body;
+    const { name, clientType, status, problem } = body;
 
     const row = await prisma.dtfRow.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
+        ...(clientType !== undefined && { clientType }),
         ...(status !== undefined && { status }),
         ...(problem !== undefined && { problem: problem || null }),
       },

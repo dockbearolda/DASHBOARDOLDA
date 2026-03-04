@@ -41,6 +41,7 @@ export interface PlanningItem {
   responsible: string;
   color:       string;   // stores secteur value
   position:    number;
+  updatedAt?:  string;   // ISO — pour détecter l'inactivité 3 jours
 }
 
 export type PlanningStatus =
@@ -78,24 +79,30 @@ const PRIORITY_CONFIG: Record<string, { label: string; style: string }> = {
   HAUTE:   { label: "Haute",   style: "bg-orange-50 text-orange-600" },
 };
 
-const STATUS_LABELS: Record<PlanningStatus, string> = {
-  A_DEVISER:           "À deviser",
-  ATTENTE_VALIDATION:  "Attente validation",
-  MAQUETTE_A_FAIRE:    "Maquette à faire",
-  ATTENTE_MARCHANDISE: "Attente marchandise",
-  A_PREPARER:          "À préparer",
-  A_PRODUIRE:          "À produire",
-  EN_PRODUCTION:       "En production",
-  A_MONTER_NETTOYER:   "À monter/nettoyer",
-  MANQUE_INFORMATION:  "Manque information",
-  TERMINE:             "Terminé",
-  PREVENIR_CLIENT:     "Prévenir client",
-  CLIENT_PREVENU:      "Client prévenu",
-  RELANCE_CLIENT:      "Relance client",
-  PRODUIT_RECUPERE:    "Produit récupéré",
-  A_FACTURER:          "À facturer",
-  FACTURE_FAITE:       "Facture faite",
+// Statuts avec couleurs — remplace STATUS_LABELS
+const STATUS_CONFIG: Record<PlanningStatus, { label: string; bg: string; text: string; dot: string }> = {
+  A_DEVISER:           { label: "À deviser",          bg: "#f8fafc", text: "#64748b", dot: "#94a3b8" },
+  ATTENTE_VALIDATION:  { label: "Attente validation",  bg: "#fefce8", text: "#854d0e", dot: "#eab308" },
+  MAQUETTE_A_FAIRE:    { label: "Maquette à faire",    bg: "#f5f3ff", text: "#6d28d9", dot: "#8b5cf6" },
+  ATTENTE_MARCHANDISE: { label: "Attente marchandise", bg: "#fff7ed", text: "#c2410c", dot: "#f97316" },
+  A_PREPARER:          { label: "À préparer",          bg: "#eff6ff", text: "#1e40af", dot: "#3b82f6" },
+  A_PRODUIRE:          { label: "À produire",          bg: "#eef2ff", text: "#3730a3", dot: "#6366f1" },
+  EN_PRODUCTION:       { label: "En production",       bg: "#ecfeff", text: "#0e7490", dot: "#06b6d4" },
+  A_MONTER_NETTOYER:   { label: "À monter/nettoyer",   bg: "#f0fdf4", text: "#15803d", dot: "#22c55e" },
+  MANQUE_INFORMATION:  { label: "Manque information",  bg: "#fef2f2", text: "#b91c1c", dot: "#ef4444" },
+  TERMINE:             { label: "Terminé",             bg: "#dcfce7", text: "#166534", dot: "#16a34a" },
+  PREVENIR_CLIENT:     { label: "Prévenir client",     bg: "#fdf4ff", text: "#a21caf", dot: "#d946ef" },
+  CLIENT_PREVENU:      { label: "Client prévenu",      bg: "#d1fae5", text: "#065f46", dot: "#059669" },
+  RELANCE_CLIENT:      { label: "Relance client",      bg: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
+  PRODUIT_RECUPERE:    { label: "Produit récupéré",    bg: "#f7fee7", text: "#3f6212", dot: "#84cc16" },
+  A_FACTURER:          { label: "À facturer",          bg: "#faf5ff", text: "#7e22ce", dot: "#9333ea" },
+  FACTURE_FAITE:       { label: "Facture faite",       bg: "#f1f5f9", text: "#1e293b", dot: "#64748b" },
 };
+
+// Statuts « terminés » — pas de clignotement inactivité
+const DONE_STATUSES: PlanningStatus[] = [
+  "TERMINE", "FACTURE_FAITE", "PRODUIT_RECUPERE", "CLIENT_PREVENU",
+];
 
 const TEAM = [
   { key: "loic",     name: "Loïc"     },
@@ -218,6 +225,14 @@ function daysUntil(deadline: string | null): number | null {
 function isUrgent(deadline: string | null): boolean {
   const d = daysUntil(deadline);
   return d !== null && d <= 1;
+}
+
+/** Ligne inactive depuis 3+ jours — doit clignoter pour tous */
+function needsAttention(item: PlanningItem): boolean {
+  if (!item.updatedAt) return false;
+  if (DONE_STATUSES.includes(item.status)) return false;
+  const diffMs = Date.now() - new Date(item.updatedAt).getTime();
+  return diffMs > 3 * 24 * 60 * 60 * 1000; // 3 jours en ms
 }
 
 /** Affiche "DD/MM/YY" sans passer par UTC — corrige le bug "jour -1" en UTC+x */
@@ -426,6 +441,39 @@ function AppleSelect({
         onChange={(e) => onChange(e.target.value)}
       >
         {children}
+      </select>
+    </div>
+  );
+}
+
+// Menu état coloré — chaque statut a sa propre couleur pastel
+function StatusPicker({ value, onChange }: { value: PlanningStatus; onChange: (v: PlanningStatus) => void }) {
+  const cfg = STATUS_CONFIG[value] ?? STATUS_CONFIG.A_DEVISER;
+  return (
+    <div className="relative w-full">
+      <div
+        className="flex items-center h-8 gap-1.5 px-2.5 rounded-lg border text-[12px] font-semibold cursor-pointer select-none"
+        style={{
+          backgroundColor: cfg.bg,
+          color:            cfg.text,
+          borderColor:      cfg.dot + "40",
+          transition:       "opacity 0.1s ease, transform 0.1s ease",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.75"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+      >
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.dot }} />
+        <span className="truncate flex-1">{cfg.label}</span>
+        <ChevronDown className="h-3 w-3 opacity-40 shrink-0" />
+      </div>
+      <select
+        className="absolute inset-0 opacity-0 cursor-pointer w-full"
+        value={value}
+        onChange={(e) => onChange(e.target.value as PlanningStatus)}
+      >
+        {(Object.entries(STATUS_CONFIG) as [PlanningStatus, { label: string }][]).map(([key, { label }]) => (
+          <option key={key} value={key}>{label}</option>
+        ))}
       </select>
     </div>
   );
@@ -878,6 +926,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                 const isDeleting  = deletingIds.has(item.id);
                 const isSaving    = savingIds.has(item.id);
                 const urgent      = isUrgent(item.deadline);
+                const attention   = needsAttention(item);
                 const itemType    = (types[item.id] ?? "") as ItemType;
                 const typeConfig  = TYPE_CONFIG[itemType] ?? TYPE_CONFIG[""];
                 const isNoteEdit  = isEditingCell(item.id, "note");
@@ -916,6 +965,15 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                           />
                         )}
                       </AnimatePresence>
+
+                      {/* Attention indicator — clignotement si inactivité > 3 jours */}
+                      {attention && !isDeleting && (
+                        <span
+                          className="planning-attention-strip absolute left-0 top-0 bottom-0 w-1 rounded-r z-10 pointer-events-none"
+                          style={{ backgroundColor: "#f59e0b" }}
+                          title="Aucune modification depuis plus de 3 jours"
+                        />
+                      )}
 
                       {/* 0 · Grip */}
                       <div className="h-full flex items-center justify-center cursor-grab active:cursor-grabbing">
@@ -1040,17 +1098,12 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         />
                       </div>
 
-                      {/* 8 · État */}
+                      {/* 8 · État — menu coloré */}
                       <div className={CELL_WRAP}>
-                        <AppleSelect
+                        <StatusPicker
                           value={item.status}
-                          displayLabel={STATUS_LABELS[item.status]}
-                          onChange={(v) => saveNow(item.id, "status", v as PlanningStatus)}
-                        >
-                          {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                            <option key={key} value={key}>{label}</option>
-                          ))}
-                        </AppleSelect>
+                          onChange={(v) => saveNow(item.id, "status", v)}
+                        />
                       </div>
 
                       {/* 9 · Interne — clic droit sur le nom = filtre rapide */}

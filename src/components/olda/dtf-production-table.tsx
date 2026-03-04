@@ -12,13 +12,21 @@ import { Plus, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type DTFStatus = "a_produire" | "en_cours" | "termine" | "erreur";
+export type DTFClientType = "particulier" | "pro" | "association";
 
 export interface DTFProductionRow {
   id: string;
   name: string;
+  clientType: DTFClientType;
   status: DTFStatus;
   problem?: string;
 }
+
+const clientTypeConfig: Record<DTFClientType, { label: string; bg: string; text: string }> = {
+  particulier: { label: "PART.",  bg: "#f0fdf4", text: "#15803d" },
+  pro:         { label: "PRO",    bg: "#eff6ff", text: "#1e40af" },
+  association: { label: "ASSO",   bg: "#faf5ff", text: "#7e22ce" },
+};
 
 const statusConfig: Record<DTFStatus, { label: string; color: string }> = {
   a_produire: { label: "À produire", color: "#ff9500" },
@@ -47,9 +55,10 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
       .then((r) => r.json())
       .then((data) => {
         setRows(
-          (data.rows ?? []).map((r: DTFProductionRow & { status: string }) => ({
+          (data.rows ?? []).map((r: DTFProductionRow & { status: string; clientType: string }) => ({
             ...r,
-            status: (r.status ?? "en_cours") as DTFStatus,
+            status:     (r.status     ?? "en_cours")    as DTFStatus,
+            clientType: (r.clientType ?? "particulier") as DTFClientType,
           }))
         );
       })
@@ -65,7 +74,7 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
       const res = await fetch("/api/dtf-production", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user: activeUser, name: "", status: "en_cours" }),
+        body: JSON.stringify({ user: activeUser, name: "", clientType: "particulier", status: "en_cours" }),
       });
       if (!res.ok) return;
       const { row } = await res.json();
@@ -97,6 +106,18 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
+      });
+    } catch { /* ignore */ }
+  }, []);
+
+  // ── Mettre à jour type client (immédiat) ──────────────────────────────────
+  const updateClientType = useCallback(async (id: string, clientType: DTFClientType) => {
+    setRows((prev) => prev.map((r) => r.id === id ? { ...r, clientType } : r));
+    try {
+      await fetch(`/api/dtf-production/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientType }),
       });
     } catch { /* ignore */ }
   }, []);
@@ -170,13 +191,17 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
       {/* Table */}
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm">
         {/* Headers */}
-        <div className="shrink-0 grid grid-cols-2 gap-0 border-b border-gray-100">
+        <div className="shrink-0 grid gap-0 border-b border-gray-100" style={{ gridTemplateColumns: "72px 1fr 160px 32px" }}>
+          <div className="px-3 py-3 text-[12px] font-semibold uppercase tracking-widest text-gray-500">
+            Type
+          </div>
           <div className="px-4 py-3 text-[12px] font-semibold uppercase tracking-widest text-gray-500">
             Nom du PRT
           </div>
           <div className="px-4 py-3 text-[12px] font-semibold uppercase tracking-widest text-gray-500">
             Statut
           </div>
+          <div />
         </div>
 
         {/* Body */}
@@ -193,27 +218,50 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
           ) : (
             <div className="divide-y divide-gray-100">
               {rows.map((row) => {
-                const cfg = statusConfig[row.status];
+                const cfg    = statusConfig[row.status];
+                const ctCfg  = clientTypeConfig[row.clientType ?? "particulier"];
                 return (
                   <div key={row.id}>
-                    <div className="grid grid-cols-2 gap-0 px-4 py-3 items-start hover:bg-gray-50 transition-colors">
-                      <input
-                        value={row.name}
-                        onChange={(e) => updateTextField(row.id, "name", e.target.value)}
-                        placeholder="Ex: Commande #123"
-                        className="text-[13px] text-gray-900 bg-transparent outline-none placeholder:text-gray-300 font-medium"
-                      />
-                      <div className="flex items-center gap-2">
+                    <div className="grid gap-0 px-0 py-0 items-center hover:bg-gray-50 transition-colors" style={{ gridTemplateColumns: "72px 1fr 160px 32px" }}>
+                      {/* Type client — clic pour cycler */}
+                      <div className="px-3 py-3 flex items-center">
+                        <button
+                          onClick={() => {
+                            const cycle: DTFClientType[] = ["particulier", "pro", "association"];
+                            const next = cycle[(cycle.indexOf(row.clientType ?? "particulier") + 1) % cycle.length];
+                            updateClientType(row.id, next);
+                          }}
+                          className="px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider cursor-pointer select-none"
+                          style={{ backgroundColor: ctCfg.bg, color: ctCfg.text }}
+                          title="Cliquer pour changer le type"
+                        >
+                          {ctCfg.label}
+                        </button>
+                      </div>
+                      {/* Nom */}
+                      <div className="px-4 py-3">
+                        <input
+                          value={row.name}
+                          onChange={(e) => updateTextField(row.id, "name", e.target.value)}
+                          placeholder="Ex: Commande #123"
+                          className="w-full text-[13px] text-gray-900 bg-transparent outline-none placeholder:text-gray-300 font-medium"
+                        />
+                      </div>
+                      {/* Statut */}
+                      <div className="py-3">
                         <select
                           value={row.status}
                           onChange={(e) => updateStatus(row.id, e.target.value as DTFStatus)}
-                          className="flex-1 h-7 rounded-lg px-2.5 text-[12px] font-semibold text-white outline-none cursor-pointer"
+                          className="w-full h-7 rounded-lg px-2.5 text-[12px] font-semibold text-white outline-none cursor-pointer"
                           style={{ backgroundColor: cfg.color }}
                         >
                           {Object.entries(statusConfig).map(([key, val]) => (
                             <option key={key} value={key}>{val.label}</option>
                           ))}
                         </select>
+                      </div>
+                      {/* Supprimer */}
+                      <div className="flex items-center justify-center py-3">
                         <button
                           onClick={() => deleteRow(row.id)}
                           className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -225,7 +273,7 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
                     </div>
 
                     {row.status === "erreur" && (
-                      <div className="px-4 pb-3 pt-0">
+                      <div className="px-4 pb-3 pt-0 col-span-4">
                         <input
                           value={row.problem ?? ""}
                           onChange={(e) => updateTextField(row.id, "problem", e.target.value)}

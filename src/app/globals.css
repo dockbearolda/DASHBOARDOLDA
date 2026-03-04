@@ -72,6 +72,12 @@
       transform: scale(0.85);
     }
   }
+
+  /* Planning — ligne inactive depuis 3+ jours */
+  @keyframes planning-attention {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -232,6 +238,11 @@
 
   /* ── View toggle ────────────────────────────────────────────────── */
   .hidden { display: none; }
+
+  /* ── Planning attention strip — barre gauche clignotante (3 jours sans action) ── */
+  .planning-attention-strip {
+    animation: planning-attention 1.8s ease-in-out infinite;
+  }
 
   /* ── GPU acceleration — forces composited layer on Windows/Chrome ── */
   .gpu-layer {

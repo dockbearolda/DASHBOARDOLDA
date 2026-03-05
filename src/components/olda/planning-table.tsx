@@ -1619,9 +1619,13 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                           onChange={(e) => updateItem(item.id, "note", e.target.value)}
                           onFocus={() => startEdit(item.id, "note", item.note)}
                           onBlur={(e) => handleBlurSave(item.id, "note", e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e, item.id, "note")}
+                          onKeyDown={(e) => {
+                            if (e.key === "Tab") { e.preventDefault(); (e.currentTarget as HTMLElement).blur(); }
+                            else if (e.key === "Escape") { updateItem(item.id, "note", preEdit.current); setEditing(null); }
+                            // Enter intentionally NOT prevented → insère un saut de ligne
+                          }}
                           placeholder="Note…"
-                          rows={1}
+                          rows={Math.max(1, (item.note || "").split("\n").length)}
                           className={cn(
                             "w-full px-2 py-1 text-[12px] italic bg-transparent rounded-lg resize-none overflow-hidden leading-snug",
                             "border border-transparent hover:border-slate-200",

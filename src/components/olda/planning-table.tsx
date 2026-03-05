@@ -19,29 +19,43 @@
 import {
   useState, useCallback, useMemo, useRef, useEffect, type CSSProperties,
 } from "react";
-import { motion, Reorder, AnimatePresence } from "framer-motion";
 import {
-  Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X,
+  Trash2, Plus, ChevronDown, GripVertical, Search, Calendar, X, User,
+  AlertTriangle, ArrowUp, ArrowDown, ArrowUpDown, Package, Shirt, Scissors, Printer,
+  Archive, ShoppingCart, RotateCcw, Loader2, QrCode, MessageSquare,
 } from "lucide-react";
+import { QRCodeSVG, QRCodeCanvas } from "qrcode.react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useSocket } from "@/hooks/useSocket";
+import { STATUS_LABELS, SECTEUR_CONFIG, DaysChip } from "@/components/ui/table-cells";
 
 // ── Types ───────────────────────────────────────────────────────────────────────
 
 export interface PlanningItem {
+  id:             string;
+  priority:       "BASSE" | "MOYENNE" | "HAUTE";
+  clientName:     string;
+  clientId:       string | null;
+  clientPhone:    string | null;   // Numéro WhatsApp (format international)
+  designation:    string;          // mapped to « Famille » in UI
+  quantity:       number;
+  note:           string;
+  unitPrice:      number;          // kept for backward-compat, not displayed
+  deadline:       string | null;
+  status:         PlanningStatus;
+  responsible:    string;
+  color:          string;          // stores secteur value
+  position:       number;
+  trackingId:     string | null;   // UUID pour le lien de suivi
+  whatsappSentAt: string | null;   // Horodatage d'envoi WhatsApp
+  updatedAt?:     string;          // Horodatage dernière modification
+}
+
+export interface ClientSuggestion {
   id: string;
-  priority:    "BASSE" | "MOYENNE" | "HAUTE";
-  clientName:  string;
-  designation: string;   // mapped to « Famille » in UI
-  quantity:    number;
-  note:        string;
-  unitPrice:   number;   // kept for backward-compat, not displayed
-  deadline:    string | null;
-  status:      PlanningStatus;
-  responsible: string;
-  color:       string;   // stores secteur value
-  position:    number;
-  updatedAt?:  string;   // ISO — pour détecter l'inactivité 3 jours
+  nom: string;
+  telephone: string;
 }
 
 export type PlanningStatus =
@@ -67,11 +81,15 @@ interface PlanningTableProps {
   onItemsChange?:   (items: PlanningItem[]) => void;
   /** Appelé quand l'état d'édition change (true = en cours, false = terminé) */
   onEditingChange?: (isEditing: boolean) => void;
+  /** Appelé quand l'utilisateur veut créer une commande Achat Textile depuis Planning */
+  onCreateAchatFromPlanning?: (item: PlanningItem) => void;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_RANK = { HAUTE: 2, MOYENNE: 1, BASSE: 0 } as const;
+
+type SortableCol = "priority" | "clientName" | "deadline" | "status";
 
 const PRIORITY_CONFIG: Record<string, { label: string; style: string }> = {
   BASSE:   { label: "Basse",   style: "bg-slate-100 text-slate-500"  },
@@ -79,30 +97,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; style: string }> = {
   HAUTE:   { label: "Haute",   style: "bg-orange-50 text-orange-600" },
 };
 
-// Statuts avec couleurs — remplace STATUS_LABELS
-const STATUS_CONFIG: Record<PlanningStatus, { label: string; bg: string; text: string; dot: string }> = {
-  A_DEVISER:           { label: "À deviser",          bg: "#f8fafc", text: "#64748b", dot: "#94a3b8" },
-  ATTENTE_VALIDATION:  { label: "Attente validation",  bg: "#fefce8", text: "#854d0e", dot: "#eab308" },
-  MAQUETTE_A_FAIRE:    { label: "Maquette à faire",    bg: "#f5f3ff", text: "#6d28d9", dot: "#8b5cf6" },
-  ATTENTE_MARCHANDISE: { label: "Attente marchandise", bg: "#fff7ed", text: "#c2410c", dot: "#f97316" },
-  A_PREPARER:          { label: "À préparer",          bg: "#eff6ff", text: "#1e40af", dot: "#3b82f6" },
-  A_PRODUIRE:          { label: "À produire",          bg: "#eef2ff", text: "#3730a3", dot: "#6366f1" },
-  EN_PRODUCTION:       { label: "En production",       bg: "#ecfeff", text: "#0e7490", dot: "#06b6d4" },
-  A_MONTER_NETTOYER:   { label: "À monter/nettoyer",   bg: "#f0fdf4", text: "#15803d", dot: "#22c55e" },
-  MANQUE_INFORMATION:  { label: "Manque information",  bg: "#fef2f2", text: "#b91c1c", dot: "#ef4444" },
-  TERMINE:             { label: "Terminé",             bg: "#dcfce7", text: "#166534", dot: "#16a34a" },
-  PREVENIR_CLIENT:     { label: "Prévenir client",     bg: "#fdf4ff", text: "#a21caf", dot: "#d946ef" },
-  CLIENT_PREVENU:      { label: "Client prévenu",      bg: "#d1fae5", text: "#065f46", dot: "#059669" },
-  RELANCE_CLIENT:      { label: "Relance client",      bg: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
-  PRODUIT_RECUPERE:    { label: "Produit récupéré",    bg: "#f7fee7", text: "#3f6212", dot: "#84cc16" },
-  A_FACTURER:          { label: "À facturer",          bg: "#faf5ff", text: "#7e22ce", dot: "#9333ea" },
-  FACTURE_FAITE:       { label: "Facture faite",       bg: "#f1f5f9", text: "#1e293b", dot: "#64748b" },
-};
-
-// Statuts « terminés » — pas de clignotement inactivité
-const DONE_STATUSES: PlanningStatus[] = [
-  "TERMINE", "FACTURE_FAITE", "PRODUIT_RECUPERE", "CLIENT_PREVENU",
-];
+// STATUS_LABELS importé depuis @/components/ui/table-cells
 
 const TEAM = [
   { key: "loic",     name: "Loïc"     },
@@ -120,33 +115,16 @@ const FAMILLE_OPTIONS = [
   "Goodies",
 ] as const;
 
-// Secteur options with pastel pills (feature 7)
-const SECTEUR_CONFIG = [
-  {
-    value: "Textiles",
-    label: "Textiles",
-    pill:  "bg-emerald-50 text-emerald-700 border-emerald-100",
-    dot:   "bg-emerald-400",
-  },
-  {
-    value: "Gravure et découpe laser",
-    label: "Gravure & Découpe",
-    pill:  "bg-violet-50 text-violet-700 border-violet-100",
-    dot:   "bg-violet-400",
-  },
-  {
-    value: "Impression UV",
-    label: "Impression UV",
-    pill:  "bg-cyan-50 text-cyan-700 border-cyan-100",
-    dot:   "bg-cyan-400",
-  },
-  {
-    value: "Goodies",
-    label: "Goodies",
-    pill:  "bg-amber-50 text-amber-700 border-amber-100",
-    dot:   "bg-amber-400",
-  },
-] as const;
+// SECTEUR_CONFIG importé depuis @/components/ui/table-cells
+
+// ── URL de suivi (domaine discret configurable) ──────────────────────────────
+const TRACKING_BASE =
+  process.env.NEXT_PUBLIC_TRACKING_BASE_URL ??
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  "https://dasholda.up.railway.app";
+
+const trackingUrl = (id: string | null | undefined): string =>
+  id ? `${TRACKING_BASE}/s/${id}` : "";
 
 // Type indicator config (feature 10)
 const TYPE_CONFIG = {
@@ -167,35 +145,37 @@ const TABS: { key: TabKey; label: string; secteur: string | null }[] = [
   { key: "goodies",       label: "Goodies",            secteur: "Goodies"                   },
 ];
 
-// ── Grid layout (11 columns) ────────────────────────────────────────────────────
-// Grip | Type | Priorité | Client | Secteur | Qté | Note | Échéance | État | Interne | ×
+// ── Grid layout (12 columns) ────────────────────────────────────────────────────
+// Grip | Type | Priorité | Client | Tél. | Secteur | Qté | Note | Échéance | État | Interne | ×
+// Note prend le 1fr → toutes les notes visibles ; Client capé à 160px
 
 const GRID_COLS =
-  "32px 76px 94px 175px 158px 64px minmax(78px,1fr) 165px 172px 108px 40px";
+  "32px 76px 94px minmax(80px,160px) 108px 140px 56px minmax(60px,1fr) 165px 168px 100px 148px";
 const GRID_STYLE: CSSProperties = { gridTemplateColumns: GRID_COLS };
 
-const COL_HEADERS = [
+const COL_HEADERS: Array<{ label: string; align: string; sortKey?: SortableCol }> = [
   { label: "",         align: "center" },
   { label: "Type",     align: "center" },
-  { label: "Priorité", align: "left"   },
-  { label: "Client",   align: "left"   },
+  { label: "Priorité", align: "center", sortKey: "priority"   },
+  { label: "Client",   align: "left",   sortKey: "clientName" },
+  { label: "Tél.",     align: "left"                          },
   { label: "Secteur",  align: "left"   },
   { label: "Qté",      align: "center" },
   { label: "Note",     align: "left"   },
-  { label: "Échéance", align: "left"   },
-  { label: "État",     align: "left"   },
-  { label: "Interne",  align: "center" },
+  { label: "Échéance", align: "left",   sortKey: "deadline"   },
+  { label: "État",     align: "left",   sortKey: "status"     },
+  { label: "Interne",  align: "left"   },
   { label: "",         align: "center" },
-] as const;
+];
 
 // ── Shared styles ───────────────────────────────────────────────────────────────
 
 const CELL_INPUT =
-  "w-full h-8 px-2.5 text-[13px] text-slate-900 bg-white rounded-lg " +
+  "w-full h-8 px-2.5 text-[12px] text-slate-900 bg-white rounded-lg " +
   "border border-blue-300 ring-2 ring-blue-100/70 shadow-sm focus:outline-none";
 
 const EMPTY_CLS  = "text-slate-300 italic font-normal";
-const CELL_WRAP  = "h-full flex items-center px-1.5 overflow-hidden min-w-0";
+const CELL_WRAP  = "h-full flex items-center px-2.5 overflow-hidden min-w-0";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
@@ -225,14 +205,6 @@ function daysUntil(deadline: string | null): number | null {
 function isUrgent(deadline: string | null): boolean {
   const d = daysUntil(deadline);
   return d !== null && d <= 1;
-}
-
-/** Ligne inactive depuis 3+ jours — doit clignoter pour tous */
-function needsAttention(item: PlanningItem): boolean {
-  if (!item.updatedAt) return false;
-  if (DONE_STATUSES.includes(item.status)) return false;
-  const diffMs = Date.now() - new Date(item.updatedAt).getTime();
-  return diffMs > 3 * 24 * 60 * 60 * 1000; // 3 jours en ms
 }
 
 /** Affiche "DD/MM/YY" sans passer par UTC — corrige le bug "jour -1" en UTC+x */
@@ -273,17 +245,31 @@ function toTitleCase(s: string): string {
   return s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 }
 
+/** Statuts considérés comme « terminés » — pas de clignotement d'attention */
+const DONE_STATUSES: PlanningStatus[] = [
+  "TERMINE", "FACTURE_FAITE", "PRODUIT_RECUPERE", "CLIENT_PREVENU",
+];
+
+/** Renvoie true si la ligne n'a pas été modifiée depuis 3 jours et n'est pas terminée */
+function needsAttention(item: PlanningItem): boolean {
+  if (!item.updatedAt) return false;
+  if (DONE_STATUSES.includes(item.status)) return false;
+  const diffMs = Date.now() - new Date(item.updatedAt).getTime();
+  return diffMs > 3 * 24 * 60 * 60 * 1000;
+}
+
 // ── Sub-components ──────────────────────────────────────────────────────────────
 
 // Search bar glassmorphism (feature 1)
-function SearchBar({ value, onChange, maxWidth }: { value: string; onChange: (v: string) => void; maxWidth?: string }) {
+function SearchBar({ value, onChange, maxWidth, className }: { value: string; onChange: (v: string) => void; maxWidth?: string; className?: string }) {
   return (
     <div
       style={{ maxWidth }}
       className={cn(
         "flex items-center gap-2.5 h-9 px-3.5 rounded-xl w-full",
+        className,
         "bg-white/60 backdrop-blur-md border border-slate-200/80 shadow-sm",
-        "transition-all duration-200",
+        "transition-[background-color,border-color,box-shadow] duration-200",
         "focus-within:bg-white focus-within:border-blue-200 focus-within:shadow-blue-50",
       )}>
       <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -317,8 +303,8 @@ function TypePicker({ value, onChange }: { value: ItemType; onChange: (v: ItemTy
       onClick={cycle}
       title="Cliquer pour changer le type"
       className={cn(
-        "px-2 py-0.5 rounded-md text-[10px] font-bold tracking-widest",
-        "transition-all duration-150 active:scale-95 select-none whitespace-nowrap",
+        "px-2 py-0.5 rounded-md text-[11px] font-bold tracking-widest",
+        "transition-[background-color,color,transform] duration-150 active:scale-95 select-none whitespace-nowrap",
         cfg.badge,
       )}
     >
@@ -360,7 +346,7 @@ function NoteCell({
           if (e.key === "Escape") { e.preventDefault(); onCancel(); }
         }}
         className={cn(
-          "w-full px-2 py-1 text-[10px] italic text-slate-600 bg-white rounded-xl",
+          "w-full px-2 py-1 text-[12px] italic text-slate-600 bg-white rounded-xl",
           "border border-blue-300 ring-2 ring-blue-100/70 shadow-lg focus:outline-none resize-none",
         )}
         placeholder="Précisions…"
@@ -373,7 +359,7 @@ function NoteCell({
     <div
       onClick={onStartEdit}
       className={cn(
-        "w-full px-2 text-[10px] rounded-lg cursor-text leading-snug",
+        "w-full px-2 text-[12px] rounded-lg cursor-text leading-snug",
         "hover:bg-black/[0.03] transition-colors duration-100 select-none",
         "whitespace-pre-wrap break-words",
         note ? "text-slate-500 italic" : EMPTY_CLS,
@@ -391,12 +377,11 @@ function SecteurPicker({ value, onChange }: { value: string; onChange: (v: strin
     <div className="relative w-full">
       <div className={cn(
         "flex items-center h-8 gap-1.5 px-2.5 rounded-lg border text-[12px] font-medium cursor-pointer",
-        "transition-all duration-100",
-        cfg
-          ? cn(cfg.pill, "hover:opacity-80")
-          : "bg-white/50 border-slate-100 text-slate-400 hover:bg-white hover:border-slate-200",
+        "transition-[background-color,border-color] duration-100",
+        "bg-white/50 border-slate-100 hover:bg-white hover:border-slate-200",
+        cfg ? "text-slate-700" : "text-slate-400",
       )}>
-        {cfg && <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />}
+        {cfg && <span className="w-2 h-2 rounded-full flex-shrink-0 shrink-0" style={{ backgroundColor: cfg.dotHex }} />}
         <span className="truncate flex-1">{cfg?.label ?? "—"}</span>
         <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
       </div>
@@ -427,9 +412,9 @@ function AppleSelect({
   return (
     <div className="relative w-full">
       <div className={cn(
-        "flex items-center h-8 gap-1 px-2.5 rounded-lg border text-[13px]",
+        "flex items-center h-8 gap-1 px-2.5 rounded-lg border text-[12px]",
         "border-slate-100 bg-white/50 text-slate-800",
-        "hover:bg-white hover:border-slate-200 cursor-pointer transition-all duration-100",
+        "hover:bg-white hover:border-slate-200 cursor-pointer transition-[background-color,border-color] duration-100",
         pillStyle,
       )}>
         <span className="truncate flex-1">{displayLabel}</span>
@@ -446,32 +431,64 @@ function AppleSelect({
   );
 }
 
-// Menu état coloré — chaque statut a sa propre couleur pastel
+// Status config — point coloré par état (Tailwind classes, pour PlanningDetailPanel)
+const STATUS_CONFIG: Record<PlanningStatus, string> = {
+  A_DEVISER:           "bg-slate-300",
+  ATTENTE_VALIDATION:  "bg-amber-400",
+  MAQUETTE_A_FAIRE:    "bg-purple-400",
+  ATTENTE_MARCHANDISE: "bg-orange-400",
+  A_PREPARER:          "bg-blue-400",
+  A_PRODUIRE:          "bg-blue-500",
+  EN_PRODUCTION:       "bg-indigo-500",
+  A_MONTER_NETTOYER:   "bg-cyan-500",
+  MANQUE_INFORMATION:  "bg-red-400",
+  TERMINE:             "bg-green-500",
+  PREVENIR_CLIENT:     "bg-yellow-500",
+  CLIENT_PREVENU:      "bg-yellow-400",
+  RELANCE_CLIENT:      "bg-orange-500",
+  PRODUIT_RECUPERE:    "bg-teal-500",
+  A_FACTURER:          "bg-emerald-500",
+  FACTURE_FAITE:       "bg-green-600",
+};
+
+// Status hex colors — pour le StatusPicker coloré (plus plaisant à utiliser)
+const STATUS_HEX: Record<PlanningStatus, { bg: string; text: string; dot: string }> = {
+  A_DEVISER:           { bg: "#f8fafc", text: "#64748b", dot: "#94a3b8" },
+  ATTENTE_VALIDATION:  { bg: "#fefce8", text: "#854d0e", dot: "#eab308" },
+  MAQUETTE_A_FAIRE:    { bg: "#f5f3ff", text: "#6d28d9", dot: "#8b5cf6" },
+  ATTENTE_MARCHANDISE: { bg: "#fff7ed", text: "#c2410c", dot: "#f97316" },
+  A_PREPARER:          { bg: "#eff6ff", text: "#1e40af", dot: "#3b82f6" },
+  A_PRODUIRE:          { bg: "#eef2ff", text: "#3730a3", dot: "#6366f1" },
+  EN_PRODUCTION:       { bg: "#ecfeff", text: "#0e7490", dot: "#06b6d4" },
+  A_MONTER_NETTOYER:   { bg: "#f0fdf4", text: "#15803d", dot: "#22c55e" },
+  MANQUE_INFORMATION:  { bg: "#fef2f2", text: "#b91c1c", dot: "#ef4444" },
+  TERMINE:             { bg: "#dcfce7", text: "#166534", dot: "#16a34a" },
+  PREVENIR_CLIENT:     { bg: "#fdf4ff", text: "#a21caf", dot: "#d946ef" },
+  CLIENT_PREVENU:      { bg: "#d1fae5", text: "#065f46", dot: "#059669" },
+  RELANCE_CLIENT:      { bg: "#fffbeb", text: "#92400e", dot: "#f59e0b" },
+  PRODUIT_RECUPERE:    { bg: "#f7fee7", text: "#3f6212", dot: "#84cc16" },
+  A_FACTURER:          { bg: "#faf5ff", text: "#7e22ce", dot: "#9333ea" },
+  FACTURE_FAITE:       { bg: "#f1f5f9", text: "#1e293b", dot: "#64748b" },
+};
+
 function StatusPicker({ value, onChange }: { value: PlanningStatus; onChange: (v: PlanningStatus) => void }) {
-  const cfg = STATUS_CONFIG[value] ?? STATUS_CONFIG.A_DEVISER;
+  const hex = STATUS_HEX[value] ?? STATUS_HEX.A_DEVISER;
   return (
     <div className="relative w-full">
       <div
-        className="flex items-center h-8 gap-1.5 px-2.5 rounded-lg border text-[12px] font-semibold cursor-pointer select-none"
-        style={{
-          backgroundColor: cfg.bg,
-          color:            cfg.text,
-          borderColor:      cfg.dot + "40",
-          transition:       "opacity 0.1s ease, transform 0.1s ease",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.75"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+        className="flex items-center h-8 gap-2 px-2.5 rounded-lg text-[12px] cursor-pointer transition-opacity duration-[80ms] hover:opacity-80"
+        style={{ backgroundColor: hex.bg, color: hex.text }}
       >
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.dot }} />
-        <span className="truncate flex-1">{cfg.label}</span>
-        <ChevronDown className="h-3 w-3 opacity-40 shrink-0" />
+        <span className="shrink-0 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: hex.dot }} />
+        <span className="truncate flex-1 font-semibold">{STATUS_LABELS[value]}</span>
+        <ChevronDown className="h-3 w-3 opacity-50 shrink-0" />
       </div>
       <select
         className="absolute inset-0 opacity-0 cursor-pointer w-full"
         value={value}
         onChange={(e) => onChange(e.target.value as PlanningStatus)}
       >
-        {(Object.entries(STATUS_CONFIG) as [PlanningStatus, { label: string }][]).map(([key, { label }]) => (
+        {Object.entries(STATUS_LABELS).map(([key, label]) => (
           <option key={key} value={key}>{label}</option>
         ))}
       </select>
@@ -479,13 +496,7 @@ function StatusPicker({ value, onChange }: { value: PlanningStatus; onChange: (v
   );
 }
 
-// Jours restants — chip coloré (feature « jours restants »)
-function DaysChip({ days }: { days: number }) {
-  if (days === 0)  return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100">auj.</span>;
-  if (days === 1)  return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100">dem.</span>;
-  if (days > 0)    return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">+{days}j</span>;
-  /* dépassée */   return <span className="shrink-0 px-1.5 py-px rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-100">{days}j</span>;
-}
+// DaysChip importé depuis @/components/ui/table-cells
 
 // Hybrid date input — text JJ/MM + calendar icon (feature 6)
 function HybridDateInput({
@@ -540,12 +551,12 @@ function HybridDateInput({
         onChange={handleTextChange}
         onFocus={() => setFocus(true)}
         onBlur={handleTextBlur}
-        placeholder="JJ/MM/AA"
+        placeholder="—"
         maxLength={8}
         className={cn(
-          "w-[82px] shrink-0 h-8 px-2 text-[13px] rounded-lg border bg-transparent",
+          "w-[82px] shrink-0 h-8 px-2 text-[12px] rounded-lg border bg-transparent",
           "focus:outline-none focus:ring-2 focus:border-blue-300 focus:ring-blue-100/70 focus:bg-white",
-          "transition-all duration-100 tabular-nums",
+          "transition-[border-color,box-shadow] duration-100 tabular-nums",
           urgent
             ? "text-red-600 font-semibold border-transparent hover:border-red-200"
             : text
@@ -582,12 +593,227 @@ function HybridDateInput({
   );
 }
 
+// ── Client name cell with autocomplete ─────────────────────────────────────────
+function ClientNameCell({
+  value,
+  clientId,
+  isEditing,
+  onStartEdit,
+  onChange,
+  onBlurSave,
+  onKeyDown,
+  onSelectClient,
+}: {
+  value:          string;
+  clientId:       string | null;
+  isEditing:      boolean;
+  onStartEdit:    () => void;
+  onChange:       (v: string) => void;
+  onBlurSave:     (v: string) => void;
+  onKeyDown:      (e: React.KeyboardEvent) => void;
+  onSelectClient: (client: ClientSuggestion) => void;
+}) {
+  const [suggestions, setSuggestions] = useState<ClientSuggestion[]>([]);
+  const [showDrop, setShowDrop]       = useState(false);
+  const [activeIdx, setActiveIdx]     = useState(-1);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch suggestions with debounce
+  const fetchSuggestions = useCallback((q: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!q.trim()) { setSuggestions([]); setShowDrop(false); return; }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/clients?search=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        const list: ClientSuggestion[] = (data.clients ?? []).map((c: ClientSuggestion) => ({
+          id:        c.id,
+          nom:       c.nom,
+          telephone: c.telephone,
+        }));
+        setSuggestions(list);
+        setShowDrop(list.length > 0);
+        setActiveIdx(-1);
+      } catch { /* ignore */ }
+    }, 180);
+  }, []);
+
+  const handleChange = (v: string) => {
+    onChange(v);
+    fetchSuggestions(v);
+  };
+
+  const handleSelect = (client: ClientSuggestion) => {
+    setShowDrop(false);
+    setSuggestions([]);
+    onSelectClient(client);
+  };
+
+  const handleKeyDownWrapper = (e: React.KeyboardEvent) => {
+    if (showDrop && suggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIdx((i) => Math.min(i + 1, suggestions.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" && activeIdx >= 0) {
+        e.preventDefault();
+        handleSelect(suggestions[activeIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setShowDrop(false);
+        setSuggestions([]);
+      }
+    }
+    onKeyDown(e);
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    // Delay blur so click on suggestion fires first
+    setTimeout(() => {
+      if (!containerRef.current?.contains(document.activeElement)) {
+        setShowDrop(false);
+        onBlurSave(e.target.value);
+      }
+    }, 150);
+  };
+
+  if (!isEditing) {
+    return (
+      <div
+        onClick={onStartEdit}
+        className={cn(
+          "w-full h-8 px-2.5 text-[13px] rounded-lg cursor-text font-semibold tracking-[-0.01em]",
+          "flex items-center gap-1.5 hover:bg-black/[0.03] transition-colors duration-100 select-none truncate",
+          value ? "text-slate-900" : EMPTY_CLS,
+        )}
+      >
+        {clientId && (
+          <User className="h-3 w-3 text-blue-400 shrink-0" />
+        )}
+        {value || "Nom Prénom"}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <input
+        type="text"
+        value={value}
+        autoFocus
+        onChange={(e) => handleChange(toTitleCase(e.target.value))}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDownWrapper}
+        className={cn(CELL_INPUT, "font-medium")}
+        placeholder="Nom Prénom"
+      />
+      {showDrop && (
+        <div
+          className={cn(
+            "absolute z-50 top-full left-0 mt-1 min-w-[220px] w-max max-w-[320px]",
+            "bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden",
+          )}
+        >
+          {suggestions.map((s, idx) => (
+            <button
+              key={s.id}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(s); }}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2 text-left",
+                "transition-colors duration-75",
+                idx === activeIdx
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-slate-700 hover:bg-slate-50",
+              )}
+            >
+              <div className="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                <span className="text-[10px] font-bold text-blue-500">
+                  {s.nom.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold truncate">{s.nom}</p>
+                {s.telephone && (
+                  <p className="text-[11px] text-slate-400 truncate">{s.telephone}</p>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────────────────
 
-export function PlanningTable({ items, onItemsChange, onEditingChange }: PlanningTableProps) {
-  const [editing,     setEditing]     = useState<string | null>(null);
-  const [savingIds,   setSavingIds]   = useState<Set<string>>(new Set());
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateAchatFromPlanning }: PlanningTableProps) {
+  const [editing,         setEditing]         = useState<string | null>(null);
+  const [savingIds,       setSavingIds]       = useState<Set<string>>(new Set());
+  const [deletingIds,     setDeletingIds]     = useState<Set<string>>(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [detailId,        setDetailId]        = useState<string | null>(null);
+  const [sortConfig,      setSortConfig]      = useState<{ col: SortableCol; dir: "asc" | "desc" } | null>(null);
+  const [filterUrgent,    setFilterUrgent]    = useState(false);
+  const [newRowId,        setNewRowId]        = useState<string | null>(null);
+  const [qrItem,          setQrItem]          = useState<PlanningItem | null>(null);
+  const [qrPhone,         setQrPhone]         = useState("");
+  const [waItem,          setWaItem]          = useState<PlanningItem | null>(null);
+  const [waPhone,         setWaPhone]         = useState("");
+  const confirmDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Inline quick-add ─────────────────────────────────────────────────────
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+  const [quickDraft,    setQuickDraft]    = useState("");
+  const quickAddRef = useRef<HTMLInputElement>(null);
+
+  // ── Archive ───────────────────────────────────────────────────────────────
+  const [showArchived,   setShowArchived]   = useState(false);
+  const [archiveItems,   setArchiveItems]   = useState<PlanningItem[]>([]);
+  const [loadingArchive, setLoadingArchive] = useState(false);
+
+  const fetchArchived = useCallback(async () => {
+    setLoadingArchive(true);
+    try {
+      const res  = await fetch("/api/planning?archived=true");
+      const data = await res.json();
+      setArchiveItems(data.items ?? []);
+    } catch { /* ignore */ }
+    finally { setLoadingArchive(false); }
+  }, []);
+
+  const archiveItem = useCallback(async (id: string) => {
+    onItemsChange?.(items.filter((i) => i.id !== id));
+    try {
+      await fetch(`/api/planning/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ archived: true }),
+      });
+    } catch { /* ignore */ }
+  }, [items, onItemsChange]);
+
+  const restoreItem = useCallback(async (id: string) => {
+    setArchiveItems((prev) => prev.filter((i) => i.id !== id));
+    try {
+      const res  = await fetch(`/api/planning/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ archived: false }),
+      });
+      const data = await res.json();
+      if (data.item) onItemsChange?.([data.item, ...items]);
+    } catch { /* ignore */ }
+  }, [archiveItems, items, onItemsChange]);
 
   // Ref vers l'état d'édition courant, accessible dans les handlers socket/polling
   const editingRef = useRef(editing);
@@ -659,28 +885,49 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
     return sorted.filter((i) => i.color === tab.secteur);
   }, [activeTab, generalSorted, sorted]);
 
-  // Search + person filter
+  // Search + person + urgent filter + column sort
   const displayItems = useMemo(() => {
     let result = tabItems;
     if (filterPerson) result = result.filter((i) => i.responsible === filterPerson);
-    if (!search.trim()) return result;
-    const q = search.toLowerCase();
-    return result.filter(
-      (i) =>
-        i.clientName.toLowerCase().includes(q) ||
-        i.designation.toLowerCase().includes(q) ||
-        i.note.toLowerCase().includes(q),
-    );
-  }, [tabItems, search, filterPerson]);
+    if (filterUrgent) result = result.filter((i) => isUrgent(i.deadline) || i.priority === "HAUTE");
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (i) =>
+          i.clientName.toLowerCase().includes(q) ||
+          i.designation.toLowerCase().includes(q) ||
+          i.note.toLowerCase().includes(q),
+      );
+    }
+    if (sortConfig) {
+      const dir = sortConfig.dir === "asc" ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        switch (sortConfig.col) {
+          case "priority":   return dir * (PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+          case "clientName": return dir * a.clientName.localeCompare(b.clientName, "fr");
+          case "deadline": {
+            const aD = a.deadline ?? "9999"; const bD = b.deadline ?? "9999";
+            return dir * aD.localeCompare(bD);
+          }
+          case "status": return dir * a.status.localeCompare(b.status);
+          default: return 0;
+        }
+      });
+    }
+    return result;
+  }, [tabItems, search, filterPerson, filterUrgent, sortConfig]);
 
-  // Tab counts
-  const tabCounts = useMemo((): Record<TabKey, number> => ({
-    general:        sorted.length,
-    textiles:       sorted.filter((i) => i.color === "Textiles").length,
-    gravure:        sorted.filter((i) => i.color === "Gravure et découpe laser").length,
-    "impression-uv":sorted.filter((i) => i.color === "Impression UV").length,
-    goodies:        sorted.filter((i) => i.color === "Goodies").length,
-  }), [sorted]);
+  // Tab counts — filtré par personne si un filtre est actif
+  const tabCounts = useMemo((): Record<TabKey, number> => {
+    const base = filterPerson ? sorted.filter((i) => i.responsible === filterPerson) : sorted;
+    return {
+      general:         base.length,
+      textiles:        base.filter((i) => i.color === "Textiles").length,
+      gravure:         base.filter((i) => i.color === "Gravure et découpe laser").length,
+      "impression-uv": base.filter((i) => i.color === "Impression UV").length,
+      goodies:         base.filter((i) => i.color === "Goodies").length,
+    };
+  }, [sorted, filterPerson]);
 
   // ── API helpers ──────────────────────────────────────────────────────────────
 
@@ -758,23 +1005,33 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
 
-  const addRow = useCallback(() => {
-    const newId    = `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-    const maxPos   = sorted.length > 0 ? Math.max(...sorted.map((s) => s.position)) : 0;
-    const position = maxPos + 1;
+  const addRow = useCallback((clientName: string = "") => {
+    const newId  = `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+    // Insérer EN HAUT : position = minPos - 1 (ou -1 si liste vide)
+    const minPos   = sorted.length > 0 ? Math.min(...sorted.map((s) => s.position)) : 0;
+    const position = minPos - 1;
+    // Pré-remplir l'onglet actif et la personne filtrée
+    const tab     = TABS.find((t) => t.key === activeTab);
     const newItem: PlanningItem = {
-      id: newId, priority: "MOYENNE", clientName: "", quantity: 1,
+      id: newId, priority: "MOYENNE", clientName, clientId: null, clientPhone: null, quantity: 1,
       designation: "", note: "", unitPrice: 0, deadline: null,
-      status: "A_DEVISER", responsible: "", color: "", position,
+      status: "A_DEVISER",
+      responsible: filterPerson || "",
+      color: tab?.secteur ?? "",
+      position,
+      trackingId: null, whatsappSentAt: null,
     };
     onItemsChange?.([...items, newItem]);
-    setEditing(`${newId}:clientName`);
+    // N'ouvrir l'édition inline que si le clientName est vide (sinon déjà rempli)
+    if (!clientName) setEditing(`${newId}:clientName`);
+    setNewRowId(newId);
+    setTimeout(() => setNewRowId(null), 1400);
     fetch("/api/planning", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ ...newItem, deadline: null }),
     }).catch((e) => console.error("Failed to save new row:", e));
-  }, [items, sorted, onItemsChange]);
+  }, [items, sorted, activeTab, filterPerson, onItemsChange]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -812,61 +1069,202 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
     [items, onItemsChange],
   );
 
+  // ── Drag-to-reorder fluide (indicateur de position + animation layout) ────────
+
+  const [dragId,     setDragId]     = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; pos: "before" | "after" } | null>(null);
+  const dragIdRef = useRef<string | null>(null);
+
+  const onDragStart = useCallback((e: React.DragEvent, id: string) => {
+    dragIdRef.current = id;
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pos  = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+    setDropTarget((prev) =>
+      prev?.id === id && prev.pos === pos ? prev : { id, pos }
+    );
+  }, []);
+
+  const onDrop = useCallback((e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const fromId = dragIdRef.current;
+    const pos    = dropTarget?.pos ?? "after";
+    dragIdRef.current = null;
+    setDragId(null);
+    setDropTarget(null);
+    if (!fromId || fromId === targetId) return;
+    const fromIdx = displayItems.findIndex((i) => i.id === fromId);
+    if (fromIdx === -1) return;
+    const newOrder = [...displayItems];
+    const [moved]  = newOrder.splice(fromIdx, 1);
+    const targetIdx = newOrder.findIndex((i) => i.id === targetId);
+    if (targetIdx === -1) return;
+    newOrder.splice(pos === "before" ? targetIdx : targetIdx + 1, 0, moved);
+    handleReorder(newOrder);
+  }, [displayItems, handleReorder, dropTarget]);
+
+  const onDragEnd = useCallback(() => {
+    dragIdRef.current = null;
+    setDragId(null);
+    setDropTarget(null);
+  }, []);
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div
-      className="flex flex-col rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden"
+      className="flex flex-col rounded-2xl bg-white overflow-hidden h-full"
       style={{
         fontFamily:          "'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
         WebkitFontSmoothing: "antialiased",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05)",
       }}
     >
 
-      {/* ── Toolbar ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-white">
-        <button
-          onClick={addRow}
-          className={cn(
-            "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium",
-            "bg-blue-500 text-white hover:bg-blue-600 active:scale-95",
-            "transition-all duration-150 shadow-sm shadow-blue-200 shrink-0",
-          )}
-          aria-label="Ajouter une ligne"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Ajouter</span>
-        </button>
-
-        {/* Compteur total */}
-        <span className="text-[12px] text-slate-400 font-medium tabular-nums">
-          {sorted.length} ligne{sorted.length !== 1 ? "s" : ""}
-        </span>
-
-        {/* Filtre par personne */}
-        {filterPerson && (
+      {/* ── Toolbar unifiée ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-black/[0.06] bg-white/80 backdrop-blur-sm">
+        {isQuickAdding ? (
+          <div className="flex items-center gap-2 h-8 px-3 rounded-lg bg-white border border-blue-200 ring-1 ring-blue-100 shadow-sm min-w-[180px] shrink-0">
+            <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+            <input
+              ref={quickAddRef}
+              value={quickDraft}
+              onChange={(e) => setQuickDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const text = quickDraft.trim();
+                  if (text) {
+                    addRow(text);
+                    setQuickDraft("");
+                    setTimeout(() => quickAddRef.current?.focus(), 0);
+                  } else {
+                    setIsQuickAdding(false);
+                    setQuickDraft("");
+                  }
+                }
+                if (e.key === "Escape") { setIsQuickAdding(false); setQuickDraft(""); }
+              }}
+              onBlur={() => {
+                const text = quickDraft.trim();
+                if (text) addRow(text);
+                setIsQuickAdding(false);
+                setQuickDraft("");
+              }}
+              placeholder="Nom du client…"
+              className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+            />
+            <button
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { setIsQuickAdding(false); setQuickDraft(""); }}
+              className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ) : (
           <button
-            onClick={() => setFilterPerson("")}
+            onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
             className={cn(
-              "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold",
-              "bg-blue-50 text-blue-600 border border-blue-200",
-              "hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors duration-150",
+              "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-semibold shrink-0",
+              "bg-blue-500 text-white hover:bg-blue-600 active:scale-95",
+              "transition-[background-color,transform] duration-[80ms] shadow-sm shadow-blue-200/60",
             )}
+            aria-label="Ajouter une ligne"
           >
-            {TEAM.find((p) => p.key === filterPerson)?.name}
-            <X className="h-3 w-3" />
+            <Plus className="h-3.5 w-3.5" />
+            <span>Ajouter</span>
           </button>
         )}
+
+        <div className="h-4 w-px bg-slate-200 shrink-0" />
+        <SearchBar value={search} onChange={setSearch} className="flex-1 min-w-0 max-w-[240px]" />
+        <div className="h-4 w-px bg-slate-200 shrink-0" />
+
+        {/* Avatars équipe — filtre rapide */}
+        <div className="flex items-center gap-1 shrink-0">
+          {TEAM.map((person) => (
+            <button
+              key={person.key}
+              onClick={() => setFilterPerson((p) => p === person.key ? "" : person.key)}
+              title={person.name}
+              className={cn(
+                "h-6 w-6 rounded-full text-[10px] font-bold transition-all duration-[80ms]",
+                filterPerson === person.key
+                  ? "bg-blue-500 text-white scale-110 shadow-sm shadow-blue-300/60"
+                  : "bg-slate-100 text-slate-500 hover:bg-slate-200",
+              )}
+            >
+              {person.name[0]}
+            </button>
+          ))}
+        </div>
+
+        <div className="h-4 w-px bg-slate-200 shrink-0" />
+
+        {/* Bouton urgences */}
+        {!showArchived && (
+          <button
+            onClick={() => setFilterUrgent((p) => !p)}
+            title="Filtrer les urgences (HAUTE + deadline proche)"
+            className={cn(
+              "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-[80ms]",
+              filterUrgent
+                ? "bg-orange-50 text-orange-600 border border-orange-200"
+                : "bg-slate-100/80 text-slate-500 hover:bg-orange-50 hover:text-orange-500 border border-transparent",
+            )}
+          >
+            <AlertTriangle className="h-3 w-3" />
+            Urgences
+          </button>
+        )}
+
+        {/* Bouton Archives */}
+        <button
+          onClick={() => {
+            if (showArchived) {
+              setShowArchived(false);
+            } else {
+              setShowArchived(true);
+              fetchArchived();
+            }
+          }}
+          className={cn(
+            "flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-semibold shrink-0 transition-all duration-[80ms]",
+            showArchived
+              ? "bg-amber-50 text-amber-600 border border-amber-200"
+              : "bg-slate-100/80 text-slate-500 hover:bg-amber-50 hover:text-amber-500 border border-transparent",
+          )}
+        >
+          <Archive className="h-3 w-3" />
+          Archives
+        </button>
+
+        {/* Indicateur de sauvegarde global */}
+        <AnimatePresence>
+          {savingIds.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: 6 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 6 }}
+              transition={{ duration: 0.15 }}
+              className="flex items-center gap-1.5 text-[11px] text-amber-500 font-medium ml-auto shrink-0"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Sauvegarde…
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ── Search bar ────────────────────────────────────────────────── */}
-      <div className="px-4 py-2.5 border-b border-slate-100 bg-white">
-        <SearchBar value={search} onChange={setSearch} maxWidth="18%" />
-      </div>
-
-      {/* ── Tabs (feature 8) ────────────────────────────────────────────────── */}
-      <div className="border-b border-slate-100 bg-slate-50/50 overflow-x-auto">
-        <div className="flex justify-start items-end gap-1 px-4 min-w-max">
+      {/* ── Tabs (masqués en vue archives) ───────────────────────────────────── */}
+      <div className={cn("bg-white overflow-x-auto", showArchived && "hidden")}>
+        <div className="flex justify-start items-stretch gap-0 px-4 min-w-max">
           {TABS.map((tab) => {
             const active = activeTab === tab.key;
             const count  = tabCounts[tab.key];
@@ -875,98 +1273,231 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium",
-                  "whitespace-nowrap transition-colors duration-150 rounded-t-lg",
-                  "border border-b-0",
+                  "relative flex items-center gap-1.5 px-4 py-3.5 text-[13px]",
+                  "whitespace-nowrap transition-[color] duration-[80ms]",
                   active
-                    ? "text-blue-600 bg-white border-slate-200 shadow-sm"
-                    : "text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-100/60",
+                    ? "text-blue-600 font-semibold"
+                    : "text-slate-500 font-medium hover:text-slate-800",
                 )}
               >
                 {tab.label}
                 {count > 0 && (
                   <span className={cn(
-                    "px-1.5 py-0.5 rounded-full text-[11px] font-semibold",
-                    active ? "bg-blue-100 text-blue-600" : "bg-slate-200 text-slate-500",
+                    "px-1.5 py-0.5 rounded-full text-[11px] font-semibold transition-[background-color,color] duration-[80ms]",
+                    active ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-400",
                   )}>
                     {count}
                   </span>
+                )}
+                {/* Trait bleu animé en bas de l'onglet actif */}
+                {active && (
+                  <motion.div
+                    layoutId="tab-active-line"
+                    className="absolute bottom-0 left-2 right-2 h-[2px] bg-blue-500 rounded-t-full"
+                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                  />
                 )}
               </button>
             );
           })}
         </div>
       </div>
+      <div className="h-px bg-black/[0.06] ml-[10%]" />
+
+      {/* ── Vue Archives ────────────────────────────────────────────────────── */}
+      {showArchived && (
+        <div className="overflow-auto flex-1">
+          <div style={{ minWidth: "1200px" }}>
+            {loadingArchive ? (
+              <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Chargement…
+              </div>
+            ) : archiveItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center select-none">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center">
+                  <Archive className="h-5 w-5 text-slate-300" />
+                </div>
+                <p className="text-[13px] text-slate-400">Aucun élément archivé</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {archiveItems.map((item) => {
+                  const cfg    = SECTEUR_CONFIG[item.color as keyof typeof SECTEUR_CONFIG] as { dotHex?: string; label?: string } | undefined;
+                  const status = STATUS_LABELS[item.status as keyof typeof STATUS_LABELS];
+                  return (
+                    <div key={item.id} className="grid items-center bg-amber-50/30 hover:bg-amber-50/60 transition-colors group" style={GRID_STYLE}>
+                      <div />
+                      <div />
+                      <div className="px-2.5 py-3 text-[11px] text-slate-400">{item.priority}</div>
+                      <div className="px-2.5 py-3 text-[13px] font-medium text-slate-600 truncate">{item.clientName || <span className="text-slate-300 italic">—</span>}</div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400 font-mono truncate">{item.clientPhone || "—"}</div>
+                      <div className="px-2.5 py-3">
+                        {cfg ? (
+                          <span className="flex items-center gap-1.5 text-[12px]">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: cfg.dotHex }} />
+                            <span className="text-slate-500">{item.color}</span>
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-500 text-center">{item.quantity}</div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400 italic truncate">{item.note || "—"}</div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400">{item.deadline ? item.deadline.toString().slice(0, 10) : "—"}</div>
+                      <div className="px-2.5 py-3">
+                        {status ? <span className="text-[11px] text-slate-500">{status}</span> : null}
+                      </div>
+                      <div className="px-2.5 py-3 text-[12px] text-slate-400">{item.responsible || "—"}</div>
+                      {/* Restaurer */}
+                      <div className="h-full flex items-center justify-center gap-1">
+                        <button
+                          onClick={() => restoreItem(item.id)}
+                          title="Restaurer"
+                          className="flex items-center gap-1 p-1.5 rounded-md text-[11px] font-semibold text-amber-600 hover:bg-amber-100 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          <span>Restaurer</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div className="overflow-x-auto">
+      <div className={cn("overflow-auto flex-1", showArchived && "hidden")}>
         <div style={{ minWidth: "1200px" }}>
 
-          {/* Column headers */}
-          <div className="grid bg-slate-50/70 border-b border-slate-100" style={GRID_STYLE}>
-            {COL_HEADERS.map(({ label, align }, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "px-1.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-400",
-                  align === "center" && "text-center",
-                  (align as string) === "right" && "text-right",
-                )}
-              >
-                {label}
-              </div>
-            ))}
+          {/* Column headers — sticky */}
+          <div className="grid bg-[#f9f9fb] border-l-4 border-l-transparent sticky top-0 z-10" style={GRID_STYLE}>
+            {COL_HEADERS.map(({ label, align, sortKey }, i) => {
+              const isSorted = sortConfig?.col === sortKey;
+              return (
+                <div
+                  key={i}
+                  onClick={sortKey ? () => setSortConfig((prev) =>
+                    prev?.col === sortKey
+                      ? prev.dir === "asc" ? { col: sortKey, dir: "desc" } : null
+                      : { col: sortKey, dir: "asc" }
+                  ) : undefined}
+                  className={cn(
+                    "px-2.5 py-3.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                    "flex items-center gap-1",
+                    align === "center" ? "justify-center" : "",
+                    sortKey ? "cursor-pointer select-none hover:text-slate-600 transition-colors duration-[80ms]" : "",
+                    isSorted ? "text-blue-500" : "text-slate-500",
+                  )}
+                >
+                  {label}
+                  {sortKey && (
+                    isSorted
+                      ? sortConfig?.dir === "asc"
+                        ? <ArrowUp className="h-2.5 w-2.5" />
+                        : <ArrowDown className="h-2.5 w-2.5" />
+                      : <ArrowUpDown className="h-2.5 w-2.5 opacity-30" />
+                  )}
+                </div>
+              );
+            })}
           </div>
+          <div className="h-px bg-black/[0.06] ml-[20%]" />
 
-          {/* Rows */}
-          <Reorder.Group as="div" axis="y" values={displayItems} onReorder={handleReorder}>
-            <AnimatePresence mode="popLayout" initial={false}>
+          {/* Rows — layout animé + indicateur de position fluide */}
+          <div
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropTarget(null);
+            }}
+          >
               {displayItems.map((item) => {
                 if (!item?.id) return null;
                 const isDeleting  = deletingIds.has(item.id);
-                const isSaving    = savingIds.has(item.id);
                 const urgent      = isUrgent(item.deadline);
-                const attention   = needsAttention(item);
                 const itemType    = (types[item.id] ?? "") as ItemType;
                 const typeConfig  = TYPE_CONFIG[itemType] ?? TYPE_CONFIG[""];
-                const isNoteEdit  = isEditingCell(item.id, "note");
-
-                const rowBg = urgent
-                  ? "bg-red-50 hover:bg-red-100/40"
-                  : "bg-white hover:bg-slate-50/70";
+                const isDone      = item.status === "TERMINE" || item.status === "FACTURE_FAITE";
+                const isNew       = newRowId === item.id;
+                const attention   = needsAttention(item);
+                const SECTEUR_ROW: Record<string, { bg: string; hover: string }> = {
+                  "Textiles":                 { bg: "#FAF0F3", hover: "#F5E6EC" },
+                  "Gravure et découpe laser": { bg: "#EFF3F8", hover: "#E4EBF5" },
+                  "Impression UV":            { bg: "#F3EFF9", hover: "#EAE2F5" },
+                  "Goodies":                  { bg: "#F7F0E8", hover: "#F0E6D8" },
+                };
+                const secteurRow = !isDone && !urgent ? SECTEUR_ROW[item.color ?? ""] : undefined;
+                const rowBg = isDone
+                  ? "bg-[#fafafa] hover:bg-[#f7f7f7]"
+                  : urgent
+                  ? "bg-red-50/70 hover:bg-red-50"
+                  : secteurRow ? "" : "bg-white hover:bg-[#f5f5f7]/60";
+                const isDragging = dragId === item.id;
+                const isTarget   = dropTarget?.id === item.id;
 
                 return (
-                  <Reorder.Item key={item.id} value={item} as="div">
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: isDeleting ? 0.25 : 1, y: 0 }}
-                      exit={{ opacity: 0, x: 24, transition: { duration: 0.15 } }}
-                      transition={{ type: "spring", stiffness: 500, damping: 42 }}
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={isNew ? { opacity: 0, y: -6 } : false}
+                    animate={{ opacity: isDragging ? 0.38 : 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 38, mass: 0.85 }}
+                    draggable
+                    onDragStart={(e) => onDragStart(e as unknown as React.DragEvent, item.id)}
+                    onDragOver={(e) => onDragOver(e as unknown as React.DragEvent, item.id)}
+                    onDrop={(e) => onDrop(e as unknown as React.DragEvent, item.id)}
+                    onDragEnd={onDragEnd}
+                    className="relative"
+                  >
+                    {/* Ligne indicatrice de dépôt — avant */}
+                    <AnimatePresence>
+                      {isTarget && dropTarget?.pos === "before" && (
+                        <motion.div
+                          layoutId="dnd-drop-line"
+                          className="absolute top-0 left-0 right-0 h-[2.5px] rounded-full bg-blue-500 z-20 pointer-events-none"
+                          initial={{ opacity: 0, scaleX: 0.6 }}
+                          animate={{ opacity: 1, scaleX: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                        />
+                      )}
+                    </AnimatePresence>
+                    {/* Ligne indicatrice de dépôt — après */}
+                    <AnimatePresence>
+                      {isTarget && dropTarget?.pos === "after" && (
+                        <motion.div
+                          layoutId="dnd-drop-line"
+                          className="absolute bottom-0 left-0 right-0 h-[2.5px] rounded-full bg-blue-500 z-20 pointer-events-none"
+                          initial={{ opacity: 0, scaleX: 0.6 }}
+                          animate={{ opacity: 1, scaleX: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.12, ease: [0.16, 1, 0.3, 1] }}
+                        />
+                      )}
+                    </AnimatePresence>
+                    <div
                       className={cn(
-                        "grid w-full border-b border-slate-100 group relative",
-                        "transition-colors duration-100",
-                        "border-l-4", typeConfig.border,
-                        "min-h-[44px]",
+                        "grid w-full border-b border-black/[0.04] group relative",
+                        "transition-[background-color,opacity,filter] duration-[80ms]",
+                        "border-l-4", isDone ? "border-l-slate-200" : typeConfig.border,
+                        "min-h-[64px]",
                         rowBg,
+                        isDone && "saturate-[0.4]",
+                        isNew && "ring-1 ring-inset ring-blue-300/40",
                         isDeleting && "pointer-events-none",
                       )}
-                      style={GRID_STYLE}
+                      style={{
+                        ...GRID_STYLE,
+                        backgroundColor: secteurRow ? secteurRow.bg : undefined,
+                        opacity: isDeleting ? 0.25 : isDone ? 0.6 : 1,
+                        transition: "opacity 0.1s, background-color 0.08s, filter 0.08s",
+                      }}
+                      onMouseEnter={secteurRow ? (e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = secteurRow.hover; } : undefined}
+                      onMouseLeave={secteurRow ? (e) => { (e.currentTarget as HTMLDivElement).style.backgroundColor = secteurRow.bg; } : undefined}
                     >
 
-                      {/* Save indicator */}
-                      <AnimatePresence>
-                        {isSaving && (
-                          <motion.span
-                            key="dot"
-                            initial={{ opacity: 0, scale: 0.4 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.4 }}
-                            className="absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse z-10 pointer-events-none"
-                          />
-                        )}
-                      </AnimatePresence>
 
-                      {/* Attention indicator — clignotement si inactivité > 3 jours */}
+                      {/* Bande d'attention — clignotement si aucune action depuis 3 jours */}
                       {attention && !isDeleting && (
                         <span
                           className="planning-attention-strip absolute left-0 top-0 bottom-0 w-1 rounded-r z-10 pointer-events-none"
@@ -990,8 +1521,8 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         <div className="relative w-full">
                           <span className={cn(
                             "flex items-center justify-center gap-1 h-7 px-2.5 rounded-full",
-                            "text-[11px] font-semibold cursor-pointer select-none w-full",
-                            "transition-all duration-150 hover:opacity-75 active:scale-95",
+                            "text-[12px] font-semibold cursor-pointer select-none w-full",
+                            "transition-[opacity,transform] duration-150 hover:opacity-75 active:scale-95",
                             PRIORITY_CONFIG[item.priority].style,
                           )}>
                             {PRIORITY_CONFIG[item.priority].label}
@@ -1011,32 +1542,61 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
 
                       {/* 3 · Client */}
                       <div className={CELL_WRAP}>
-                        {isEditingCell(item.id, "clientName") ? (
+                        <ClientNameCell
+                          value={item.clientName}
+                          clientId={item.clientId ?? null}
+                          isEditing={isEditingCell(item.id, "clientName")}
+                          onStartEdit={() => startEdit(item.id, "clientName", item.clientName)}
+                          onChange={(v) => updateItem(item.id, "clientName", v)}
+                          onBlurSave={(v) => handleBlurSave(item.id, "clientName", toTitleCase(v))}
+                          onKeyDown={(e) => handleKeyDown(e, item.id, "clientName")}
+                          onSelectClient={(client) => {
+                            // Save both clientName and clientId atomically
+                            onItemsChange?.(
+                              items.map((it) =>
+                                it.id === item.id
+                                  ? { ...it, clientName: client.nom, clientId: client.id }
+                                  : it
+                              )
+                            );
+                            persist(item.id, { clientName: client.nom, clientId: client.id });
+                            setEditing(null);
+                          }}
+                        />
+                      </div>
+
+                      {/* 4 · Tél. — numéro WhatsApp inline éditable */}
+                      <div className={CELL_WRAP}>
+                        {isEditingCell(item.id, "clientPhone") ? (
                           <input
-                            type="text"
-                            value={item.clientName}
+                            type="tel"
+                            value={item.clientPhone ?? ""}
                             autoFocus
-                            onChange={(e) => updateItem(item.id, "clientName", toTitleCase(e.target.value))}
-                            onBlur={(e)   => handleBlurSave(item.id, "clientName", toTitleCase(e.target.value))}
-                            onKeyDown={(e) => handleKeyDown(e, item.id, "clientName")}
-                            className={cn(CELL_INPUT, "font-medium")}
-                            placeholder="Nom Prénom"
+                            onChange={(e) => updateItem(item.id, "clientPhone", e.target.value)}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim() || null;
+                              setEditing(null);
+                              persist(item.id, { clientPhone: val });
+                            }}
+                            onKeyDown={(e) => handleKeyDown(e, item.id, "clientPhone")}
+                            className={cn(CELL_INPUT, "font-mono")}
+                            placeholder="+33…"
                           />
                         ) : (
                           <div
-                            onClick={() => startEdit(item.id, "clientName", item.clientName)}
+                            onClick={() => startEdit(item.id, "clientPhone", item.clientPhone ?? "")}
                             className={cn(
-                              "w-full h-8 px-2.5 text-[13px] rounded-lg cursor-text font-medium",
+                              "w-full h-8 px-2 text-[12px] rounded-lg cursor-text font-mono",
                               "flex items-center hover:bg-black/[0.03] transition-colors duration-100 select-none truncate",
-                              item.clientName ? "text-slate-800" : EMPTY_CLS,
+                              item.clientPhone ? "text-slate-700" : EMPTY_CLS,
                             )}
                           >
-                            {item.clientName || "Nom Prénom"}
+                            {item.clientPhone || "+33…"}
                           </div>
                         )}
                       </div>
 
-                      {/* 4 · Secteur (feature 7 — juste après Client) */}
+                      {/* 5 · Secteur (feature 7 — juste après Client) */}
                       <div className={CELL_WRAP}>
                         <SecteurPicker
                           value={item.color ?? ""}
@@ -1044,7 +1604,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         />
                       </div>
 
-                      {/* 5 · Quantité — input direct sans flèches (feature 5) */}
+                      {/* 6 · Quantité — input direct sans flèches (feature 5) */}
                       <div className={CELL_WRAP}>
                         {isEditingCell(item.id, "quantity") ? (
                           <input
@@ -1067,7 +1627,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                           <div
                             onClick={() => startEdit(item.id, "quantity", item.quantity)}
                             className={cn(
-                              "w-full h-8 px-2.5 text-[13px] text-slate-800 rounded-lg cursor-text",
+                              "w-full h-8 px-2.5 text-[12px] text-slate-800 rounded-lg cursor-text",
                               "flex items-center justify-center font-semibold tabular-nums",
                               "hover:bg-black/[0.03] transition-colors duration-100 select-none",
                             )}
@@ -1077,19 +1637,28 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         )}
                       </div>
 
-                      {/* 6 · Note — multi-ligne → agrandit la ligne verticalement */}
-                      <div className="px-1.5 py-[13px] min-w-0 overflow-visible">
-                        <NoteCell
-                          note={item.note}
-                          isEditing={isNoteEdit}
-                          onStartEdit={() => startEdit(item.id, "note", item.note)}
-                          onUpdate={(v) => updateItem(item.id, "note", v)}
-                          onBlurSave={(v) => handleBlurSave(item.id, "note", v)}
-                          onCancel={() => { updateItem(item.id, "note", preEdit.current); setEditing(null); }}
+                      {/* 7 · Note — textarea auto-expand, toutes les notes visibles */}
+                      <div className="py-1 px-1.5 min-w-0 flex items-start">
+                        <textarea
+                          value={item.note}
+                          onChange={(e) => updateItem(item.id, "note", e.target.value)}
+                          onFocus={() => startEdit(item.id, "note", item.note)}
+                          onBlur={(e) => handleBlurSave(item.id, "note", e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, item.id, "note")}
+                          placeholder="Note…"
+                          rows={1}
+                          className={cn(
+                            "w-full px-2 py-1 text-[12px] italic bg-transparent rounded-lg resize-none overflow-hidden leading-snug",
+                            "border border-transparent hover:border-slate-200",
+                            "focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100/70 focus:outline-none",
+                            "transition-[border-color,background-color,box-shadow] duration-100 placeholder:text-slate-300",
+                            item.note ? "text-slate-500" : "text-slate-300",
+                          )}
+                          style={{ fieldSizing: "content", minHeight: "2rem" } as React.CSSProperties}
                         />
                       </div>
 
-                      {/* 7 · Échéance hybride JJ/MM + calendrier (feature 6) */}
+                      {/* 8 · Échéance hybride JJ/MM + calendrier (feature 6) */}
                       <div className={CELL_WRAP}>
                         <HybridDateInput
                           value={item.deadline}
@@ -1098,7 +1667,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         />
                       </div>
 
-                      {/* 8 · État — menu coloré */}
+                      {/* 9 · État */}
                       <div className={CELL_WRAP}>
                         <StatusPicker
                           value={item.status}
@@ -1106,25 +1675,9 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         />
                       </div>
 
-                      {/* 9 · Interne — clic droit sur le nom = filtre rapide */}
+                      {/* 10 · Interne — clic droit sur le nom = filtre rapide */}
                       <div className={CELL_WRAP}>
                         <div className="relative flex items-center gap-1">
-                          {item.responsible && (
-                            <button
-                              title={`Filtrer : ${TEAM.find((p) => p.key === item.responsible)?.name}`}
-                              onClick={() => setFilterPerson(
-                                filterPerson === item.responsible ? "" : item.responsible
-                              )}
-                              className={cn(
-                                "shrink-0 h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors duration-150",
-                                filterPerson === item.responsible
-                                  ? "bg-blue-500 text-white"
-                                  : "bg-slate-100 text-slate-400 hover:bg-blue-100 hover:text-blue-500",
-                              )}
-                            >
-                              {TEAM.find((p) => p.key === item.responsible)?.name?.[0] ?? "?"}
-                            </button>
-                          )}
                           <AppleSelect
                             value={item.responsible}
                             displayLabel={TEAM.find((p) => p.key === item.responsible)?.name ?? "—"}
@@ -1139,14 +1692,79 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         </div>
                       </div>
 
-                      {/* 10 · Supprimer */}
-                      <div className="h-full flex items-center justify-center">
+
+                      {/* 11 · Actions : QR, WhatsApp, Achat Textile, Archiver, Supprimer */}
+                      <div className="h-full flex items-center justify-center gap-0.5 overflow-visible">
+                        {/* Bouton WhatsApp */}
                         <button
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => {
+                            setWaPhone(item.clientPhone ?? "");
+                            setWaItem(item);
+                          }}
+                          title={
+                            item.whatsappSentAt
+                              ? `Lien envoyé le ${new Date(item.whatsappSentAt).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                              : "Envoyer le lien de suivi sur WhatsApp"
+                          }
                           className={cn(
-                            "p-1.5 rounded-md transition-all duration-150",
+                            "p-1.5 rounded-md transition-[color,background-color] duration-150",
                             "opacity-0 group-hover:opacity-100",
-                            "text-slate-300 hover:text-red-400 hover:bg-red-50",
+                            item.whatsappSentAt
+                              ? "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
+                              : "text-slate-300 hover:text-emerald-500 hover:bg-emerald-50",
+                          )}
+                          aria-label="Envoyer WhatsApp"
+                        >
+                          <MessageSquare className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Bouton commande Achat Textile — seulement pour les lignes Textiles */}
+                        {item.color === "Textiles" && (
+                          <button
+                            onClick={() => onCreateAchatFromPlanning?.(item)}
+                            title="Passer commande fournisseur"
+                            className={cn(
+                              "p-1.5 rounded-md transition-[color,background-color] duration-150",
+                              "opacity-0 group-hover:opacity-100",
+                              "text-slate-300 hover:text-emerald-600 hover:bg-emerald-50",
+                            )}
+                            aria-label="Commande Achat Textile"
+                          >
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {/* Bouton Archiver */}
+                        <button
+                          onClick={() => archiveItem(item.id)}
+                          title="Archiver"
+                          className={cn(
+                            "p-1.5 rounded-md transition-[color,background-color] duration-150",
+                            "opacity-0 group-hover:opacity-100",
+                            "text-slate-300 hover:text-amber-500 hover:bg-amber-50",
+                          )}
+                          aria-label="Archiver"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                        </button>
+                        {/* Bouton Supprimer (2 clics pour confirmer) */}
+                        <button
+                          onClick={() => {
+                            if (confirmDeleteId === item.id) {
+                              if (confirmDeleteTimer.current) clearTimeout(confirmDeleteTimer.current);
+                              setConfirmDeleteId(null);
+                              handleDelete(item.id);
+                            } else {
+                              setConfirmDeleteId(item.id);
+                              if (confirmDeleteTimer.current) clearTimeout(confirmDeleteTimer.current);
+                              confirmDeleteTimer.current = setTimeout(() => setConfirmDeleteId(null), 3000);
+                            }
+                          }}
+                          className={cn(
+                            "p-1.5 rounded-md transition-[color,box-shadow] duration-150",
+                            "opacity-0 group-hover:opacity-100",
+                            confirmDeleteId === item.id
+                              ? "text-red-500 ring-1 ring-red-300"
+                              : "text-slate-300 hover:text-red-400",
                           )}
                           aria-label="Supprimer"
                         >
@@ -1154,22 +1772,21 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         </button>
                       </div>
 
-                    </motion.div>
-                  </Reorder.Item>
+                    </div>
+                  </motion.div>
                 );
               })}
-            </AnimatePresence>
-          </Reorder.Group>
+          </div>
 
           {/* Ghost row — ajouter rapidement en bas de liste */}
           {displayItems.length > 0 && !search && !filterPerson && (
             <button
-              onClick={addRow}
+              onClick={() => addRow()}
               className={cn(
                 "w-full flex items-center gap-2 px-4 py-2.5 text-[12px] font-medium",
                 "text-slate-300 hover:text-blue-400 hover:bg-blue-50/40",
                 "border-t border-dashed border-slate-100 hover:border-blue-200",
-                "transition-all duration-150 group/ghost",
+                "transition-[background-color,color,border-color] duration-150 group/ghost",
               )}
             >
               <Plus className="h-3.5 w-3.5 opacity-50 group-hover/ghost:opacity-100 transition-opacity" />
@@ -1177,30 +1794,513 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
             </button>
           )}
 
-          {/* Empty state */}
-          {displayItems.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 text-center select-none">
-              <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
-                <Search className="h-5 w-5 text-slate-200" />
+          {/* Empty state — contextualisé par onglet */}
+          {displayItems.length === 0 && (() => {
+            const TAB_EMPTY: Record<TabKey, { icon: React.ReactNode; label: string }> = {
+              general:          { icon: <Package className="h-5 w-5 text-slate-300" />,  label: "Aucune commande" },
+              textiles:         { icon: <Shirt className="h-5 w-5 text-emerald-200" />,  label: "Aucune commande Textiles" },
+              gravure:          { icon: <Scissors className="h-5 w-5 text-violet-200" />, label: "Aucune commande Gravure & Découpe" },
+              "impression-uv":  { icon: <Printer className="h-5 w-5 text-cyan-200" />,   label: "Aucune commande Impression UV" },
+              goodies:          { icon: <Package className="h-5 w-5 text-amber-200" />,  label: "Aucune commande Goodies" },
+            };
+            const ctx = search ? null : TAB_EMPTY[activeTab];
+            return (
+              <div className="flex flex-col items-center justify-center py-16 text-center select-none gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center">
+                  {search ? <Search className="h-5 w-5 text-slate-200" /> : ctx?.icon}
+                </div>
+                <p className="text-[13px] text-slate-400">
+                  {search ? `Aucun résultat pour « ${search} »` : (filterUrgent ? "Aucune urgence pour cette vue" : ctx?.label)}
+                </p>
+                {search && (
+                  <button onClick={() => setSearch("")} className="text-[12px] text-blue-500 hover:underline transition-colors">
+                    Effacer la recherche
+                  </button>
+                )}
+                {!search && !filterUrgent && (
+                  <button
+                    onClick={() => addRow()}
+                    className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors duration-[80ms]"
+                  >
+                    <Plus className="h-3 w-3" /> Ajouter une commande
+                  </button>
+                )}
               </div>
-              <p className="text-[13px] text-slate-400">
-                {search
-                  ? `Aucun résultat pour « ${search} »`
-                  : "Aucune commande dans cette vue"}
-              </p>
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  className="mt-2 text-[12px] text-blue-500 hover:underline transition-colors"
-                >
-                  Effacer la recherche
-                </button>
-              )}
-            </div>
-          )}
+            );
+          })()}
+
+          {/* Footer stats */}
+          {displayItems.length > 0 && (() => {
+            const urgentCount = displayItems.filter((i) => isUrgent(i.deadline) || i.priority === "HAUTE").length;
+            const doneCount   = displayItems.filter((i) => i.status === "TERMINE" || i.status === "FACTURE_FAITE").length;
+            return (
+              <div className="flex items-center gap-4 px-4 py-2 border-t border-black/[0.04] bg-[#f9f9fb]">
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {displayItems.length} commande{displayItems.length > 1 ? "s" : ""}
+                </span>
+                {urgentCount > 0 && (
+                  <span className="flex items-center gap-1 text-[11px] text-orange-500 font-medium">
+                    <AlertTriangle className="h-2.5 w-2.5" />
+                    {urgentCount} urgente{urgentCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {doneCount > 0 && (
+                  <span className="text-[11px] text-green-600 font-medium">
+                    {doneCount} terminée{doneCount > 1 ? "s" : ""}
+                  </span>
+                )}
+                {sortConfig && (
+                  <button
+                    onClick={() => setSortConfig(null)}
+                    className="ml-auto text-[11px] text-blue-500 hover:text-blue-700 hover:underline transition-colors duration-[80ms]"
+                  >
+                    Réinitialiser le tri
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
         </div>
       </div>
+
+      {/* ── Slide-over détails ───────────────────────────────────────────────── */}
+      <PlanningDetailPanel
+        item={items.find((i) => i.id === detailId) ?? null}
+        itemType={detailId ? (types[detailId] ?? "") : ""}
+        onClose={() => setDetailId(null)}
+      />
+
+      {/* ── Modal QR Code ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {qrItem && (
+          <motion.div
+            key="qr-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={() => setQrItem(null)}
+          >
+            <motion.div
+              key="qr-panel"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-5 w-full max-w-xs"
+            >
+              <div className="text-center">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">QR Code de suivi</p>
+                <p className="text-[15px] font-semibold text-slate-900 leading-tight">
+                  {qrItem.clientName || "Client"}
+                </p>
+                <p className="text-[13px] text-slate-500 truncate max-w-[200px]">
+                  {qrItem.designation || "Commande"}
+                </p>
+              </div>
+
+              {qrItem.trackingId && (
+                <>
+                  <div className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                    <QRCodeSVG
+                      value={trackingUrl(qrItem.trackingId)}
+                      size={180}
+                      bgColor="#FFFFFF"
+                      fgColor="#1D1D1F"
+                      level="M"
+                    />
+                  </div>
+
+                  <div className="w-full">
+                    <p className="text-[10px] text-slate-400 mb-1.5 text-center">Lien de suivi</p>
+                    <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+                      <span className="text-[11px] text-slate-600 truncate flex-1 font-mono">
+                        {trackingUrl(qrItem.trackingId)}
+                      </span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(trackingUrl(qrItem!.trackingId)).catch(() => {});
+                        }}
+                        className="text-[11px] font-medium text-blue-500 hover:text-blue-700 shrink-0 transition-colors"
+                      >
+                        Copier
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      // Télécharger le QR code via le canvas caché
+                      const canvas = document.getElementById("qr-dl-canvas") as HTMLCanvasElement | null;
+                      if (!canvas) return;
+                      const link = document.createElement("a");
+                      link.download = `qr-${qrItem!.clientName || "commande"}.png`;
+                      link.href = canvas.toDataURL("image/png");
+                      link.click();
+                    }}
+                    className={cn(
+                      "w-full h-9 rounded-xl text-[13px] font-medium",
+                      "bg-slate-900 text-white hover:bg-slate-700 active:scale-[0.98]",
+                      "transition-all duration-150",
+                    )}
+                  >
+                    Télécharger PNG
+                  </button>
+
+                  {/* ── Envoi WhatsApp depuis la modal QR ── */}
+                  <div className="w-full border-t border-slate-100 pt-4 flex flex-col gap-2">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">
+                      Envoyer le lien
+                    </p>
+                    <input
+                      type="tel"
+                      value={qrPhone}
+                      onChange={(e) => setQrPhone(e.target.value)}
+                      placeholder="+33612345678"
+                      className={cn(
+                        "w-full h-9 px-3 text-[13px] rounded-xl font-mono",
+                        "border border-slate-200 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100/70",
+                        "focus:outline-none transition-all",
+                      )}
+                    />
+                    <button
+                      disabled={!qrPhone.trim()}
+                      onClick={() => {
+                        if (!qrItem || !qrPhone.trim()) return;
+                        const phone = qrPhone.replace(/\D/g, "");
+                        const url   = trackingUrl(qrItem.trackingId);
+                        const msg   = encodeURIComponent(
+                          `Bonjour,\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
+                        );
+                        window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
+                        saveNow(qrItem.id, "whatsappSentAt", new Date().toISOString());
+                        if (qrPhone !== qrItem.clientPhone) saveNow(qrItem.id, "clientPhone", qrPhone.trim());
+                        setTimeout(() => setQrItem(null), 400);
+                      }}
+                      className={cn(
+                        "w-full h-9 rounded-xl text-[13px] font-semibold",
+                        "transition-all duration-150 active:scale-[0.98]",
+                        qrPhone.trim()
+                          ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                          : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                      )}
+                    >
+                      📱 Envoyer sur WhatsApp
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <button
+                onClick={() => setQrItem(null)}
+                className="text-[13px] text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Fermer
+              </button>
+
+              {/* Canvas caché pour le téléchargement PNG haute résolution */}
+              <div className="hidden">
+                {qrItem.trackingId && (
+                  <QRCodeCanvas
+                    id="qr-dl-canvas"
+                    value={trackingUrl(qrItem.trackingId)}
+                    size={400}
+                    bgColor="#FFFFFF"
+                    fgColor="#1D1D1F"
+                    level="M"
+                  />
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Modal WhatsApp ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {waItem && (
+          <motion.div
+            key="wa-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+            onClick={() => setWaItem(null)}
+          >
+            <motion.div
+              key="wa-panel"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.18 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl p-6 flex flex-col gap-5 w-full max-w-sm"
+            >
+              <div>
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Envoyer via WhatsApp</p>
+                <p className="text-[15px] font-semibold text-slate-900">
+                  {waItem.clientName || "Client"}
+                </p>
+              </div>
+
+              {/* Numéro de téléphone */}
+              <div>
+                <label className="block text-[12px] font-medium text-slate-500 mb-1.5">
+                  Numéro WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={waPhone}
+                  onChange={(e) => setWaPhone(e.target.value)}
+                  placeholder="+33612345678"
+                  className={cn(
+                    "w-full h-10 px-3 text-[14px] rounded-xl",
+                    "border border-slate-200 focus:border-blue-300 focus:ring-2 focus:ring-blue-100",
+                    "focus:outline-none text-slate-900 font-mono transition-all",
+                  )}
+                />
+                <p className="text-[11px] text-slate-400 mt-1">Format international (ex: +33612345678)</p>
+              </div>
+
+              {/* Aperçu du message */}
+              <div className="bg-emerald-50 rounded-xl p-3.5 border border-emerald-100">
+                <p className="text-[11px] font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Aperçu du message</p>
+                <p className="text-[13px] text-slate-700 leading-relaxed">
+                  Bonjour,<br />
+                  votre commande est en cours de préparation chez Atelier OLDA !<br />
+                  Suivez l&apos;avancement en temps réel ici :<br />
+                  <span className="text-blue-600 font-mono text-[11px]">
+                    {trackingUrl(waItem.trackingId) || "…"}
+                  </span>
+                </p>
+              </div>
+
+              {/* Boutons */}
+              <div className="flex flex-col gap-2">
+                {/* Envoyer via whatsapp:// — ouvre l'app desktop (Mac / Windows) */}
+                <button
+                  disabled={!waPhone.trim()}
+                  title="Envoyer sur WhatsApp"
+                  onClick={() => {
+                    if (!waItem || !waPhone.trim()) return;
+                    const phone = waPhone.replace(/\D/g, "");
+                    const url = trackingUrl(waItem.trackingId);
+                    const msg = encodeURIComponent(
+                      `Bonjour,\nvotre commande est en cours de préparation chez Atelier OLDA !\nSuivez l'avancement en temps réel ici :\n${url}`
+                    );
+                    window.location.href = `whatsapp://send?phone=${phone}&text=${msg}`;
+                    saveNow(waItem.id, "whatsappSentAt", new Date().toISOString());
+                    if (waPhone !== waItem.clientPhone) saveNow(waItem.id, "clientPhone", waPhone.trim());
+                    setTimeout(() => setWaItem(null), 400);
+                  }}
+                  className={cn(
+                    "w-full h-10 rounded-xl text-[13px] font-medium",
+                    "transition-all duration-150 active:scale-[0.98]",
+                    waPhone.trim()
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-slate-100 text-slate-300 cursor-not-allowed",
+                  )}
+                >
+                  📱 Envoyer sur WhatsApp
+                </button>
+
+                {/* Annuler */}
+                <button
+                  onClick={() => setWaItem(null)}
+                  className={cn(
+                    "w-full h-9 rounded-xl text-[13px] font-medium",
+                    "bg-slate-100 text-slate-500 hover:bg-slate-200 active:scale-[0.98]",
+                    "transition-all duration-150",
+                  )}
+                >
+                  Annuler
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
+  );
+}
+
+// ── PlanningDetailPanel — panneau latéral Apple-style ────────────────────────
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.07em] text-slate-400">{label}</span>
+      <div className="text-[13px] text-slate-700">{children}</div>
+    </div>
+  );
+}
+
+function PlanningDetailPanel({
+  item,
+  itemType,
+  onClose,
+}: {
+  item:      PlanningItem | null;
+  itemType?: string;
+  onClose:   () => void;
+}) {
+  // Fermer sur Escape
+  useEffect(() => {
+    if (!item) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [item, onClose]);
+
+  const secteurCfg  = SECTEUR_CONFIG.find((s) => s.value === item?.color);
+  const priorityCfg = PRIORITY_CONFIG[item?.priority ?? "MOYENNE"];
+  const statusLabel = item ? STATUS_LABELS[item.status] : "";
+  const statusDot   = item ? STATUS_CONFIG[item.status] : "bg-slate-300";
+  const days        = daysUntil(item?.deadline ?? null);
+  const responsible = TEAM.find((p) => p.key === item?.responsible);
+
+  return (
+    <AnimatePresence>
+      {item && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-40"
+            onClick={onClose}
+          />
+
+          {/* Panneau */}
+          <motion.aside
+            key="panel"
+            initial={{ x: "100%", opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: "100%", opacity: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 40, mass: 0.9 }}
+            className="fixed right-0 top-0 h-full w-[400px] max-w-[96vw] bg-white z-50 flex flex-col"
+            style={{ boxShadow: "-2px 0 32px rgba(0,0,0,0.12), -1px 0 0 rgba(0,0,0,0.04)" }}
+          >
+            {/* Header panneau */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-black/[0.06] shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={cn("w-2 h-2 rounded-full shrink-0", statusDot)} />
+                <h2 className="text-[14px] font-semibold text-slate-800 truncate max-w-[280px]">
+                  {item.clientName || "Nouvelle commande"}
+                </h2>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors duration-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Corps scrollable */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+              {/* Client */}
+              <DetailRow label="Client">
+                <div className="flex items-center gap-1.5">
+                  {item.clientId && <User className="h-3.5 w-3.5 text-blue-400 shrink-0" />}
+                  <span className="font-semibold text-slate-800">{item.clientName || "—"}</span>
+                </div>
+              </DetailRow>
+
+              {/* Type + Priorité */}
+              <div className="grid grid-cols-2 gap-4">
+                <DetailRow label="Type">
+                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold", (TYPE_CONFIG[itemType as keyof typeof TYPE_CONFIG] ?? TYPE_CONFIG[""]).badge)}>
+                    {(TYPE_CONFIG[itemType as keyof typeof TYPE_CONFIG] ?? TYPE_CONFIG[""]).label}
+                  </span>
+                </DetailRow>
+                <DetailRow label="Priorité">
+                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold", priorityCfg.style)}>
+                    {priorityCfg.label}
+                  </span>
+                </DetailRow>
+              </div>
+
+              {/* Secteur + Quantité */}
+              <div className="grid grid-cols-2 gap-4">
+                <DetailRow label="Secteur">
+                  {secteurCfg ? (
+                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border", secteurCfg.pill)}>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: secteurCfg.dotHex }} />
+                      {secteurCfg.label}
+                    </span>
+                  ) : <span className="text-slate-300">—</span>}
+                </DetailRow>
+                <DetailRow label="Quantité">
+                  <span className="font-semibold tabular-nums">{item.quantity ?? "—"}</span>
+                </DetailRow>
+              </div>
+
+              {/* Échéance */}
+              <DetailRow label="Échéance">
+                <div className="flex items-center gap-2">
+                  <span className={cn("tabular-nums font-medium", item.deadline ? "text-slate-800" : "text-slate-300")}>
+                    {item.deadline ? formatDDMM(item.deadline) : "—"}
+                  </span>
+                  {days !== null && <DaysChip days={days} />}
+                </div>
+              </DetailRow>
+
+              {/* État */}
+              <DetailRow label="État">
+                <div className="flex items-center gap-2">
+                  <span className={cn("w-2 h-2 rounded-full shrink-0", statusDot)} />
+                  <span>{statusLabel}</span>
+                </div>
+              </DetailRow>
+
+              {/* Responsable */}
+              <DetailRow label="Responsable interne">
+                {responsible ? (
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600">
+                      {responsible.name[0]}
+                    </span>
+                    <span className="font-medium">{responsible.name}</span>
+                  </div>
+                ) : <span className="text-slate-300">—</span>}
+              </DetailRow>
+
+              {/* Note */}
+              <DetailRow label="Note / Précisions">
+                {item.note ? (
+                  <p className="whitespace-pre-wrap text-slate-600 leading-relaxed bg-slate-50 rounded-xl px-3 py-2.5 text-[13px]">
+                    {item.note}
+                  </p>
+                ) : (
+                  <span className="text-slate-300 italic">Aucune note</span>
+                )}
+              </DetailRow>
+
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 px-5 py-3 border-t border-black/[0.06] flex items-center justify-between bg-slate-50/70">
+              <span className="text-[11px] text-slate-400 font-mono truncate">#{item.id.slice(-8)}</span>
+              <button
+                onClick={onClose}
+                className="text-[12px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

@@ -21,6 +21,10 @@ import { DTFProductionTable } from "./dtf-production-table";
 import { WorkflowListsGrid } from "./workflow-list";
 import { PRTManager } from "./prt-manager";
 import { PlanningTable, type PlanningItem } from "./planning-table";
+import { ThemeSwitcher } from "./theme-switcher";
+import { ClientProTable, type ClientItem } from "./client-pro-table";
+import { AchatTextileTable } from "./achat-textile-table";
+import { AchatCardsGrid } from "./achat-cards-grid";
 
 interface PRTItem {
   id: string;
@@ -31,6 +35,7 @@ interface PRTItem {
   quantity: number;
   done: boolean;
   position: number;
+  note: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -408,23 +413,51 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat' | 'achat_textile'>('flux');
+  // Badge de notification sur l'onglet Flux
+  const [fluxHasNotif, setFluxHasNotif] = useState(false);
+  // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
+  const [prtHasNotif, setPrtHasNotif] = useState(false);
+  const prtCountRef = useRef<number>(0);
+  // Ref pour connaître l'onglet courant dans les callbacks SSE (évite les stale closures)
+  const viewTabRef = useRef(viewTab);
+  useEffect(() => { viewTabRef.current = viewTab; }, [viewTab]);
   const [workflowItems, setWorkflowItems] = useState<WorkflowItem[]>([]);
   const [prtItems, setPrtItems] = useState<PRTItem[]>([]);
   const [allPrtItems, setAllPrtItems] = useState<PRTItem[]>([]);
   const [planningItems, setPlanningItems] = useState<PlanningItem[]>([]);
+  const [clientItems, setClientItems] = useState<ClientItem[]>([]);
 
   const addOrder = async () => {
     const res = await fetch("/api/orders/manual", { method: "POST" });
     if (!res.ok) return;
     const { order } = await res.json();
     setOrders((prev) => [order, ...prev]);
-    setViewTab("commandes");
   };
 
   // ── Session ───────────────────────────────────────────────────────────────
   const [session, setSession]               = useState<OldaSession | null>(null);
   const [sessionChecked, setSessionChecked] = useState(false);
+
+  // ── Achat Textile : trigger refresh + lien depuis Planning ────────────────
+  const [achatRefreshTrigger, setAchatRefreshTrigger] = useState(0);
+
+  const handleCreateAchatFromPlanning = useCallback(async (item: PlanningItem) => {
+    try {
+      await fetch("/api/achat-textile", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          client:      item.clientName,
+          designation: item.designation,
+          quantite:    item.quantity,
+          sessionUser: session?.name ?? "",
+        }),
+      });
+      setAchatRefreshTrigger((t) => t + 1);
+      setViewTab("achat_textile");
+    } catch { /* ignore */ }
+  }, [session]);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -558,29 +591,53 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
-  // ── Workflow items ──────────────────────────────────────────────────────────
+  // ── Workflow items : polling toutes les 5 s ────────────────────────────────
 
-  useEffect(() => {
+  const fetchWorkflowItems = useCallback(() => {
     fetch("/api/workflow-items")
       .then((r) => r.json())
-      .then((data) => {
-        setWorkflowItems(data.items ?? []);
-      })
+      .then((data) => { setWorkflowItems(data.items ?? []); })
       .catch(() => {});
   }, []);
 
-  // ── PRT items ────────────────────────────────────────────────────────────────
-
   useEffect(() => {
+    fetchWorkflowItems();
+    const id = setInterval(fetchWorkflowItems, 5_000);
+    return () => clearInterval(id);
+  }, [fetchWorkflowItems]);
+
+  // ── PRT items : polling toutes les 5 s, pausé pendant la saisie ─────────────
+
+  const prtEditingRef = useRef(false);
+
+  const fetchPrtItems = useCallback(() => {
+    if (prtEditingRef.current) return; // pause while editing
     fetch("/api/prt-requests")
       .then((r) => r.json())
       .then((data) => {
-        const items = data.items ?? [];
-        setPrtItems(items);
-        setAllPrtItems(items);
+        if (prtEditingRef.current) return; // double-check au retour async
+        const newItems = data.items ?? [];
+        setAllPrtItems(newItems);
+        // Badge notification pour loic et charlie
+        const count = newItems.length;
+        const sess = sessionRef.current;
+        if (
+          sess &&
+          (sess.name === "loic" || sess.name === "charlie") &&
+          viewTabRef.current !== "demande_prt"
+        ) {
+          if (count > prtCountRef.current) setPrtHasNotif(true);
+        }
+        prtCountRef.current = count;
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchPrtItems();
+    const id = setInterval(fetchPrtItems, 5_000);
+    return () => clearInterval(id);
+  }, [fetchPrtItems]);
 
   // ── Planning items ─────────────────────────────────────────────────────────
   // Chargement initial + polling de secours toutes les 10 s.
@@ -605,6 +662,54 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     const id = setInterval(fetchPlanning, 10_000);
     return () => clearInterval(id);
   }, [fetchPlanning]);
+
+  // ── Client Pro items ───────────────────────────────────────────────────────
+  const fetchClients = useCallback(() => {
+    fetch("/api/clients")
+      .then((r) => r.json())
+      .then((data) => { setClientItems(data.clients ?? []); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+
+  // Refresh clients when switching to the clients_pro tab
+  useEffect(() => {
+    if (viewTab === "clients_pro") fetchClients();
+  }, [viewTab, fetchClients]);
+
+  // ── Notification badge Flux ────────────────────────────────────────────────
+  // Appelé depuis RemindersGrid quand une note SSE arrive.
+  // Si la note concerne l'utilisateur actif ET qu'il n'est pas sur l'onglet Flux
+  // → on allume le badge.
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  const handleNoteChangedForNotif = useCallback((person: string) => {
+    if (!sessionRef.current) return;
+    if (person !== sessionRef.current.name) return;
+    if (viewTabRef.current === 'flux') return; // déjà visible → pas de badge
+    setFluxHasNotif(true);
+  }, []);
+
+  // Changement d'onglet : efface le badge quand l'utilisateur retourne sur l'onglet concerné
+  const handleTabChange = useCallback((tab: typeof viewTab) => {
+    setViewTab(tab);
+    if (tab === 'flux') setFluxHasNotif(false);
+    if (tab === 'demande_prt') setPrtHasNotif(false);
+  }, []);
+
+  // Appelé depuis PRTManager quand une nouvelle demande est créée
+  const handleNewPrtRequest = useCallback(() => {
+    prtCountRef.current += 1;
+    const sess = sessionRef.current;
+    if (!sess) return;
+    if (sess.name !== "loic" && sess.name !== "charlie") return;
+    if (viewTabRef.current === "demande_prt") return;
+    setPrtHasNotif(true);
+  }, []);
 
   // ── Connexion ─────────────────────────────────────────────────────────────
   const handleLogin = useCallback((name: string) => {
@@ -647,70 +752,68 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
   return (
     <div
-      className="flex flex-col h-svh w-full overflow-hidden bg-white"
+      className="flex flex-col h-svh w-full overflow-hidden bg-background"
       style={{ fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
     >
 
       {/* ── Header : tabs centrés · user à gauche · indicateur live à droite ─ */}
-      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 relative flex items-center justify-center border-b border-gray-100">
+      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 relative flex items-center justify-center border-b border-black/[0.06] dark:border-border bg-white/80 dark:bg-card/80 backdrop-blur-xl">
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
-          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 overflow-x-auto">
-            {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning'] as const).map((v) => (
+          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat', 'achat_textile'] as const).map((v) => (
               <button
                 key={v}
-                onClick={() => setViewTab(v)}
+                onClick={() => handleTabChange(v)}
                 className={cn(
-                  "px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
+                  "relative px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
                   "[touch-action:manipulation]",
                   viewTab === v
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : 'Planning'}
+                {v === 'flux' ? 'Tâches'
+                  : v === 'achat' ? 'Achat'
+                  : v === 'planning' ? 'Planning'
+                  : v === 'clients_pro' ? 'Clients Pro'
+                  : v === 'demande_prt' ? 'Demande de DTF'
+                  : v === 'production_dtf' ? 'Production'
+                  : v === 'workflow' ? "Gestion d'atelier"
+                  : 'Achat Textile'}
+                {v === 'flux' && fluxHasNotif && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
+                )}
+                {v === 'demande_prt' && prtHasNotif && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-orange-400 border border-white" />
+                )}
               </button>
             ))}
           </div>
-          {/* Bouton + commande — visible sur l'onglet commandes */}
-          {viewTab === 'commandes' && (
-            <button
-              onClick={addOrder}
-              className="flex items-center justify-center w-6 h-6 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-all duration-150 shrink-0"
-              aria-label="Ajouter une commande"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          )}
         </div>
-        {/* Indicateur live — positionné à droite en absolu */}
-        <div className="absolute right-4 sm:right-6">
+        {/* ThemeSwitcher + Indicateur live — positionnés à droite en absolu */}
+        <div className="absolute right-4 sm:right-6 flex items-center gap-2">
+          <ThemeSwitcher />
           <LiveIndicator connected={sseConnected} />
         </div>
       </div>
 
       {/* ── Contenu principal ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} />
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
-        {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}
-        <div className={cn(viewTab !== 'commandes' && 'hidden')}>
-          <KanbanBoard
-            columns={TSHIRT_COLUMNS}
-            orders={tshirt}
-            newOrderIds={newOrderIds}
-            onUpdateOrder={handleUpdateOrder}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        </div>
-
-        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
+        {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
+          <PRTManager
+            items={allPrtItems}
+            onItemsChange={setAllPrtItems}
+            onNewRequest={handleNewPrtRequest}
+            onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
+          />
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
@@ -732,8 +835,28 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             items={planningItems}
             onItemsChange={setPlanningItems}
             onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
+            onCreateAchatFromPlanning={handleCreateAchatFromPlanning}
           />
         </div>
+
+        {/* ══ VUE CLIENTS PRO — Base de données clients ═══════════════════════ */}
+        <div className={cn(viewTab !== 'clients_pro' && 'hidden', 'h-full')}>
+          <ClientProTable
+            clients={clientItems}
+            onClientsChange={setClientItems}
+          />
+        </div>
+
+        {/* ══ VUE ACHAT — 3 cartes SXM / Europe / USA ════════════════════════ */}
+        <div className={cn(viewTab !== 'achat' && 'hidden')}>
+          <AchatCardsGrid />
+        </div>
+
+        {/* ══ VUE ACHAT TEXTILE — Tableau des commandes textile ════════════════ */}
+        <div className={cn(viewTab !== 'achat_textile' && 'hidden', 'h-full')}>
+          <AchatTextileTable activeUser={session.name} refreshTrigger={achatRefreshTrigger} />
+        </div>
+
 
       </div>
 

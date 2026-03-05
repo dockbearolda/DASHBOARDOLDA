@@ -2,14 +2,15 @@
 
 /**
  * DTF Production Table — données persistées en base PostgreSQL.
- * Remplace l'ancienne implémentation localStorage.
+ * Utilise OrderTable (table-shell) pour la carte Apple-style + sticky headers.
  * Chaque utilisateur voit et édite ses propres lignes ; les modifications
  * sont sauvegardées en temps réel via l'API.
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Trash2, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OrderTable } from "@/components/ui/table-shell";
 
 export type DTFStatus = "a_produire" | "en_cours" | "termine" | "erreur";
 export type DTFClientType = "particulier" | "pro" | "association";
@@ -44,6 +45,11 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
 
+  // ── Inline quick-add ─────────────────────────────────────────────────────
+  const [isQuickAdding, setIsQuickAdding] = useState(false);
+  const [quickDraft,    setQuickDraft]    = useState("");
+  const quickAddRef = useRef<HTMLInputElement>(null);
+
   // Debounce timers par row.id pour les champs texte
   const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -59,7 +65,7 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
             ...r,
             status:     (r.status     ?? "en_cours")    as DTFStatus,
             clientType: (r.clientType ?? "particulier") as DTFClientType,
-          }))
+          })),
         );
       })
       .catch(() => {})
@@ -67,14 +73,14 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
   }, [activeUser]);
 
   // ── Ajouter une ligne ─────────────────────────────────────────────────────
-  const addRow = useCallback(async () => {
+  const addRow = useCallback(async (name: string = "") => {
     if (!activeUser || saving) return;
     setSaving(true);
     try {
       const res = await fetch("/api/dtf-production", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user: activeUser, name: "", clientType: "particulier", status: "en_cours" }),
+        body:    JSON.stringify({ user: activeUser, name, clientType: "particulier", status: "en_cours" }),
       });
       if (!res.ok) return;
       const { row } = await res.json();
@@ -85,14 +91,12 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
 
   // ── Supprimer une ligne ───────────────────────────────────────────────────
   const deleteRow = useCallback(async (id: string) => {
-    // Optimiste : retire immédiatement de l'UI
     setRows((prev) => prev.filter((r) => r.id !== id));
     try {
       await fetch(`/api/dtf-production/${id}`, { method: "DELETE" });
     } catch {
-      // Rollback : recharge depuis le serveur
       if (!activeUser) return;
-      const res = await fetch(`/api/dtf-production?user=${activeUser}`);
+      const res  = await fetch(`/api/dtf-production?user=${activeUser}`);
       const data = await res.json();
       setRows(data.rows ?? []);
     }
@@ -103,9 +107,9 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
     try {
       await fetch(`/api/dtf-production/${id}`, {
-        method: "PATCH",
+        method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body:    JSON.stringify({ status }),
       });
     } catch { /* ignore */ }
   }, []);
@@ -115,9 +119,9 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, clientType } : r));
     try {
       await fetch(`/api/dtf-production/${id}`, {
-        method: "PATCH",
+        method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientType }),
+        body:    JSON.stringify({ clientType }),
       });
     } catch { /* ignore */ }
   }, []);
@@ -126,15 +130,14 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
   const updateTextField = useCallback((id: string, field: "name" | "problem", value: string) => {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, [field]: value } : r));
 
-    // Annule le timer précédent pour ce row
     if (debounceRefs.current[id]) clearTimeout(debounceRefs.current[id]);
 
     debounceRefs.current[id] = setTimeout(async () => {
       try {
         await fetch(`/api/dtf-production/${id}`, {
-          method: "PATCH",
+          method:  "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ [field]: value }),
+          body:    JSON.stringify({ [field]: value }),
         });
       } catch { /* ignore */ }
     }, 600);
@@ -157,138 +160,164 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
     return () => { Object.values(refs).forEach(clearTimeout); };
   }, []);
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  return (
-    <div className="flex flex-col gap-3 h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <h3 style={{ fontSize: 15, fontWeight: 600, color: "#1d1d1f" }}>
-            Production DTF
-          </h3>
-          {saving && <Loader2 className="h-3.5 w-3.5 text-gray-400 animate-spin" />}
-        </div>
-        <div className="flex items-center gap-2">
-          {rows.some((r) => r.status === "termine") && (
-            <button
-              onClick={deleteTerminated}
-              className="h-8 px-2.5 rounded-lg text-[12px] font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              Supprimer les terminés
-            </button>
-          )}
+  // ── Slots OrderTable ──────────────────────────────────────────────────────
+
+  const toolbar = (
+    <div className="flex items-center gap-3 px-4 py-3">
+      {isQuickAdding ? (
+        <div className="flex items-center gap-2 h-8 px-3 rounded-lg bg-white border border-blue-200 ring-1 ring-blue-100 shadow-sm min-w-[200px] shrink-0">
+          <Plus className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+          <input
+            ref={quickAddRef}
+            value={quickDraft}
+            onChange={(e) => setQuickDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const text = quickDraft.trim();
+                if (text) {
+                  addRow(text);
+                  setQuickDraft("");
+                  setTimeout(() => quickAddRef.current?.focus(), 0);
+                } else {
+                  setIsQuickAdding(false);
+                  setQuickDraft("");
+                }
+              }
+              if (e.key === "Escape") { setIsQuickAdding(false); setQuickDraft(""); }
+            }}
+            onBlur={() => {
+              const text = quickDraft.trim();
+              if (text) addRow(text);
+              setIsQuickAdding(false);
+              setQuickDraft("");
+            }}
+            placeholder="Nom de la production…"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+          />
           <button
-            onClick={addRow}
-            disabled={saving}
-            className="h-8 w-8 rounded-lg flex items-center justify-center bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-colors"
-            title="Ajouter une ligne"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { setIsQuickAdding(false); setQuickDraft(""); }}
+            className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
           >
-            <Plus className="h-4 w-4" />
+            <X className="h-3 w-3" />
           </button>
         </div>
+      ) : (
+        <button
+          onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
+          disabled={saving}
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0"
+        >
+          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          <span>Ajouter une production</span>
+        </button>
+      )}
+      <div className="flex-1" />
+      {rows.some((r) => r.status === "termine") && (
+        <button
+          onClick={deleteTerminated}
+          className="h-8 px-2.5 rounded-lg text-[12px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+        >
+          Supprimer les terminés
+        </button>
+      )}
+    </div>
+  );
+
+  const headers = (
+    <div className="grid grid-cols-[1fr_64px_1fr] gap-0 px-0">
+      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        Nom du PRT
       </div>
-
-      {/* Table */}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col rounded-2xl border border-gray-200 bg-white shadow-sm">
-        {/* Headers */}
-        <div className="shrink-0 grid gap-0 border-b border-gray-100" style={{ gridTemplateColumns: "72px 1fr 160px 32px" }}>
-          <div className="px-3 py-3 text-[12px] font-semibold uppercase tracking-widest text-gray-500">
-            Type
-          </div>
-          <div className="px-4 py-3 text-[12px] font-semibold uppercase tracking-widest text-gray-500">
-            Nom du PRT
-          </div>
-          <div className="px-4 py-3 text-[12px] font-semibold uppercase tracking-widest text-gray-500">
-            Statut
-          </div>
-          <div />
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-gray-300">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Chargement…
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="flex items-center justify-center h-24 text-[13px] text-gray-300">
-              Aucune production
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {rows.map((row) => {
-                const cfg    = statusConfig[row.status];
-                const ctCfg  = clientTypeConfig[row.clientType ?? "particulier"];
-                return (
-                  <div key={row.id}>
-                    <div className="grid gap-0 px-0 py-0 items-center hover:bg-gray-50 transition-colors" style={{ gridTemplateColumns: "72px 1fr 160px 32px" }}>
-                      {/* Type client — clic pour cycler */}
-                      <div className="px-3 py-3 flex items-center">
-                        <button
-                          onClick={() => {
-                            const cycle: DTFClientType[] = ["particulier", "pro", "association"];
-                            const next = cycle[(cycle.indexOf(row.clientType ?? "particulier") + 1) % cycle.length];
-                            updateClientType(row.id, next);
-                          }}
-                          className="px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-wider cursor-pointer select-none"
-                          style={{ backgroundColor: ctCfg.bg, color: ctCfg.text }}
-                          title="Cliquer pour changer le type"
-                        >
-                          {ctCfg.label}
-                        </button>
-                      </div>
-                      {/* Nom */}
-                      <div className="px-4 py-3">
-                        <input
-                          value={row.name}
-                          onChange={(e) => updateTextField(row.id, "name", e.target.value)}
-                          placeholder="Ex: Commande #123"
-                          className="w-full text-[13px] text-gray-900 bg-transparent outline-none placeholder:text-gray-300 font-medium"
-                        />
-                      </div>
-                      {/* Statut */}
-                      <div className="py-3">
-                        <select
-                          value={row.status}
-                          onChange={(e) => updateStatus(row.id, e.target.value as DTFStatus)}
-                          className="w-full h-7 rounded-lg px-2.5 text-[12px] font-semibold text-white outline-none cursor-pointer"
-                          style={{ backgroundColor: cfg.color }}
-                        >
-                          {Object.entries(statusConfig).map(([key, val]) => (
-                            <option key={key} value={key}>{val.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {/* Supprimer */}
-                      <div className="flex items-center justify-center py-3">
-                        <button
-                          onClick={() => deleteRow(row.id)}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {row.status === "erreur" && (
-                      <div className="px-4 pb-3 pt-0 col-span-4">
-                        <input
-                          value={row.problem ?? ""}
-                          onChange={(e) => updateTextField(row.id, "problem", e.target.value)}
-                          placeholder="Problème rencontré…"
-                          className="w-full h-7 rounded-lg px-2.5 text-[12px] bg-red-50 border border-red-100 text-gray-700 outline-none focus:border-red-300 focus:bg-white transition-colors placeholder:text-gray-300"
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+      <div className="px-2 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        Type
+      </div>
+      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        Statut
       </div>
     </div>
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  return (
+    <OrderTable
+      toolbar={toolbar}
+      headers={headers}
+      className="h-full"
+      bodyClassName="overflow-auto flex-1 min-h-0"
+    >
+      {loading ? (
+        <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Chargement…
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="flex items-center justify-center h-24 text-[13px] text-slate-300">
+          Aucune production
+        </div>
+      ) : (
+        <div className="divide-y divide-slate-50">
+          {rows.map((row) => {
+            const cfg    = statusConfig[row.status];
+            const ctCfg  = clientTypeConfig[row.clientType ?? "particulier"];
+            const ctOrder: DTFClientType[] = ["particulier", "pro", "association"];
+            const nextCt = ctOrder[(ctOrder.indexOf(row.clientType ?? "particulier") + 1) % ctOrder.length];
+            return (
+              <div key={row.id}>
+                <div className="grid grid-cols-[1fr_64px_1fr] gap-0 px-4 py-3 items-center hover:bg-slate-50/70 transition-colors group">
+                  <input
+                    value={row.name}
+                    onChange={(e) => updateTextField(row.id, "name", e.target.value)}
+                    placeholder="Ex: Commande #123"
+                    className="text-[13px] text-slate-900 font-medium bg-transparent outline-none placeholder:text-slate-300"
+                  />
+                  {/* Client type badge — clic pour cycler PART → PRO → ASSO */}
+                  <button
+                    onClick={() => updateClientType(row.id, nextCt)}
+                    title="Changer le type de client"
+                    className="h-7 px-2 rounded-lg text-[11px] font-bold cursor-pointer transition-colors shrink-0 text-center"
+                    style={{ backgroundColor: ctCfg.bg, color: ctCfg.text }}
+                  >
+                    {ctCfg.label}
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={row.status}
+                      onChange={(e) => updateStatus(row.id, e.target.value as DTFStatus)}
+                      className="flex-1 h-7 rounded-lg px-2.5 text-[12px] font-semibold text-white outline-none cursor-pointer"
+                      style={{ backgroundColor: cfg.color }}
+                    >
+                      {Object.entries(statusConfig).map(([key, val]) => (
+                        <option key={key} value={key}>{val.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => deleteRow(row.id)}
+                      className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {row.status === "erreur" && (
+                  <div className="px-4 pb-3 pt-0">
+                    <input
+                      value={row.problem ?? ""}
+                      onChange={(e) => updateTextField(row.id, "problem", e.target.value)}
+                      placeholder="Problème rencontré…"
+                      className="w-full h-7 rounded-lg px-2.5 text-[12px] bg-red-50 border border-red-100 text-slate-700 outline-none focus:border-red-300 focus:bg-white transition-colors placeholder:text-slate-300"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </OrderTable>
   );
 }

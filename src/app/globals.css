@@ -157,6 +157,24 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   THEMES COULEUR  ·  6 accents personnalisables
+   Appliqués via data-color-theme="xxx" sur <html>
+   Bleu = défaut (aucun attribut)
+   ════════════════════════════════════════════════════════════════════ */
+[data-color-theme="violet"] { --primary: 262 83% 58%; --ring: 262 83% 58%; }
+[data-color-theme="vert"]   { --primary: 142 71% 45%; --ring: 142 71% 45%; }
+[data-color-theme="orange"] { --primary: 25 95% 53%;  --ring: 25 95% 53%;  }
+[data-color-theme="rose"]   { --primary: 330 80% 60%; --ring: 330 80% 60%; }
+[data-color-theme="indigo"] { --primary: 234 89% 64%; --ring: 234 89% 64%; }
+
+/* Variantes dark : légèrement plus claires pour lisibilité sur fond sombre */
+.dark[data-color-theme="violet"] { --primary: 262 70% 70%; --ring: 262 70% 70%; }
+.dark[data-color-theme="vert"]   { --primary: 142 60% 55%; --ring: 142 60% 55%; }
+.dark[data-color-theme="orange"] { --primary: 25 90% 62%;  --ring: 25 90% 62%;  }
+.dark[data-color-theme="rose"]   { --primary: 330 75% 68%; --ring: 330 75% 68%; }
+.dark[data-color-theme="indigo"] { --primary: 234 80% 72%; --ring: 234 80% 72%; }
+
+/* ════════════════════════════════════════════════════════════════════
    BASE
    ════════════════════════════════════════════════════════════════════ */
 @layer base {
@@ -166,11 +184,11 @@
      duration 0.2 s = seuil Apple HIG pour les changements d'état UI. */
   *, *::before, *::after {
     border-color: hsl(var(--border));
+    /* Only transition composited properties — box-shadow triggers repaint on Windows */
     transition-property: color, background-color, border-color,
-                         text-decoration-color, fill, stroke, box-shadow,
-                         opacity;
-    transition-duration: 0.2s;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); /* ease-in-out Apple */
+                         text-decoration-color, fill, stroke, opacity;
+    transition-duration: 0.18s;
+    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1); /* iOS default easing */
   }
 
   body {
@@ -232,6 +250,32 @@
 
   /* ── View toggle ────────────────────────────────────────────────── */
   .hidden { display: none; }
+
+  /* ── GPU acceleration — forces composited layer on Windows/Chrome ── */
+  .gpu-layer {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    will-change: transform, opacity;
+  }
+
+  /* ── Layout containment for animated lists (Windows Chromium perf) ─ */
+  /* Isolates style recalculation to the container — prevents a list   */
+  /* animation from triggering a full-page style flush on Windows.     */
+  .contain-layout {
+    contain: layout style;
+  }
+
+  /* ── Animated rows — pre-promote to GPU layer before animation ───── */
+  /* Applied to Framer Motion list items. The translateZ(0) creates     */
+  /* a separate compositing layer so Chrome doesn't flatten and repaint */
+  /* the whole list on every animation frame (critical on Windows iGPU) */
+  [data-framer-motion-layout-id],
+  .motion-row {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
 
   /* ── Scrollbar hiding (iOS-style snap containers) ───────────────── */
   .no-scrollbar {

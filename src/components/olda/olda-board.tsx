@@ -21,6 +21,10 @@ import { DTFProductionTable } from "./dtf-production-table";
 import { WorkflowListsGrid } from "./workflow-list";
 import { PRTManager } from "./prt-manager";
 import { PlanningTable, type PlanningItem } from "./planning-table";
+import { ThemeSwitcher } from "./theme-switcher";
+import { ClientProTable, type ClientItem } from "./client-pro-table";
+import { AchatTextileTable } from "./achat-textile-table";
+import { AchatCardsGrid } from "./achat-cards-grid";
 
 interface PRTItem {
   id: string;
@@ -31,10 +35,10 @@ interface PRTItem {
   quantity: number;
   done: boolean;
   position: number;
+  note: string;
   createdAt: string;
   updatedAt: string;
 }
-
 
 
 // ── Product type detection ─────────────────────────────────────────────────────
@@ -267,11 +271,47 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'commandes' | 'production_dtf' | 'workflow' | 'demande_prt' | 'planning'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat' | 'achat_textile'>('flux');
+  // Badge de notification sur l'onglet Flux
+  const [fluxHasNotif, setFluxHasNotif] = useState(false);
+  // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
+  const [prtHasNotif, setPrtHasNotif] = useState(false);
+  const prtCountRef = useRef<number>(0);
+  // Ref pour connaître l'onglet courant dans les callbacks SSE (évite les stale closures)
+  const viewTabRef = useRef(viewTab);
+  useEffect(() => { viewTabRef.current = viewTab; }, [viewTab]);
   const [workflowItems, setWorkflowItems] = useState<WorkflowItem[]>([]);
   const [prtItems, setPrtItems] = useState<PRTItem[]>([]);
   const [allPrtItems, setAllPrtItems] = useState<PRTItem[]>([]);
   const [planningItems, setPlanningItems] = useState<PlanningItem[]>([]);
+  const [clientItems, setClientItems] = useState<ClientItem[]>([]);
+
+  const addOrder = async () => {
+    const res = await fetch("/api/orders/manual", { method: "POST" });
+    if (!res.ok) return;
+    const { order } = await res.json();
+    setOrders((prev) => [order, ...prev]);
+  };
+
+  // ── Achat Textile : trigger refresh + lien depuis Planning ────────────────
+  const [achatRefreshTrigger, setAchatRefreshTrigger] = useState(0);
+
+  const handleCreateAchatFromPlanning = useCallback(async (item: PlanningItem) => {
+    try {
+      await fetch("/api/achat-textile", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          client:      item.clientName,
+          designation: item.designation,
+          quantite:    item.quantity,
+          sessionUser: "",
+        }),
+      });
+      setAchatRefreshTrigger((t) => t + 1);
+      setViewTab("achat_textile");
+    } catch { /* ignore */ }
+  }, []);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -396,39 +436,107 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       .catch(() => {});
   }, []);
 
-  // ── Workflow items ──────────────────────────────────────────────────────────
+  // ── Workflow items : polling toutes les 5 s ────────────────────────────────
 
-  useEffect(() => {
+  const fetchWorkflowItems = useCallback(() => {
     fetch("/api/workflow-items")
       .then((r) => r.json())
-      .then((data) => {
-        setWorkflowItems(data.items ?? []);
-      })
+      .then((data) => { setWorkflowItems(data.items ?? []); })
       .catch(() => {});
   }, []);
 
-  // ── PRT items ────────────────────────────────────────────────────────────────
-
   useEffect(() => {
+    fetchWorkflowItems();
+    const id = setInterval(fetchWorkflowItems, 5_000);
+    return () => clearInterval(id);
+  }, [fetchWorkflowItems]);
+
+  // ── PRT items : polling toutes les 5 s, pausé pendant la saisie ─────────────
+
+  const prtEditingRef = useRef(false);
+
+  const fetchPrtItems = useCallback(() => {
+    if (prtEditingRef.current) return; // pause while editing
     fetch("/api/prt-requests")
       .then((r) => r.json())
       .then((data) => {
-        const items = data.items ?? [];
-        setPrtItems(items);
-        setAllPrtItems(items);
+        if (prtEditingRef.current) return; // double-check au retour async
+        const newItems = data.items ?? [];
+        setAllPrtItems(newItems);
+        const count = newItems.length;
+        if (count > prtCountRef.current && viewTabRef.current !== "demande_prt") {
+          setPrtHasNotif(true);
+        }
+        prtCountRef.current = count;
       })
       .catch(() => {});
   }, []);
 
-  // ── Planning items ────────────────────────────────────────────────────────────
-
   useEffect(() => {
+    fetchPrtItems();
+    const id = setInterval(fetchPrtItems, 5_000);
+    return () => clearInterval(id);
+  }, [fetchPrtItems]);
+
+  // ── Planning items ─────────────────────────────────────────────────────────
+  // Chargement initial + polling de secours toutes les 10 s.
+  // Le polling est suspendu pendant qu'une cellule est en cours d'édition
+  // pour ne pas écraser la frappe de l'utilisateur.
+
+  const planningEditingRef = useRef(false);
+
+  const fetchPlanning = useCallback(() => {
+    if (planningEditingRef.current) return; // pause while editing
     fetch("/api/planning")
       .then((r) => r.json())
       .then((data) => {
+        if (planningEditingRef.current) return; // double-check au retour async
         setPlanningItems(data.items ?? []);
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchPlanning();
+    const id = setInterval(fetchPlanning, 10_000);
+    return () => clearInterval(id);
+  }, [fetchPlanning]);
+
+  // ── Client Pro items ───────────────────────────────────────────────────────
+  const fetchClients = useCallback(() => {
+    fetch("/api/clients")
+      .then((r) => r.json())
+      .then((data) => { setClientItems(data.clients ?? []); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchClients();
+  }, [fetchClients]);
+
+  // Refresh clients when switching to the clients_pro tab
+  useEffect(() => {
+    if (viewTab === "clients_pro") fetchClients();
+  }, [viewTab, fetchClients]);
+
+  // ── Notification badge Flux ────────────────────────────────────────────────
+  const handleNoteChangedForNotif = useCallback((_person: string) => {
+    if (viewTabRef.current === 'flux') return;
+    setFluxHasNotif(true);
+  }, []);
+
+  // Changement d'onglet : efface le badge quand l'utilisateur retourne sur l'onglet concerné
+  const handleTabChange = useCallback((tab: typeof viewTab) => {
+    setViewTab(tab);
+    if (tab === 'flux') setFluxHasNotif(false);
+    if (tab === 'demande_prt') setPrtHasNotif(false);
+  }, []);
+
+  // Appelé depuis PRTManager quand une nouvelle demande est créée
+  const handleNewPrtRequest = useCallback(() => {
+    prtCountRef.current += 1;
+    if (viewTabRef.current === "demande_prt") return;
+    setPrtHasNotif(true);
   }, []);
 
   // ── Suppression d'une commande (optimistic) ───────────────────────────────
@@ -461,58 +569,68 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
   return (
     <div
-      className="flex flex-col h-svh w-full overflow-hidden bg-white"
+      className="flex flex-col h-svh w-full overflow-hidden bg-background"
       style={{ fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}
     >
 
-      {/* ── Header : tabs à gauche · indicateur live à droite ─────────────── */}
-      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 flex items-center gap-3 border-b border-gray-100">
-        {/* Tabs — alignés à gauche */}
-        <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 overflow-x-auto">
-          {(['flux', 'commandes', 'demande_prt', 'production_dtf', 'workflow', 'planning'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setViewTab(v)}
-              className={cn(
-                "px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
-                "[touch-action:manipulation]",
-                viewTab === v
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
-            >
-              {v === 'flux' ? 'Flux' : v === 'commandes' ? 'Commandes' : v === 'demande_prt' ? 'Demande de PRT' : v === 'production_dtf' ? 'Production' : v === 'workflow' ? 'Gestion d\'atelier' : 'Planning'}
-            </button>
-          ))}
+      {/* ── Header : tabs centrés · user à gauche · indicateur live à droite ─ */}
+      <div className="shrink-0 px-4 sm:px-6 pt-5 pb-3 relative flex items-center justify-center border-b border-black/[0.06] dark:border-border bg-white/80 dark:bg-card/80 backdrop-blur-xl">
+        {/* Tabs — centrés */}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat', 'achat_textile'] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => handleTabChange(v)}
+                className={cn(
+                  "relative px-3.5 py-1.5 rounded-[10px] text-[13px] font-semibold transition-all whitespace-nowrap",
+                  "[touch-action:manipulation]",
+                  viewTab === v
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {v === 'flux' ? 'Tâches'
+                  : v === 'achat' ? 'Achat'
+                  : v === 'planning' ? 'Planning'
+                  : v === 'clients_pro' ? 'Clients Pro'
+                  : v === 'demande_prt' ? 'Demande de DTF'
+                  : v === 'production_dtf' ? 'Production'
+                  : v === 'workflow' ? "Gestion d'atelier"
+                  : 'Achat Textile'}
+                {v === 'flux' && fluxHasNotif && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-red-400 border border-white" />
+                )}
+                {v === 'demande_prt' && prtHasNotif && (
+                  <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-orange-400 border border-white" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-        {/* Indicateur live — repoussé à droite */}
-        <div className="ml-auto">
+        {/* ThemeSwitcher + Indicateur live — positionnés à droite en absolu */}
+        <div className="absolute right-4 sm:right-6 flex items-center gap-2">
+          <ThemeSwitcher />
           <LiveIndicator connected={sseConnected} />
         </div>
       </div>
 
       {/* ── Contenu principal ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" />
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
-        {/* ══ VUE COMMANDES — Kanban t-shirts uniquement ══════════════════════ */}
-        <div className={cn(viewTab !== 'commandes' && 'hidden')}>
-          <KanbanBoard
-            columns={TSHIRT_COLUMNS}
-            orders={tshirt}
-            newOrderIds={newOrderIds}
-            onUpdateOrder={handleUpdateOrder}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        </div>
-
-        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
+        {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
+          <PRTManager
+            items={allPrtItems}
+            onItemsChange={setAllPrtItems}
+            onNewRequest={handleNewPrtRequest}
+            onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
+          />
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
@@ -530,8 +648,32 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE PLANNING — Tableau d'entreprise partagé ════════════════════ */}
         <div className={cn(viewTab !== 'planning' && 'hidden', 'h-full')}>
-          <PlanningTable items={planningItems} onItemsChange={setPlanningItems} />
+          <PlanningTable
+            items={planningItems}
+            onItemsChange={setPlanningItems}
+            onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
+            onCreateAchatFromPlanning={handleCreateAchatFromPlanning}
+          />
         </div>
+
+        {/* ══ VUE CLIENTS PRO — Base de données clients ═══════════════════════ */}
+        <div className={cn(viewTab !== 'clients_pro' && 'hidden', 'h-full')}>
+          <ClientProTable
+            clients={clientItems}
+            onClientsChange={setClientItems}
+          />
+        </div>
+
+        {/* ══ VUE ACHAT — 3 cartes SXM / Europe / USA ════════════════════════ */}
+        <div className={cn(viewTab !== 'achat' && 'hidden')}>
+          <AchatCardsGrid />
+        </div>
+
+        {/* ══ VUE ACHAT TEXTILE — Tableau des commandes textile ════════════════ */}
+        <div className={cn(viewTab !== 'achat_textile' && 'hidden', 'h-full')}>
+          <AchatTextileTable activeUser="" refreshTrigger={achatRefreshTrigger} />
+        </div>
+
 
       </div>
 

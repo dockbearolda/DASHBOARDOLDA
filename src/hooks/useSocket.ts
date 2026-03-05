@@ -5,6 +5,10 @@ import { io, Socket } from "socket.io-client";
 export function useSocket(handlers: Record<string, (data: unknown) => void>) {
   const socketRef = useRef<Socket | null>(null);
 
+  // Toujours pointer vers les handlers les plus récents sans redéconnecter
+  const handlersRef = useRef(handlers);
+  handlersRef.current = handlers;
+
   useEffect(() => {
     const socket = io({
       path: "/socket.io",
@@ -13,8 +17,9 @@ export function useSocket(handlers: Record<string, (data: unknown) => void>) {
 
     socketRef.current = socket;
 
-    Object.entries(handlers).forEach(([event, handler]) => {
-      socket.on(event, handler);
+    // On enregistre des wrappers stables qui délèguent au handler courant
+    Object.keys(handlersRef.current).forEach((event) => {
+      socket.on(event, (data) => handlersRef.current[event]?.(data));
     });
 
     return () => {

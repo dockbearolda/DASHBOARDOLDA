@@ -18,7 +18,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { clientName, dimensions, design, color, quantity } = body;
+    const { clientName, dimensions, design, color, quantity, note } = body;
 
     const lastItem = await prisma.pRTRequest.findFirst({
       orderBy: { position: "desc" },
@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
         design: design || "",
         color: color || "",
         quantity: quantity || 1,
+        note: note || "",
         position,
       },
     });

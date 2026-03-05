@@ -49,6 +49,7 @@ export interface PlanningItem {
   position:       number;
   trackingId:     string | null;   // UUID pour le lien de suivi
   whatsappSentAt: string | null;   // Horodatage d'envoi WhatsApp
+  updatedAt?:     string;          // Horodatage dernière modification (pour clignotement stale)
 }
 
 export interface ClientSuggestion {
@@ -204,6 +205,14 @@ function daysUntil(deadline: string | null): number | null {
 function isUrgent(deadline: string | null): boolean {
   const d = daysUntil(deadline);
   return d !== null && d <= 1;
+}
+
+const STALE_EXEMPT: PlanningStatus[] = ["TERMINE", "FACTURE_FAITE", "PRODUIT_RECUPERE"];
+
+function isStale(updatedAt: string | undefined, status: PlanningStatus): boolean {
+  if (!updatedAt) return false;
+  if (STALE_EXEMPT.includes(status)) return false;
+  return (Date.now() - new Date(updatedAt).getTime()) >= 3 * 24 * 60 * 60 * 1000;
 }
 
 /** Affiche "DD/MM/YY" sans passer par UTC — corrige le bug "jour -1" en UTC+x */
@@ -1083,6 +1092,14 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
+    <>
+    <style>{`
+      @keyframes stale-pulse {
+        0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+        50% { box-shadow: inset 0 0 0 2px rgba(251,191,36,0.7); }
+      }
+      .row-stale { animation: stale-pulse 2s ease-in-out infinite; }
+    `}</style>
     <div
       className="flex flex-col rounded-2xl bg-white overflow-hidden h-full"
       style={{
@@ -1384,6 +1401,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 const itemType    = (types[item.id] ?? "") as ItemType;
                 const typeConfig  = TYPE_CONFIG[itemType] ?? TYPE_CONFIG[""];
                 const isDone      = item.status === "TERMINE" || item.status === "FACTURE_FAITE";
+                const stale       = isStale(item.updatedAt, item.status);
                 const isNew       = newRowId === item.id;
                 const SECTEUR_ROW: Record<string, { bg: string; hover: string }> = {
                   "Textiles":                 { bg: "#FAF0F3", hover: "#F5E6EC" },
@@ -1450,6 +1468,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                         isDone && "saturate-[0.4]",
                         isNew && "ring-1 ring-inset ring-blue-300/40",
                         isDeleting && "pointer-events-none",
+                        stale && !urgent && !isDone && "row-stale",
                       )}
                       style={{
                         ...GRID_STYLE,
@@ -2082,6 +2101,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
       </AnimatePresence>
 
     </div>
+    </>
   );
 }
 

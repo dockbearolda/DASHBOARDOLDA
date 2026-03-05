@@ -12,7 +12,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Order, OrderStatus, WorkflowItem } from "@/types/order";
-import { Inbox, Pencil, Layers, Phone, RefreshCw, Plus, LogOut } from "lucide-react";
+import { Inbox, Pencil, Layers, Phone, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NoteData, TodoItem } from "./person-note-modal";
 import { RemindersGrid } from "./reminders-grid";
@@ -40,165 +40,6 @@ interface PRTItem {
   updatedAt: string;
 }
 
-
-// ════════════════════════════════════════════════════════════════════
-//  SYSTÈME DE SESSION TEMPORELLE  (Morning & Afternoon Reset)
-//
-//  La session est enregistrée dans localStorage avec l'heure de connexion.
-//  Deux créneaux de travail :
-//    · Nuit   : 00h00–06h59  →  expire à 07h00 le même matin
-//    · Matin  : 07h00–12h59  →  expire à 13h00 le même jour
-//    · Après  : 13h00–23h59  →  expire à 07h00 le lendemain
-//
-//  Le champ session.name est la clé utilisée par /api/notes/${name}
-//  pour l'attribution des tâches — ne pas le modifier sans mettre à
-//  jour les routes notes en conséquence.
-// ════════════════════════════════════════════════════════════════════
-
-const SESSION_KEY = "olda_session";
-
-interface OldaSession {
-  /** Clé de la personne active : "loic" | "charlie" | "melina" | "amandine" */
-  name: string;
-  /** ISO 8601 — timestamp exact de connexion */
-  loginAt: string;
-}
-
-/** Retourne le timestamp d'expiration selon le créneau de connexion. */
-function getExpiryTs(loginAt: Date): number {
-  const h = loginAt.getHours();
-  const d = new Date(loginAt);
-  if (h < 7) {
-    d.setHours(7, 0, 0, 0);          // nuit → expire à 07h00 ce matin
-  } else if (h < 13) {
-    d.setHours(13, 0, 0, 0);         // matin → expire à 13h00
-  } else {
-    d.setDate(d.getDate() + 1);
-    d.setHours(7, 0, 0, 0);          // après-midi → expire à 07h00 demain
-  }
-  return d.getTime();
-}
-
-function readSession(): OldaSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as OldaSession) : null;
-  } catch { return null; }
-}
-
-function isSessionExpired(s: OldaSession): boolean {
-  return Date.now() >= getExpiryTs(new Date(s.loginAt));
-}
-
-function saveSession(name: string): OldaSession {
-  const s: OldaSession = { name, loginAt: new Date().toISOString() };
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); } catch { /* quota */ }
-  return s;
-}
-
-function clearSession() {
-  try { localStorage.removeItem(SESSION_KEY); } catch { /* ignore */ }
-}
-
-// Noms affichés dans l'écran de connexion (ordre = ordre PEOPLE)
-const PERSON_DISPLAY: [string, string][] = [
-  ["loic",     "Loïc"],
-  ["charlie",  "Charlie"],
-  ["melina",   "Mélina"],
-  ["amandine", "Amandine"],
-];
-
-// ── Écran de connexion glassmorphism ──────────────────────────────────────────
-
-function LoginScreen({ onLogin, wasExpired }: { onLogin: (name: string) => void; wasExpired: boolean }) {
-  const now = new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-5"
-      style={{
-        background: "linear-gradient(160deg, #f5f5f7 0%, #eaeaf0 60%, #dfe3ea 100%)",
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 320,
-          background: "rgba(255,255,255,0.72)",
-          backdropFilter: "blur(40px)",
-          WebkitBackdropFilter: "blur(40px)",
-          border: "1px solid rgba(255,255,255,0.85)",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.9) inset",
-          borderRadius: 32,
-          padding: "36px 28px",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 24,
-        }}
-      >
-        {/* Logo mark */}
-        <div style={{
-          width: 52, height: 52, borderRadius: 15, flexShrink: 0,
-          background: "linear-gradient(145deg, #2c2c2e, #1d1d1f)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 8px 20px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.06) inset",
-          fontSize: 22, color: "#fff",
-        }}>
-          ✦
-        </div>
-
-        {/* Titre */}
-        <div style={{ textAlign: "center" }}>
-          <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em", color: "#8e8e93", marginBottom: 8 }}>
-            OLDA Studio
-          </p>
-          <p style={{ fontSize: 17, fontWeight: 600, color: "#1d1d1f", lineHeight: 1.4, marginBottom: 4 }}>
-            {wasExpired ? "Nouvelle session de travail." : "Bonjour !"}
-          </p>
-          <p style={{ fontSize: 15, color: "#6e6e73" }}>
-            Quel est votre nom ?
-          </p>
-        </div>
-
-        {/* Grille 2×2 de noms */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
-          {PERSON_DISPLAY.map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => onLogin(key)}
-              style={{
-                padding: "14px 8px",
-                borderRadius: 16,
-                border: "1.5px solid rgba(0,0,0,0.07)",
-                background: "rgba(255,255,255,0.9)",
-                fontSize: 15, fontWeight: 600, color: "#1d1d1f",
-                cursor: "pointer", fontFamily: "inherit",
-                transition: "transform 0.12s ease, box-shadow 0.12s ease",
-                WebkitTapHighlightColor: "transparent",
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = "scale(1.04)";
-                e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.10)";
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = "scale(1)";
-                e.currentTarget.style.boxShadow = "none";
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Heure discrète */}
-        <p style={{ fontSize: 12, color: "#aeaeb2" }}>{now}</p>
-      </div>
-    </div>
-  );
-}
 
 // ── Product type detection ─────────────────────────────────────────────────────
 
@@ -452,11 +293,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     setOrders((prev) => [order, ...prev]);
   };
 
-  // ── Session temporelle ────────────────────────────────────────────────────
-  const [session, setSession]               = useState<OldaSession | null>(null);
-  const [sessionChecked, setSessionChecked] = useState(false);
-  const [wasExpired, setWasExpired]         = useState(false);
-
   // ── Achat Textile : trigger refresh + lien depuis Planning ────────────────
   const [achatRefreshTrigger, setAchatRefreshTrigger] = useState(0);
 
@@ -469,13 +305,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           client:      item.clientName,
           designation: item.designation,
           quantite:    item.quantity,
-          sessionUser: session?.name ?? "",
+          sessionUser: "",
         }),
       });
       setAchatRefreshTrigger((t) => t + 1);
       setViewTab("achat_textile");
     } catch { /* ignore */ }
-  }, [session]);
+  }, []);
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef   = useRef(true);
@@ -521,52 +357,16 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
   }, []);
 
-  // Lecture localStorage au montage (côté client uniquement)
-  useEffect(() => {
-    const s = readSession();
-    if (s && !isSessionExpired(s)) {
-      setSession(s);
-    } else if (s) {
-      // Session présente mais expirée → force re-connexion
-      clearSession();
-      setWasExpired(true);
-    }
-    setSessionChecked(true);
-  }, []); // exécuté une seule fois au montage
-
   useEffect(() => { refreshOrders(); }, [refreshOrders]);
 
-  // Vérification session + rechargement commandes au retour de mise en veille
+  // Rechargement commandes au retour de mise en veille
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        // Priorité : vérifie l'expiration temporelle avant tout refresh
-        const s = readSession();
-        if (!s || isSessionExpired(s)) {
-          clearSession();
-          setWasExpired(true);
-          setSession(null);
-          return; // ne pas rafraîchir si session invalide
-        }
-        refreshOrders();
-      }
+      if (document.visibilityState === "visible") refreshOrders();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refreshOrders]);
-
-  // Vérification périodique (60 s) — si l'onglet reste ouvert à cheval sur 07h00 ou 13h00
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const s = readSession();
-      if (s && isSessionExpired(s)) {
-        clearSession();
-        setWasExpired(true);
-        setSession(null);
-      }
-    }, 60_000);
-    return () => clearInterval(timer);
-  }, []); // pas de dépendances — stable pour toute la durée du composant
 
   // ── SSE subscription ───────────────────────────────────────────────────────
 
@@ -663,15 +463,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         if (prtEditingRef.current) return; // double-check au retour async
         const newItems = data.items ?? [];
         setAllPrtItems(newItems);
-        // Badge notification pour loic et charlie
         const count = newItems.length;
-        const sess = sessionRef.current;
-        if (
-          sess &&
-          (sess.name === "loic" || sess.name === "charlie") &&
-          viewTabRef.current !== "demande_prt"
-        ) {
-          if (count > prtCountRef.current) setPrtHasNotif(true);
+        if (count > prtCountRef.current && viewTabRef.current !== "demande_prt") {
+          setPrtHasNotif(true);
         }
         prtCountRef.current = count;
       })
@@ -726,16 +520,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   }, [viewTab, fetchClients]);
 
   // ── Notification badge Flux ────────────────────────────────────────────────
-  // Appelé depuis RemindersGrid quand une note SSE arrive.
-  // Si la note concerne l'utilisateur actif ET qu'il n'est pas sur l'onglet Flux
-  // → on allume le badge.
-  const sessionRef = useRef(session);
-  useEffect(() => { sessionRef.current = session; }, [session]);
-
-  const handleNoteChangedForNotif = useCallback((person: string) => {
-    if (!sessionRef.current) return;
-    if (person !== sessionRef.current.name) return;
-    if (viewTabRef.current === 'flux') return; // déjà visible → pas de badge
+  const handleNoteChangedForNotif = useCallback((_person: string) => {
+    if (viewTabRef.current === 'flux') return;
     setFluxHasNotif(true);
   }, []);
 
@@ -749,24 +535,8 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   // Appelé depuis PRTManager quand une nouvelle demande est créée
   const handleNewPrtRequest = useCallback(() => {
     prtCountRef.current += 1;
-    const sess = sessionRef.current;
-    if (!sess) return;
-    if (sess.name !== "loic" && sess.name !== "charlie") return;
     if (viewTabRef.current === "demande_prt") return;
     setPrtHasNotif(true);
-  }, []);
-
-  // ── Connexion / Déconnexion ────────────────────────────────────────────────
-  const handleLogin = useCallback((name: string) => {
-    const s = saveSession(name);
-    setSession(s);
-    setWasExpired(false);
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    clearSession();
-    setSession(null);
-    setWasExpired(false);
   }, []);
 
   // ── Suppression d'une commande (optimistic) ───────────────────────────────
@@ -796,11 +566,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   }, []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
-
-  // Attend la lecture localStorage pour éviter un flash de l'écran de connexion
-  if (!sessionChecked) return null;
-  // Session absente ou expirée → écran glassmorphism
-  if (!session) return <LoginScreen onLogin={handleLogin} wasExpired={wasExpired} />;
 
   return (
     <div
@@ -843,23 +608,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
             ))}
           </div>
         </div>
-        {/* Utilisateur + déconnexion — positionné à gauche en absolu */}
-        <div className="absolute left-4 sm:left-6">
-          <button
-            onClick={handleLogout}
-            title="Se déconnecter"
-            className="group flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-muted/80 hover:bg-red-50 dark:hover:bg-red-950/40 hover:border-red-100 dark:hover:border-red-900/40 border border-transparent transition-colors duration-150"
-          >
-            <span className="h-5 w-5 rounded-full bg-foreground/80 flex items-center justify-center text-[10px] font-bold text-background leading-none select-none">
-              {(PERSON_DISPLAY.find(([k]) => k === session.name)?.[1] ?? session.name).charAt(0).toUpperCase()}
-            </span>
-            <span className="text-[12px] font-semibold text-muted-foreground group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors duration-150 hidden sm:block">
-              {PERSON_DISPLAY.find(([k]) => k === session.name)?.[1] ?? session.name}
-            </span>
-            <LogOut className="h-3 w-3 text-muted-foreground/60 group-hover:text-red-500 dark:group-hover:text-red-400 transition-colors duration-150" />
-          </button>
-        </div>
-
         {/* ThemeSwitcher + Indicateur live — positionnés à droite en absolu */}
         <div className="absolute right-4 sm:right-6 flex items-center gap-2">
           <ThemeSwitcher />
@@ -872,7 +620,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser={session.name} onNoteChanged={handleNoteChangedForNotif} />
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
@@ -887,7 +635,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
         <div className={cn(viewTab !== 'production_dtf' && 'hidden', 'h-full')}>
-          <DTFProductionTable activeUser={session.name} />
+          <DTFProductionTable activeUser="" />
         </div>
 
         {/* ══ VUE WORKFLOW — 4 listes de flux ══════════════════════════════════ */}
@@ -923,7 +671,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE ACHAT TEXTILE — Tableau des commandes textile ════════════════ */}
         <div className={cn(viewTab !== 'achat_textile' && 'hidden', 'h-full')}>
-          <AchatTextileTable activeUser={session.name} refreshTrigger={achatRefreshTrigger} />
+          <AchatTextileTable activeUser="" refreshTrigger={achatRefreshTrigger} />
         </div>
 
 

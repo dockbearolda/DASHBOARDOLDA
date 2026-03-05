@@ -35,6 +35,7 @@ export interface PlanningItem {
   responsible: string;
   color: string;
   position: number;
+  updatedAt?: string;
 }
 
 export type PlanningStatus =
@@ -171,6 +172,14 @@ function getRowBg(color: string, urgent: boolean): string {
   if (urgent) return "bg-red-50 hover:bg-red-100/60";
   const c = COLORS.find((c) => c.key === color);
   return c ? `${c.row} ${c.hover}` : "bg-white hover:bg-slate-50";
+}
+
+const STALE_STATUSES: PlanningStatus[] = ["TERMINE", "FACTURE_FAITE", "PRODUIT_RECUPERE"];
+
+function isStale(updatedAt: string | undefined, status: PlanningStatus): boolean {
+  if (!updatedAt) return false;
+  if (STALE_STATUSES.includes(status)) return false;
+  return (Date.now() - new Date(updatedAt).getTime()) >= 3 * 24 * 60 * 60 * 1000;
 }
 
 // ── Color picker (5 pastilles inline) ─────────────────────────────────────────
@@ -347,6 +356,14 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
+    <>
+    <style>{`
+      @keyframes stale-pulse {
+        0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
+        50% { box-shadow: inset 0 0 0 2px rgba(251,191,36,0.7); }
+      }
+      .row-stale { animation: stale-pulse 2s ease-in-out infinite; }
+    `}</style>
     <div
       className="flex flex-col rounded-2xl bg-white border border-slate-100 shadow-sm overflow-hidden"
       style={{
@@ -429,6 +446,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                 const isSaving   = savingIds.has(item.id);
                 const total      = item.quantity * item.unitPrice;
                 const urgent     = isUrgent(item.deadline);
+                const stale      = isStale(item.updatedAt, item.status);
 
                 return (
                   <Reorder.Item key={item.id} value={item} as="div">
@@ -442,7 +460,8 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                         "transition-colors duration-100",
                         GRID,
                         getRowBg(item.color ?? "", urgent),
-                        isDeleting && "pointer-events-none"
+                        isDeleting && "pointer-events-none",
+                        stale && !urgent && "row-stale"
                       )}
                     >
 
@@ -550,24 +569,39 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       </div>
 
                       {/* 5. Note */}
-                      <div className={CELL_WRAP}>
+                      <div className={cn(CELL_WRAP, "relative")}>
                         {isEditingCell(item.id, "note") ? (
-                          <input
-                            type="text"
+                          <textarea
                             value={item.note}
                             autoFocus
+                            rows={4}
                             onChange={(e) => updateItem(item.id, "note", e.target.value)}
                             onBlur={(e) => handleBlurSave(item.id, "note", e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, item.id, "note")}
-                            className={cn(CELL_INPUT, "italic text-slate-600")}
-                            placeholder="Précisions…"
+                            onKeyDown={(e) => {
+                              if (e.key === "Tab") { e.preventDefault(); (e.currentTarget as HTMLElement).blur(); }
+                              else if (e.key === "Escape") { updateItem(item.id, "note", preEdit.current as string); setEditing(null); }
+                              // Enter → nouvelle ligne (comportement textarea par défaut)
+                            }}
+                            className={cn(
+                              "absolute top-0 left-0 z-20 w-full min-w-[200px]",
+                              "px-2.5 py-2 text-[13px] italic text-slate-600",
+                              "bg-white rounded-lg border border-blue-300 ring-2 ring-blue-100/70 shadow-lg",
+                              "focus:outline-none resize-none"
+                            )}
+                            style={{ minHeight: 100 }}
+                            placeholder="Précisions…&#10;- item 1&#10;- item 2"
                           />
                         ) : (
                           <div
                             onClick={() => startEdit(item.id, "note", item.note)}
                             className={cn(CELL_DISPLAY, "italic text-slate-500", !item.note && EMPTY_TEXT)}
+                            title={item.note || undefined}
                           >
-                            {item.note || "Précisions…"}
+                            {item.note
+                              ? (item.note.includes("\n")
+                                  ? item.note.split("\n")[0] + "…"
+                                  : item.note)
+                              : "Précisions…"}
                           </div>
                         )}
                       </div>
@@ -736,5 +770,6 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }

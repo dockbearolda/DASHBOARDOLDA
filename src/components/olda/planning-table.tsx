@@ -41,6 +41,7 @@ export interface PlanningItem {
   responsible: string;
   color:       string;   // stores secteur value
   position:    number;
+  updatedAt?:  string;   // ISO 8601 — for stale detection
 }
 
 export type PlanningStatus =
@@ -258,6 +259,13 @@ function toTitleCase(s: string): string {
   return s.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 }
 
+/** Ligne non modifiée depuis plus de 3 jours → clignotement d'alerte */
+function isStale(updatedAt?: string): boolean {
+  if (!updatedAt) return false;
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+  return Date.now() - new Date(updatedAt).getTime() > THREE_DAYS_MS;
+}
+
 // ── Sub-components ──────────────────────────────────────────────────────────────
 
 // Search bar glassmorphism (feature 1)
@@ -329,7 +337,14 @@ function NoteCell({
   onCancel:    () => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lines       = Math.max(2, note.split("\n").length);
+
+  // Auto-height : recalcule la hauteur à chaque changement de contenu
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [note, isEditing]);
 
   if (isEditing) {
     return (
@@ -337,16 +352,22 @@ function NoteCell({
         ref={textareaRef}
         value={note}
         autoFocus
-        rows={lines}
-        onChange={(e) => onUpdate(e.target.value)}
+        rows={1}
+        onChange={(e) => {
+          onUpdate(e.target.value);
+          // Auto-grow immédiat pendant la frappe
+          e.target.style.height = "auto";
+          e.target.style.height = e.target.scrollHeight + "px";
+        }}
         onBlur={(e)   => onBlurSave(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Tab")    { e.preventDefault(); textareaRef.current?.blur(); }
           if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+          // Enter → saut de ligne naturel (pas de capture)
         }}
         className={cn(
           "w-full px-2 py-1 text-[10px] italic text-slate-600 bg-white rounded-xl",
-          "border border-blue-300 ring-2 ring-blue-100/70 shadow-lg focus:outline-none resize-none",
+          "border border-blue-300 ring-2 ring-blue-100/70 shadow-lg focus:outline-none resize-none overflow-hidden",
         )}
         placeholder="Précisions…"
       />
@@ -878,6 +899,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                 const isDeleting  = deletingIds.has(item.id);
                 const isSaving    = savingIds.has(item.id);
                 const urgent      = isUrgent(item.deadline);
+                const stale       = isStale(item.updatedAt);
                 const itemType    = (types[item.id] ?? "") as ItemType;
                 const typeConfig  = TYPE_CONFIG[itemType] ?? TYPE_CONFIG[""];
                 const isNoteEdit  = isEditingCell(item.id, "note");
@@ -897,6 +919,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange }: Plannin
                         "grid w-full border-b border-slate-100 group relative",
                         "transition-colors duration-100",
                         "border-l-4", typeConfig.border,
+                        stale && !urgent && "animate-stale-blink",
                         "min-h-[44px]",
                         rowBg,
                         isDeleting && "pointer-events-none",

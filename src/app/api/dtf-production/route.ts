@@ -24,14 +24,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user, name = "", status = "en_cours" } = body;
-
-    if (!user || !VALID_USERS.includes(user)) {
-      return NextResponse.json({ error: "Utilisateur invalide" }, { status: 400 });
-    }
+    const { user = "", name = "", status = "en_cours" } = body;
 
     const last = await prisma.dtfRow.findFirst({
-      where: { user },
       orderBy: { position: "desc" },
     });
     const position = (last?.position ?? -1) + 1;
@@ -46,17 +41,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/dtf-production?user=loic&status=termine — purger les terminés
+// DELETE /api/dtf-production?status=termine — purger les terminés
 export async function DELETE(req: NextRequest) {
-  const user = req.nextUrl.searchParams.get("user");
+  const user   = req.nextUrl.searchParams.get("user");
   const status = req.nextUrl.searchParams.get("status");
-  if (!user || !VALID_USERS.includes(user)) {
-    return NextResponse.json({ error: "Utilisateur invalide" }, { status: 400 });
-  }
   try {
-    await prisma.dtfRow.deleteMany({
-      where: { user, ...(status ? { status } : {}) },
-    });
+    const where: Record<string, string> = {};
+    if (status) where.status = status;
+    if (user && VALID_USERS.includes(user)) where.user = user;
+    await prisma.dtfRow.deleteMany({ where });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("DELETE /api/dtf-production:", err);

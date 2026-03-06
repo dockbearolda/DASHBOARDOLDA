@@ -122,7 +122,7 @@ function WorkflowItemRow({
         ) : (
           <span
             onClick={handleEditStart}
-            className="flex-1 text-sm font-medium text-gray-900 cursor-text hover:text-gray-700 transition-colors truncate"
+            className="flex-1 min-w-0 text-sm font-medium text-gray-900 cursor-text hover:text-gray-700 transition-colors truncate"
             style={{
               fontFamily:
                 "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
@@ -500,7 +500,7 @@ export function WorkflowListsGrid({ items, onItemsChange, isLoading }: WorkflowL
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-      {(["ACHAT", "STANDARD", "ATELIER", "DTF"] as const).map((listType) => (
+      {(["STANDARD", "ATELIER", "DTF"] as const).map((listType) => (
         <WorkflowListColumn
           key={listType}
           listType={listType}

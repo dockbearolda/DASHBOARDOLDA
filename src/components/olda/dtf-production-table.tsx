@@ -8,7 +8,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, Trash2, Loader2, X } from "lucide-react";
+import { Plus, Trash2, Loader2, X, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -21,6 +21,9 @@ export interface DTFProductionRow {
   problem?: string;
 }
 
+const DTF_TEAM = ["loic", "charlie", "melina", "amandine"] as const;
+const DTF_USER_KEY = "dtf-active-user";
+
 const statusConfig: Record<DTFStatus, { label: string; color: string }> = {
   a_produire: { label: "À produire", color: "#ff9500" },
   en_cours:   { label: "En cours",   color: "#0066ff" },
@@ -32,7 +35,14 @@ interface DTFProductionTableProps {
   activeUser?: string;
 }
 
-export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
+export function DTFProductionTable({ activeUser: activeUserProp }: DTFProductionTableProps) {
+  // User management — si le prop est vide, on utilise localStorage
+  const [internalUser, setInternalUser] = useState<string>(() => {
+    if (typeof window !== "undefined") return localStorage.getItem(DTF_USER_KEY) ?? "";
+    return "";
+  });
+  const activeUser = activeUserProp || internalUser;
+
   const [rows, setRows]       = useState<DTFProductionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -201,6 +211,27 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
           Supprimer les terminés
         </button>
       )}
+      {/* Sélecteur d'utilisateur (sans mot de passe) */}
+      <div className="relative shrink-0">
+        <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-600 cursor-pointer hover:border-slate-300 transition-colors">
+          <span className="capitalize">{activeUser || "—"}</span>
+          <ChevronDown className="h-3 w-3 text-slate-400" />
+        </div>
+        <select
+          value={activeUser}
+          onChange={(e) => {
+            const val = e.target.value;
+            setInternalUser(val);
+            try { localStorage.setItem(DTF_USER_KEY, val); } catch {}
+          }}
+          className="absolute inset-0 opacity-0 cursor-pointer w-full"
+        >
+          <option value="">— Choisir —</option>
+          {DTF_TEAM.map((u) => (
+            <option key={u} value={u} className="capitalize">{u}</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 
@@ -224,7 +255,22 @@ export function DTFProductionTable({ activeUser }: DTFProductionTableProps) {
       className="h-full"
       bodyClassName="overflow-auto flex-1 min-h-0"
     >
-      {loading ? (
+      {!activeUser ? (
+        <div className="flex flex-col items-center justify-center h-40 gap-4">
+          <p className="text-[13px] text-slate-400">Qui êtes-vous ?</p>
+          <div className="flex gap-2 flex-wrap justify-center">
+            {DTF_TEAM.map((u) => (
+              <button
+                key={u}
+                onClick={() => { setInternalUser(u); try { localStorage.setItem(DTF_USER_KEY, u); } catch {} }}
+                className="h-9 px-4 rounded-xl text-[13px] font-semibold capitalize bg-slate-100 hover:bg-blue-100 hover:text-blue-700 transition-colors"
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center h-24 gap-2 text-[13px] text-slate-300">
           <Loader2 className="h-4 w-4 animate-spin" />
           Chargement…

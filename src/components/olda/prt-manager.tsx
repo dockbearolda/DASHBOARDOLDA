@@ -506,7 +506,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                                 console.error("Failed to update:", err);
                               }
                             }}
-                            className="flex-1 min-w-0 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px] truncate"
+                            className="flex-1 min-w-0 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px] truncate text-center"
                             placeholder="Design"
                             title={item.design}
                           />
@@ -547,7 +547,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                             CELL_CLASS,
                             "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
                           )}
-                          placeholder="S, M, L…"
+                          placeholder=""
                         />
 
                         {/* Couleur (1fr) */}

@@ -71,6 +71,12 @@ interface OrderTableProps {
    * Par défaut : "overflow-y-auto" (auto-height).
    */
   bodyClassName?: string;
+  /**
+   * Couleur de fond de la carte (overrides bg-white).
+   * Ex : "bg-amber-50" pour le mode archive.
+   * Par défaut : "bg-white".
+   */
+  bgClassName?: string;
 }
 
 // ── Composant ─────────────────────────────────────────────────────────────────────
@@ -83,18 +89,20 @@ export function OrderTable({
   minWidth,
   className,
   bodyClassName,
+  bgClassName = "bg-white",
 }: OrderTableProps) {
   return (
     <div
       className={cn(
-        "flex flex-col rounded-2xl bg-white overflow-hidden",
+        "flex flex-col rounded-2xl overflow-hidden",
+        bgClassName,
         className,
       )}
       style={{ ...APPLE_FONT_STYLE, ...APPLE_SHADOW_STYLE }}
     >
       {/* Toolbar slot */}
       {toolbar && (
-        <div className="shrink-0 border-b border-black/[0.06] bg-white">
+        <div className={cn("shrink-0 border-b border-black/[0.06]", bgClassName)}>
           {toolbar}
         </div>
       )}

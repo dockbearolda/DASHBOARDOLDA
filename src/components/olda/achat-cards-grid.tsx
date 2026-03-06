@@ -789,11 +789,12 @@ export function AchatCardsGrid() {
       .catch(() => {});
   }, []);
 
-  // Chargement des notes
-  useEffect(() => {
+  // Chargement des notes + polling 10 s pour voir les changements des collègues
+  const fetchNotes = useCallback(() => {
     fetch("/api/notes")
       .then((r) => r.json())
       .then((data: { notes: { person: string; content: string; todos: TodoItem[] | string }[] }) => {
+        if (!mountedRef.current) return;
         const contentMap: Record<string, string>    = {};
         const todosMapNew: Record<string, TodoItem[]> = {};
         for (const n of data.notes) {
@@ -814,6 +815,12 @@ export function AchatCardsGrid() {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  useEffect(() => {
+    fetchNotes();
+    const id = setInterval(fetchNotes, 10_000);
+    return () => clearInterval(id);
+  }, [fetchNotes]);
 
   const handleUpdate = useCallback((key: string, next: TodoItem[]) => {
     setTodosMap(prev => ({ ...prev, [key]: next }));

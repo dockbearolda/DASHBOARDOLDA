@@ -620,12 +620,14 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
+          <div className="max-w-5xl mx-auto">
+            <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
+          </div>
         </div>
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <div className="max-w-5xl">
+          <div className="max-w-5xl mx-auto">
             <PRTManager
               items={allPrtItems}
               onItemsChange={setAllPrtItems}
@@ -637,43 +639,55 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
         <div className={cn(viewTab !== 'production_dtf' && 'hidden', 'h-full')}>
-          <DTFProductionTable activeUser="" />
+          <div className="max-w-2xl mx-auto h-full">
+            <DTFProductionTable activeUser="" />
+          </div>
         </div>
 
         {/* ══ VUE WORKFLOW — 4 listes de flux ══════════════════════════════════ */}
         <div className={cn(viewTab !== 'workflow' && 'hidden')}>
-          <WorkflowListsGrid
-            items={workflowItems}
-            onItemsChange={setWorkflowItems}
-          />
+          <div className="max-w-6xl mx-auto">
+            <WorkflowListsGrid
+              items={workflowItems}
+              onItemsChange={setWorkflowItems}
+            />
+          </div>
         </div>
 
         {/* ══ VUE PLANNING — Tableau d'entreprise partagé ════════════════════ */}
         <div className={cn(viewTab !== 'planning' && 'hidden', 'h-full')}>
-          <PlanningTable
-            items={planningItems}
-            onItemsChange={setPlanningItems}
-            onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
-            onCreateAchatFromPlanning={handleCreateAchatFromPlanning}
-          />
+          <div className="max-w-screen-2xl mx-auto h-full">
+            <PlanningTable
+              items={planningItems}
+              onItemsChange={setPlanningItems}
+              onEditingChange={(isEditing) => { planningEditingRef.current = isEditing; }}
+              onCreateAchatFromPlanning={handleCreateAchatFromPlanning}
+            />
+          </div>
         </div>
 
         {/* ══ VUE CLIENTS PRO — Base de données clients ═══════════════════════ */}
         <div className={cn(viewTab !== 'clients_pro' && 'hidden', 'h-full')}>
-          <ClientProTable
-            clients={clientItems}
-            onClientsChange={setClientItems}
-          />
+          <div className="max-w-5xl mx-auto h-full">
+            <ClientProTable
+              clients={clientItems}
+              onClientsChange={setClientItems}
+            />
+          </div>
         </div>
 
         {/* ══ VUE ACHAT — 3 cartes SXM / Europe / USA ════════════════════════ */}
         <div className={cn(viewTab !== 'achat' && 'hidden')}>
-          <AchatCardsGrid />
+          <div className="max-w-4xl mx-auto">
+            <AchatCardsGrid />
+          </div>
         </div>
 
         {/* ══ VUE ACHAT TEXTILE — Tableau des commandes textile ════════════════ */}
         <div className={cn(viewTab !== 'achat_textile' && 'hidden', 'h-full')}>
-          <AchatTextileTable activeUser="" refreshTrigger={achatRefreshTrigger} />
+          <div className="max-w-7xl mx-auto h-full">
+            <AchatTextileTable activeUser="" refreshTrigger={achatRefreshTrigger} />
+          </div>
         </div>
 
 

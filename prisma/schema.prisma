@@ -135,14 +135,16 @@ model PRTRequest {
 // ── Production DTF ────────────────────────────────────────────────────────────
 // Anciennement stocké dans localStorage — migré en base pour persistance et sync.
 model DtfRow {
-  id        String   @id @default(cuid())
-  user      String   // "loic" | "charlie" | "melina" | "amandine"
-  name      String   @default("")
-  status    String   @default("en_cours") // a_produire | en_cours | termine | erreur
-  problem   String?  // Renseigné si status === "erreur"
-  position  Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  user           String   // "loic" | "charlie" | "melina" | "amandine"
+  name           String   @default("")
+  status         String   @default("en_cours") // a_produire | en_cours | termine | erreur
+  problem        String?  // Renseigné si status === "erreur"
+  quantity       Int      @default(1)           // Nombre de pièces à produire
+  completedItems Json     @default("[]")        // boolean[] — suivi pièce par pièce
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("dtf_rows")
   @@index([user])

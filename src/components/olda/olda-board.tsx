@@ -31,6 +31,7 @@ interface PRTItem {
   clientName: string;
   dimensions: string;
   design: string;
+  taille: string;
   color: string;
   quantity: number;
   done: boolean;

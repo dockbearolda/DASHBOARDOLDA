@@ -18,7 +18,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { clientName, dimensions, design, color, quantity, note, insertAfterPosition } = body;
+    const { clientName, dimensions, design, taille, color, quantity, note, insertAfterPosition } = body;
 
     let position: number;
     if (insertAfterPosition !== undefined) {
@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
         clientName: clientName || "",
         dimensions: dimensions || "",
         design: design || "",
+        taille: taille || "",
         color: color || "",
         quantity: quantity || 1,
         note: note || "",

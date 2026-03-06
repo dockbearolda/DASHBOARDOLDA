@@ -19,6 +19,7 @@ interface PRTItem {
   clientName: string;
   dimensions: string;
   design: string;
+  taille: string;
   color: string;
   quantity: number;
   done: boolean;
@@ -42,8 +43,8 @@ const COULEURS = [
   "Menthe", "Jaune", "Beige", "Blanc",
 ] as const;
 
-// Grid : [checkbox] [client] [dimensions] [design] [couleur] [note] [qté] [actions]
-const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_1fr_80px_96px]";
+// Grid : [checkbox] [client] [dimensions] [design] [taille] [couleur] [note] [qté] [actions]
+const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_100px_1fr_1fr_80px_96px]";
 const CELL_CLASS = "px-3 py-3 truncate";
 
 // ── Helpers date ──────────────────────────────────────────────────────────────
@@ -332,6 +333,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
       <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Client</div>
       <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Dimensions</div>
       <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Design</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Taille</div>
       <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Couleur</div>
       <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Note</div>
       <div className="text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Qté</div>
@@ -347,7 +349,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
         toolbar={toolbar}
         headers={headers}
         bgClassName={showArchive ? "bg-amber-50" : "bg-white"}
-        minWidth={1050}
+        minWidth={1150}
       >
         <div className="divide-y divide-slate-50">
           <Reorder.Group
@@ -517,6 +519,36 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                             <FolderOpen className="h-3.5 w-3.5" />
                           </button>
                         </div>
+
+                        {/* Taille (100px) */}
+                        <input
+                          type="text"
+                          value={item.taille ?? ""}
+                          onFocus={() => onEditingChange?.(true)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            onItemsChange?.((prev) => prev.map((i) =>
+                              i.id === item.id ? { ...i, taille: val } : i,
+                            ));
+                          }}
+                          onBlur={async () => {
+                            onEditingChange?.(false);
+                            try {
+                              await fetch(`/api/prt-requests/${item.id}`, {
+                                method:  "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body:    JSON.stringify({ taille: item.taille }),
+                              });
+                            } catch (err) {
+                              console.error("Failed to update:", err);
+                            }
+                          }}
+                          className={cn(
+                            CELL_CLASS,
+                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
+                          )}
+                          placeholder="S, M, L…"
+                        />
 
                         {/* Couleur (1fr) */}
                         <div className={CELL_CLASS}>

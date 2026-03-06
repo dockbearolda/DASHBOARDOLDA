@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Plus, Trash2, Loader2, X, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -24,9 +24,6 @@ export interface DTFProductionRow {
   quantity: number;
   completedItems: boolean[];
 }
-
-const DTF_TEAM = ["loic", "charlie", "melina", "amandine"] as const;
-const DTF_USER_KEY = "dtf-active-user";
 
 const USER_COLORS: Record<string, { bg: string; text: string }> = {
   loic:     { bg: "#e8f2ff", text: "#0066ff" },
@@ -64,17 +61,7 @@ function normalizeRow(r: Partial<DTFProductionRow> & { status?: string; complete
   };
 }
 
-interface DTFProductionTableProps {
-  activeUser?: string;
-}
-
-export function DTFProductionTable({ activeUser: activeUserProp }: DTFProductionTableProps) {
-  const [internalUser, setInternalUser] = useState<string>(() => {
-    if (typeof window !== "undefined") return localStorage.getItem(DTF_USER_KEY) ?? "";
-    return "";
-  });
-  const activeUser = activeUserProp || internalUser;
-
+export function DTFProductionTable() {
   const [rows, setRows]       = useState<DTFProductionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
@@ -117,20 +104,20 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
 
   // ── Ajouter une ligne ─────────────────────────────────────────────────────
   const addRow = useCallback(async (name: string = "") => {
-    if (!activeUser || saving) return;
+    if (saving) return;
     setSaving(true);
     try {
       const res = await fetch("/api/dtf-production", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ user: activeUser, name, status: "en_cours" }),
+        body:    JSON.stringify({ user: "", name, status: "en_cours" }),
       });
       if (!res.ok) return;
       const { row } = await res.json();
       setRows((prev) => [...prev, normalizeRow(row)]);
     } catch { /* ignore */ }
     finally { setSaving(false); }
-  }, [activeUser, saving]);
+  }, [saving]);
 
   // ── Supprimer ─────────────────────────────────────────────────────────────
   const deleteRow = useCallback(async (id: string) => {
@@ -216,14 +203,13 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
     } catch { /* ignore */ }
   }, []);
 
-  // ── Supprimer les terminés de l'utilisateur actuel ────────────────────────
+  // ── Supprimer tous les terminés ───────────────────────────────────────────
   const deleteTerminated = useCallback(async () => {
-    if (!activeUser) return;
-    setRows((prev) => prev.filter((r) => !(r.status === "termine" && r.user === activeUser)));
+    setRows((prev) => prev.filter((r) => r.status !== "termine"));
     try {
-      await fetch(`/api/dtf-production?user=${activeUser}&status=termine`, { method: "DELETE" });
+      await fetch(`/api/dtf-production?status=termine`, { method: "DELETE" });
     } catch { /* ignore */ }
-  }, [activeUser]);
+  }, []);
 
   // Nettoyage des debounce timers
   useEffect(() => {
@@ -269,9 +255,8 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
         </div>
       ) : (
         <button
-          onClick={() => { if (!activeUser) return; setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
-          disabled={saving || !activeUser}
-          title={!activeUser ? "Choisissez votre nom d'abord" : undefined}
+          onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
+          disabled={saving}
           className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
@@ -279,35 +264,14 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
         </button>
       )}
       <div className="flex-1" />
-      {activeUser && rows.some((r) => r.status === "termine" && r.user === activeUser) && (
+      {rows.some((r) => r.status === "termine") && (
         <button
           onClick={deleteTerminated}
           className="h-8 px-2.5 rounded-lg text-[12px] font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
         >
-          Supprimer mes terminés
+          Supprimer les terminés
         </button>
       )}
-      {/* Sélecteur d'identité */}
-      <div className="relative shrink-0">
-        <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-600 cursor-pointer hover:border-slate-300 transition-colors">
-          <span className="capitalize">{activeUser || "— Moi —"}</span>
-          <ChevronDown className="h-3 w-3 text-slate-400" />
-        </div>
-        <select
-          value={activeUser}
-          onChange={(e) => {
-            const val = e.target.value;
-            setInternalUser(val);
-            try { localStorage.setItem(DTF_USER_KEY, val); } catch {}
-          }}
-          className="absolute inset-0 opacity-0 cursor-pointer w-full"
-        >
-          <option value="">— Je suis… —</option>
-          {DTF_TEAM.map((u) => (
-            <option key={u} value={u} className="capitalize">{u}</option>
-          ))}
-        </select>
-      </div>
     </div>
   );
 
@@ -336,9 +300,6 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-24 gap-1 text-[13px] text-slate-300">
           <p>Aucune production en cours</p>
-          {!activeUser && (
-            <p className="text-[11px]">Choisissez votre nom en haut à droite pour ajouter</p>
-          )}
         </div>
       ) : (
         <div className="divide-y divide-slate-50">

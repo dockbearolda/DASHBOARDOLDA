@@ -271,7 +271,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat' | 'achat_textile'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat_textile'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
   // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
@@ -416,9 +416,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     };
   }, [markNew, refreshOrders, startPolling, stopPolling]);
 
-  // ── Person notes ───────────────────────────────────────────────────────────
+  // ── Person notes — polling toutes les 15 s ─────────────────────────────────
 
-  useEffect(() => {
+  const fetchNotes = useCallback(() => {
     fetch("/api/notes")
       .then((r) => r.json())
       .then((data) => {
@@ -435,6 +435,12 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetchNotes();
+    const id = setInterval(fetchNotes, 15_000);
+    return () => clearInterval(id);
+  }, [fetchNotes]);
 
   // ── Workflow items : polling toutes les 5 s ────────────────────────────────
 
@@ -502,7 +508,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
     return () => clearInterval(id);
   }, [fetchPlanning]);
 
-  // ── Client Pro items ───────────────────────────────────────────────────────
+  // ── Client Pro items — polling toutes les 15 s ────────────────────────────
   const fetchClients = useCallback(() => {
     fetch("/api/clients")
       .then((r) => r.json())
@@ -512,12 +518,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
   useEffect(() => {
     fetchClients();
+    const id = setInterval(fetchClients, 15_000);
+    return () => clearInterval(id);
   }, [fetchClients]);
-
-  // Refresh clients when switching to the clients_pro tab
-  useEffect(() => {
-    if (viewTab === "clients_pro") fetchClients();
-  }, [viewTab, fetchClients]);
 
   // ── Notification badge Flux ────────────────────────────────────────────────
   const handleNoteChangedForNotif = useCallback((_person: string) => {
@@ -527,7 +530,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
   // Changement d'onglet : efface le badge quand l'utilisateur retourne sur l'onglet concerné
   const handleTabChange = useCallback((tab: typeof viewTab) => {
-    setViewTab(tab);
+    setViewTab(tab as typeof viewTab);
     if (tab === 'flux') setFluxHasNotif(false);
     if (tab === 'demande_prt') setPrtHasNotif(false);
   }, []);
@@ -578,7 +581,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
-            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat', 'achat_textile'] as const).map((v) => (
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat_textile'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => handleTabChange(v)}
@@ -591,7 +594,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                 )}
               >
                 {v === 'flux' ? 'Tâches'
-                  : v === 'achat' ? 'Achat'
                   : v === 'planning' ? 'Planning'
                   : v === 'clients_pro' ? 'Clients Pro'
                   : v === 'demande_prt' ? 'Demande de DTF'
@@ -618,10 +620,11 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       {/* ── Contenu principal ───────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
 
-        {/* ══ VUE FLUX — 4 cartes collaborateurs ══════════════════════════════ */}
+        {/* ══ VUE FLUX — 4 cartes collaborateurs + cartes achat ══════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <div className="max-w-5xl mx-auto">
+          <div className="max-w-5xl mx-auto space-y-6">
             <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
+            <AchatCardsGrid />
           </div>
         </div>
 
@@ -640,7 +643,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
         <div className={cn(viewTab !== 'production_dtf' && 'hidden', 'h-full')}>
           <div className="max-w-2xl mx-auto h-full">
-            <DTFProductionTable activeUser="" />
+            <DTFProductionTable />
           </div>
         </div>
 
@@ -673,13 +676,6 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
               clients={clientItems}
               onClientsChange={setClientItems}
             />
-          </div>
-        </div>
-
-        {/* ══ VUE ACHAT — 3 cartes SXM / Europe / USA ════════════════════════ */}
-        <div className={cn(viewTab !== 'achat' && 'hidden')}>
-          <div className="max-w-4xl mx-auto">
-            <AchatCardsGrid />
           </div>
         </div>
 

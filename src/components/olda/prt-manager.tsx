@@ -177,17 +177,30 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({
-            clientName: item.clientName,
-            dimensions: item.dimensions,
-            design:     item.design,
-            color:      item.color,
-            quantity:   item.quantity,
-            note:       item.note,
+            clientName:          item.clientName,
+            dimensions:          item.dimensions,
+            design:              item.design,
+            color:               item.color,
+            quantity:            item.quantity,
+            note:                item.note,
+            insertAfterPosition: item.position,
           }),
         });
         if (!res.ok) throw new Error("API error");
         const data = await res.json();
-        if (data.item) onItemsChange?.((prev) => [data.item, ...prev]);
+        if (data.item) {
+          onItemsChange?.((prev) => {
+            // Décaler les positions des items après l'original
+            const shifted = prev.map((i) =>
+              i.position > item.position ? { ...i, position: i.position + 1 } : i,
+            );
+            // Insérer juste après l'original
+            const idx = shifted.findIndex((i) => i.id === item.id);
+            const next = [...shifted];
+            next.splice(idx === -1 ? 0 : idx + 1, 0, data.item);
+            return next;
+          });
+        }
       } catch (err) {
         console.error("Failed to duplicate PRT:", err);
       }

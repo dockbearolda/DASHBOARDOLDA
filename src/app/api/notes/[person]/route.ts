@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { noteEvents } from "@/lib/events";
 
-const VALID_PEOPLE = ["loic", "charlie", "melina", "amandine"];
+const VALID_PEOPLE = ["loic", "charlie", "melina", "amandine", "achat_sxm", "achat_europe", "achat_usa"];
 
 interface Params {
   params: Promise<{ person: string }>;

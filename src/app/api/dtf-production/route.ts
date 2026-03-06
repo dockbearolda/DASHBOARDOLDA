@@ -3,16 +3,15 @@ import { prisma } from "@/lib/prisma";
 
 const VALID_USERS = ["loic", "charlie", "melina", "amandine"];
 
-// GET /api/dtf-production?user=loic
+// GET /api/dtf-production         — retourne toutes les lignes
+// GET /api/dtf-production?user=x  — filtre par utilisateur
 export async function GET(req: NextRequest) {
   const user = req.nextUrl.searchParams.get("user");
-  if (!user || !VALID_USERS.includes(user)) {
-    return NextResponse.json({ error: "Utilisateur invalide" }, { status: 400 });
-  }
+  const where = user && VALID_USERS.includes(user) ? { user } : {};
   try {
     const rows = await prisma.dtfRow.findMany({
-      where: { user },
-      orderBy: { position: "asc" },
+      where,
+      orderBy: [{ user: "asc" }, { position: "asc" }],
     });
     return NextResponse.json({ rows });
   } catch (err) {

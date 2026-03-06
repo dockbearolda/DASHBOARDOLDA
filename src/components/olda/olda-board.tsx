@@ -625,12 +625,14 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <PRTManager
-            items={allPrtItems}
-            onItemsChange={setAllPrtItems}
-            onNewRequest={handleNewPrtRequest}
-            onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
-          />
+          <div className="max-w-5xl">
+            <PRTManager
+              items={allPrtItems}
+              onItemsChange={setAllPrtItems}
+              onNewRequest={handleNewPrtRequest}
+              onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
+            />
+          </div>
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}

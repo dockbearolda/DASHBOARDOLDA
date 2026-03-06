@@ -665,9 +665,9 @@ function ClientNameCell({
       <div
         onClick={onStartEdit}
         className={cn(
-          "w-full h-8 px-2.5 text-[13px] rounded-lg cursor-text font-semibold tracking-[-0.01em]",
+          "w-full h-8 px-2.5 text-[14px] rounded-lg cursor-text font-bold tracking-[-0.01em]",
           "flex items-center gap-1.5 hover:bg-black/[0.03] transition-colors duration-100 select-none truncate",
-          value ? "text-slate-900" : EMPTY_CLS,
+          value ? "text-indigo-800" : EMPTY_CLS,
         )}
       >
         {clientId && (
@@ -1619,6 +1619,8 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                           onChange={(e) => updateItem(item.id, "note", e.target.value)}
                           onFocus={() => startEdit(item.id, "note", item.note)}
                           onBlur={(e) => handleBlurSave(item.id, "note", e.target.value)}
+                          onDragStart={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
                           onKeyDown={(e) => {
                             if (e.key === "Tab") { e.preventDefault(); (e.currentTarget as HTMLElement).blur(); }
                             else if (e.key === "Escape") { updateItem(item.id, "note", preEdit.current); setEditing(null); }

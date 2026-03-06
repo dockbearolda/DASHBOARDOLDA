@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
-import { Trash2, Plus, Check, FolderOpen, X } from "lucide-react";
+import { Trash2, Plus, Check, FolderOpen, X, Archive, ArchiveRestore } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -50,6 +50,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
+  const [showArchive,  setShowArchive]  = useState(false);
 
   // ── Inline quick-add ─────────────────────────────────────────────────────
   const [isQuickAdding, setIsQuickAdding] = useState(false);
@@ -94,8 +95,11 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
 
   const sortedItems = useMemo(() => {
     if (!Array.isArray(items)) return [];
-    return [...items].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0));
-  }, [items]);
+    const filtered = showArchive ? items.filter((i) => i.done) : items.filter((i) => !i.done);
+    return [...filtered].sort((a, b) => (a?.position ?? 0) - (b?.position ?? 0));
+  }, [items, showArchive]);
+
+  const archivedCount = useMemo(() => items.filter((i) => i.done).length, [items]);
 
   const handleToggleDone = useCallback(
     async (id: string, currentDone: boolean) => {
@@ -219,13 +223,26 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
       ) : (
         <button
           onClick={() => { setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
-          disabled={isAddingNew}
-          className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0"
+          disabled={isAddingNew || showArchive}
+          className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0 disabled:opacity-40 disabled:pointer-events-none"
         >
           <Plus className="h-3.5 w-3.5" />
           <span>Demande de DTF</span>
         </button>
       )}
+      <div className="flex-1" />
+      <button
+        onClick={() => setShowArchive((v) => !v)}
+        className={cn(
+          "flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold transition-colors shrink-0",
+          showArchive
+            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+            : "text-slate-400 hover:text-slate-600 hover:bg-slate-100",
+        )}
+      >
+        {showArchive ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+        {showArchive ? "Retour" : `Archive${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+      </button>
     </div>
   );
 
@@ -296,7 +313,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                   exit={{ opacity: 0 }}
                   className="py-12 text-center text-[13px] text-slate-300"
                 >
-                  Aucune demande PRT
+                  {showArchive ? "Archive vide" : "Aucune demande PRT"}
                 </motion.div>
               ) : (
                 sortedItems.map((item) => {
@@ -312,7 +329,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                         className={cn(
                           "grid gap-0 border-b border-slate-50 transition-colors group hover:bg-slate-50/70",
                           GRID_COLS,
-                          item?.done && "opacity-40",
+                          showArchive && "opacity-60",
                         )}
                       >
                         {/* Checkbox (40px) */}

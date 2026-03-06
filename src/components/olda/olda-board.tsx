@@ -622,7 +622,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
 
         {/* ══ VUE FLUX — cartes collaborateurs ═══════════════════════════════ */}
-        <div className={cn(viewTab !== 'flux' && 'hidden')}>
+        <div className={cn(viewTab !== 'flux' && 'hidden', '-mx-4 sm:-mx-6')}>
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
         </div>
 

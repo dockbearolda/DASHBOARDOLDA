@@ -951,6 +951,7 @@ export function RemindersGrid({
   return (
     <div className="flex flex-col gap-2.5">
       {/* ── Tâche commune — pleine largeur ──────────────────────────────────── */}
+      <div className="px-4 sm:px-6">
       <ReminderCard
         personKey="commun"
         personName="Tâche commune"
@@ -970,8 +971,9 @@ export function RemindersGrid({
         onPhotoChange={() => {}}
         onColorChange={() => {}}
       />
-      {/* ── Cartes individuelles ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-2.5">
+      </div>
+      {/* ── Cartes individuelles — pleine largeur écran ───────────────────────── */}
+      <div className="grid grid-cols-4 gap-2 px-2">
         {PEOPLE.map((p) => (
           <ReminderCard
             key={p.key}

@@ -623,9 +623,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE FLUX — cartes collaborateurs ═══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <div className="max-w-5xl mx-auto">
-            <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
-          </div>
+          <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}

@@ -9,12 +9,13 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { clientName, dimensions, design, color, quantity, done, position, note } = body;
+    const { clientName, dimensions, design, taille, color, quantity, done, position, note } = body;
 
     const updateData: Record<string, unknown> = {};
     if (clientName !== undefined) updateData.clientName = clientName;
     if (dimensions !== undefined) updateData.dimensions = dimensions;
     if (design !== undefined) updateData.design = design;
+    if (taille !== undefined) updateData.taille = taille;
     if (color !== undefined) updateData.color = color;
     if (quantity !== undefined) updateData.quantity = quantity;
     if (done !== undefined) updateData.done = done;

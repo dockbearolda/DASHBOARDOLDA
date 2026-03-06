@@ -4,11 +4,13 @@
  * DTF Production Table — données persistées en base PostgreSQL.
  * Toutes les lignes de toute l'équipe sont visibles.
  * Un badge coloré indique qui a créé chaque ligne.
- * Le sélecteur "Moi" en haut permet de s'identifier pour ajouter des lignes.
+ * Colonne "Quantité" : N pastilles cliquables pour suivre N pièces.
+ * Polling 10 s pour voir les changements des collègues en temps réel.
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Plus, Trash2, Loader2, X, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
 export type DTFStatus = "a_produire" | "en_cours" | "termine" | "erreur";
@@ -19,6 +21,8 @@ export interface DTFProductionRow {
   name: string;
   status: DTFStatus;
   problem?: string;
+  quantity: number;
+  completedItems: boolean[];
 }
 
 const DTF_TEAM = ["loic", "charlie", "melina", "amandine"] as const;
@@ -38,12 +42,33 @@ const statusConfig: Record<DTFStatus, { label: string; color: string }> = {
   erreur:     { label: "Erreur",     color: "#ff3b30" },
 };
 
+// Normalise les données brutes de l'API
+function normalizeRow(r: Partial<DTFProductionRow> & { status?: string; completedItems?: unknown }): DTFProductionRow {
+  const qty = Math.max(1, Number(r.quantity ?? 1));
+  let completed: boolean[] = [];
+  if (Array.isArray(r.completedItems)) {
+    completed = (r.completedItems as unknown[]).map(Boolean);
+  }
+  // Ajuste la longueur si besoin
+  while (completed.length < qty) completed.push(false);
+  completed = completed.slice(0, qty);
+
+  return {
+    id:             r.id ?? "",
+    user:           r.user ?? "",
+    name:           r.name ?? "",
+    status:         (r.status ?? "en_cours") as DTFStatus,
+    problem:        r.problem,
+    quantity:       qty,
+    completedItems: completed,
+  };
+}
+
 interface DTFProductionTableProps {
   activeUser?: string;
 }
 
 export function DTFProductionTable({ activeUser: activeUserProp }: DTFProductionTableProps) {
-  // User management — si le prop est vide, on utilise localStorage
   const [internalUser, setInternalUser] = useState<string>(() => {
     if (typeof window !== "undefined") return localStorage.getItem(DTF_USER_KEY) ?? "";
     return "";
@@ -54,30 +79,41 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
 
-  // ── Inline quick-add ─────────────────────────────────────────────────────
   const [isQuickAdding, setIsQuickAdding] = useState(false);
   const [quickDraft,    setQuickDraft]    = useState("");
   const quickAddRef = useRef<HTMLInputElement>(null);
 
-  // Debounce timers par row.id pour les champs texte
-  const debounceRefs = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const debounceRefs  = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const editingIdsRef = useRef<Set<string>>(new Set()); // lignes en cours d'édition — pas écrasées par le poll
 
-  // ── Chargement initial — toutes les lignes de l'équipe ────────────────────
+  // ── Chargement + polling 10 s ────────────────────────────────────────────
+  const fetchAll = useCallback(() => {
+    fetch("/api/dtf-production")
+      .then((r) => r.json())
+      .then((data) => {
+        const fresh = (data.rows ?? []).map(normalizeRow) as DTFProductionRow[];
+        setRows((prev) => {
+          // Ne pas écraser les lignes actuellement éditées
+          const prevMap = new Map(prev.map((r) => [r.id, r]));
+          return fresh.map((r) => editingIdsRef.current.has(r.id) ? (prevMap.get(r.id) ?? r) : r);
+        });
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     setLoading(true);
     fetch("/api/dtf-production")
       .then((r) => r.json())
-      .then((data) => {
-        setRows(
-          (data.rows ?? []).map((r: DTFProductionRow & { status: string }) => ({
-            ...r,
-            status: (r.status ?? "en_cours") as DTFStatus,
-          })),
-        );
-      })
+      .then((data) => setRows((data.rows ?? []).map(normalizeRow)))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const id = setInterval(fetchAll, 10_000);
+    return () => clearInterval(id);
+  }, [fetchAll]);
 
   // ── Ajouter une ligne ─────────────────────────────────────────────────────
   const addRow = useCallback(async (name: string = "") => {
@@ -91,12 +127,12 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
       });
       if (!res.ok) return;
       const { row } = await res.json();
-      setRows((prev) => [...prev, row]);
+      setRows((prev) => [...prev, normalizeRow(row)]);
     } catch { /* ignore */ }
     finally { setSaving(false); }
   }, [activeUser, saving]);
 
-  // ── Supprimer une ligne ───────────────────────────────────────────────────
+  // ── Supprimer ─────────────────────────────────────────────────────────────
   const deleteRow = useCallback(async (id: string) => {
     setRows((prev) => prev.filter((r) => r.id !== id));
     try {
@@ -104,11 +140,11 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
     } catch {
       const res  = await fetch("/api/dtf-production");
       const data = await res.json();
-      setRows(data.rows ?? []);
+      setRows((data.rows ?? []).map(normalizeRow));
     }
   }, []);
 
-  // ── Mettre à jour statut (immédiat) ──────────────────────────────────────
+  // ── Statut ────────────────────────────────────────────────────────────────
   const updateStatus = useCallback(async (id: string, status: DTFStatus) => {
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
     try {
@@ -120,13 +156,14 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
     } catch { /* ignore */ }
   }, []);
 
-  // ── Mettre à jour champ texte (debounce 600 ms) ───────────────────────────
+  // ── Champs texte (debounce) ───────────────────────────────────────────────
   const updateTextField = useCallback((id: string, field: "name" | "problem", value: string) => {
+    editingIdsRef.current.add(id);
     setRows((prev) => prev.map((r) => r.id === id ? { ...r, [field]: value } : r));
 
     if (debounceRefs.current[id]) clearTimeout(debounceRefs.current[id]);
-
     debounceRefs.current[id] = setTimeout(async () => {
+      editingIdsRef.current.delete(id);
       try {
         await fetch(`/api/dtf-production/${id}`, {
           method:  "PATCH",
@@ -137,25 +174,64 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
     }, 600);
   }, []);
 
+  // ── Quantité ──────────────────────────────────────────────────────────────
+  const updateQuantity = useCallback((id: string, qty: number) => {
+    const q = Math.max(1, Math.min(50, qty));
+    let nextItems: boolean[] = [];
+    setRows((prev) => prev.map((r) => {
+      if (r.id !== id) return r;
+      let items = [...r.completedItems];
+      while (items.length < q)  items.push(false);
+      items = items.slice(0, q);
+      nextItems = items;
+      return { ...r, quantity: q, completedItems: items };
+    }));
+
+    if (debounceRefs.current[`qty_${id}`]) clearTimeout(debounceRefs.current[`qty_${id}`]);
+    debounceRefs.current[`qty_${id}`] = setTimeout(async () => {
+      try {
+        await fetch(`/api/dtf-production/${id}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ quantity: q, completedItems: nextItems }),
+        });
+      } catch { /* ignore */ }
+    }, 800);
+  }, []);
+
+  // ── Pastille (toggle) ─────────────────────────────────────────────────────
+  const togglePill = useCallback(async (id: string, index: number) => {
+    let nextItems: boolean[] = [];
+    setRows((prev) => prev.map((r) => {
+      if (r.id !== id) return r;
+      nextItems = r.completedItems.map((v, i) => i === index ? !v : v);
+      return { ...r, completedItems: nextItems };
+    }));
+    try {
+      await fetch(`/api/dtf-production/${id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ completedItems: nextItems }),
+      });
+    } catch { /* ignore */ }
+  }, []);
+
   // ── Supprimer les terminés de l'utilisateur actuel ────────────────────────
   const deleteTerminated = useCallback(async () => {
     if (!activeUser) return;
     setRows((prev) => prev.filter((r) => !(r.status === "termine" && r.user === activeUser)));
     try {
-      await fetch(`/api/dtf-production?user=${activeUser}&status=termine`, {
-        method: "DELETE",
-      });
+      await fetch(`/api/dtf-production?user=${activeUser}&status=termine`, { method: "DELETE" });
     } catch { /* ignore */ }
   }, [activeUser]);
 
-  // Nettoyage des debounce timers au démontage
+  // Nettoyage des debounce timers
   useEffect(() => {
     const refs = debounceRefs.current;
     return () => { Object.values(refs).forEach(clearTimeout); };
   }, []);
 
-  // ── Slots OrderTable ──────────────────────────────────────────────────────
-
+  // ── Toolbar ────────────────────────────────────────────────────────────────
   const toolbar = (
     <div className="flex items-center gap-3 px-4 py-3">
       {isQuickAdding ? (
@@ -169,14 +245,8 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
               if (e.key === "Enter") {
                 e.preventDefault();
                 const text = quickDraft.trim();
-                if (text) {
-                  addRow(text);
-                  setQuickDraft("");
-                  setTimeout(() => quickAddRef.current?.focus(), 0);
-                } else {
-                  setIsQuickAdding(false);
-                  setQuickDraft("");
-                }
+                if (text) { addRow(text); setQuickDraft(""); setTimeout(() => quickAddRef.current?.focus(), 0); }
+                else { setIsQuickAdding(false); setQuickDraft(""); }
               }
               if (e.key === "Escape") { setIsQuickAdding(false); setQuickDraft(""); }
             }}
@@ -199,11 +269,7 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
         </div>
       ) : (
         <button
-          onClick={() => {
-            if (!activeUser) return;
-            setIsQuickAdding(true);
-            setTimeout(() => quickAddRef.current?.focus(), 30);
-          }}
+          onClick={() => { if (!activeUser) return; setIsQuickAdding(true); setTimeout(() => quickAddRef.current?.focus(), 30); }}
           disabled={saving || !activeUser}
           title={!activeUser ? "Choisissez votre nom d'abord" : undefined}
           className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-all duration-150 shadow-sm shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -221,7 +287,7 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
           Supprimer mes terminés
         </button>
       )}
-      {/* Sélecteur d'utilisateur — qui suis-je ? */}
+      {/* Sélecteur d'identité */}
       <div className="relative shrink-0">
         <div className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold text-slate-600 cursor-pointer hover:border-slate-300 transition-colors">
           <span className="capitalize">{activeUser || "— Moi —"}</span>
@@ -247,21 +313,14 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
 
   const headers = (
     <div className="grid grid-cols-[1fr_auto_160px_36px] gap-0 px-0">
-      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-        Nom du PRT
-      </div>
-      <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-        Qui
-      </div>
-      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
-        Statut
-      </div>
+      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Nom du PRT</div>
+      <div className="px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Qui</div>
+      <div className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">Statut</div>
       <div />
     </div>
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <OrderTable
       toolbar={toolbar}
@@ -278,7 +337,7 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
         <div className="flex flex-col items-center justify-center h-24 gap-1 text-[13px] text-slate-300">
           <p>Aucune production en cours</p>
           {!activeUser && (
-            <p className="text-[11px]">Choisissez votre nom en haut à droite pour ajouter des lignes</p>
+            <p className="text-[11px]">Choisissez votre nom en haut à droite pour ajouter</p>
           )}
         </div>
       ) : (
@@ -286,16 +345,17 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
           {rows.map((row) => {
             const cfg       = statusConfig[row.status];
             const userColor = USER_COLORS[row.user] ?? { bg: "#f1f5f9", text: "#64748b" };
+            const doneCount = row.completedItems.filter(Boolean).length;
             return (
               <div key={row.id}>
-                <div className="grid grid-cols-[1fr_auto_160px_36px] gap-0 px-4 py-3 items-center hover:bg-slate-50/70 transition-colors group">
+                {/* Ligne principale */}
+                <div className="grid grid-cols-[1fr_auto_160px_36px] gap-0 px-4 py-2.5 items-center hover:bg-slate-50/70 transition-colors group">
                   <input
                     value={row.name}
                     onChange={(e) => updateTextField(row.id, "name", e.target.value)}
                     placeholder="Ex: Commande #123"
                     className="text-[13px] text-slate-900 font-medium bg-transparent outline-none placeholder:text-slate-500"
                   />
-                  {/* Badge utilisateur */}
                   <div className="px-3">
                     <span
                       className="text-[11px] font-semibold capitalize px-2 py-0.5 rounded-full whitespace-nowrap"
@@ -323,8 +383,45 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
                   </button>
                 </div>
 
+                {/* Pastilles de suivi + quantité */}
+                <div className="px-4 pb-2.5 flex items-center gap-2">
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider shrink-0">Qté</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={row.quantity}
+                    onChange={(e) => updateQuantity(row.id, parseInt(e.target.value) || 1)}
+                    className="w-11 text-[12px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-0.5 outline-none text-center focus:border-blue-300 focus:bg-white transition-colors"
+                  />
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {Array.from({ length: row.quantity }, (_, i) => {
+                      const done = row.completedItems[i] ?? false;
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => togglePill(row.id, i)}
+                          title={`Pièce ${i + 1}${done ? " — terminée" : ""}`}
+                          className={cn(
+                            "w-5 h-5 rounded-full border-2 transition-all duration-150 hover:scale-110 active:scale-95",
+                            done
+                              ? "bg-emerald-500 border-emerald-500 shadow-sm"
+                              : "bg-transparent border-slate-300 hover:border-blue-400",
+                          )}
+                        />
+                      );
+                    })}
+                  </div>
+                  {row.quantity > 1 && (
+                    <span className="text-[11px] text-slate-400 ml-0.5 shrink-0">
+                      {doneCount}/{row.quantity}
+                    </span>
+                  )}
+                </div>
+
+                {/* Champ erreur */}
                 {row.status === "erreur" && (
-                  <div className="px-4 pb-3 pt-0">
+                  <div className="px-4 pb-2.5 pt-0">
                     <input
                       value={row.problem ?? ""}
                       onChange={(e) => updateTextField(row.id, "problem", e.target.value)}

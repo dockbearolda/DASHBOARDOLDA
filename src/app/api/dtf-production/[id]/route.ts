@@ -9,14 +9,16 @@ export async function PATCH(
   const { id } = await params;
   try {
     const body = await req.json();
-    const { name, status, problem } = body;
+    const { name, status, problem, quantity, completedItems } = body;
 
     const row = await prisma.dtfRow.update({
       where: { id },
       data: {
-        ...(name !== undefined && { name }),
-        ...(status !== undefined && { status }),
-        ...(problem !== undefined && { problem: problem || null }),
+        ...(name           !== undefined && { name }),
+        ...(status         !== undefined && { status }),
+        ...(problem        !== undefined && { problem: problem || null }),
+        ...(quantity       !== undefined && { quantity: Math.max(1, Number(quantity)) }),
+        ...(completedItems !== undefined && { completedItems }),
       },
     });
     return NextResponse.json({ row });

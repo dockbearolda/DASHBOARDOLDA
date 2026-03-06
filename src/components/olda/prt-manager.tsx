@@ -8,7 +8,7 @@
  * ─ Zéro friction : clic dot → toggle done, clic trash → delete
  */
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { Trash2, Plus, Check, FolderOpen, X, Archive, ArchiveRestore, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,11 +46,38 @@ const COULEURS = [
 const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_1fr_80px_96px]";
 const CELL_CLASS = "px-3 py-3 truncate";
 
+// ── Helpers date ──────────────────────────────────────────────────────────────
+function formatDateFR(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "";
+  const diffSec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (diffSec < 60)        return "à l'instant";
+  if (diffSec < 3600)      return `il y a ${Math.floor(diffSec / 60)} min`;
+  if (diffSec < 86400)     return `il y a ${Math.floor(diffSec / 3600)} h`;
+  if (diffSec < 86400 * 30) return `il y a ${Math.floor(diffSec / 86400)} j`;
+  if (diffSec < 86400 * 365) return `il y a ${Math.floor(diffSec / 86400 / 30)} mois`;
+  return `il y a ${Math.floor(diffSec / 86400 / 365)} an`;
+}
+
 export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange }: PRTManagerProps) {
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
   const [showArchive,  setShowArchive]  = useState(false);
+  const [now,          setNow]          = useState(() => Date.now());
+
+  // Rafraîchit le "il y a X..." toutes les 60 s
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  void now; // used via timeAgo which re-runs on render
 
   // ── Inline quick-add ─────────────────────────────────────────────────────
   const [isQuickAdding, setIsQuickAdding] = useState(false);
@@ -316,7 +343,11 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
 
   return (
     <>
-      <OrderTable toolbar={toolbar} headers={headers}>
+      <OrderTable
+        toolbar={toolbar}
+        headers={headers}
+        bgClassName={showArchive ? "bg-amber-50" : "bg-white"}
+      >
         <div className="divide-y divide-slate-50">
           <Reorder.Group
             as="div"
@@ -608,6 +639,19 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           </motion.button>
                         </div>
                       </motion.div>
+                      {/* Date de création */}
+                      {item.createdAt && (
+                        <div className="flex items-center gap-1.5 px-3 pb-1.5">
+                          <div className="w-[40px] shrink-0" />
+                          <span className="text-[10px] text-slate-400">
+                            Créée le {formatDateFR(item.createdAt)}
+                          </span>
+                          <span className="text-slate-300 text-[10px]">·</span>
+                          <span className="text-[10px] text-slate-400 italic">
+                            {timeAgo(item.createdAt)}
+                          </span>
+                        </div>
+                      )}
                     </Reorder.Item>
                   );
                 })

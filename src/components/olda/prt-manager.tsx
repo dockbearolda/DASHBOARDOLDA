@@ -347,6 +347,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
         toolbar={toolbar}
         headers={headers}
         bgClassName={showArchive ? "bg-amber-50" : "bg-white"}
+        minWidth={1050}
       >
         <div className="divide-y divide-slate-50">
           <Reorder.Group
@@ -374,7 +375,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
             }}
             className="flex flex-col"
           >
-            <AnimatePresence mode="popLayout">
+            <AnimatePresence mode="sync">
               {sortedItems.length === 0 ? (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -534,7 +535,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                                 body:    JSON.stringify({ color: val }),
                               }).catch(() => {});
                             }}
-                            className="w-full text-[13px] text-slate-700 bg-transparent outline-none cursor-pointer truncate"
+                            className="w-full text-[13px] text-slate-700 bg-transparent outline-none cursor-pointer appearance-none"
                           >
                             <option value="">—</option>
                             {COULEURS.map((c) => (
@@ -609,7 +610,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                             onClick={() => handleDuplicate(item)}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.95 }}
-                            className="p-1.5 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100"
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-30 group-hover:opacity-100"
                             title="Dupliquer"
                           >
                             <Copy className="h-4 w-4" />
@@ -632,26 +633,27 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                             onClick={() => handleDelete(item.id)}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.95 }}
-                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-30 group-hover:opacity-100"
                             title="Supprimer"
                           >
                             <Trash2 className="h-4 w-4" />
                           </motion.button>
                         </div>
+
+                        {/* Date de création — col-span-full pour alignement correct sous le grid */}
+                        {item.createdAt && (
+                          <div className="col-span-full flex items-center gap-1.5 px-3 pb-1.5">
+                            <div className="w-[40px] shrink-0" />
+                            <span className="text-[10px] text-slate-400">
+                              Créée le {formatDateFR(item.createdAt)}
+                            </span>
+                            <span className="text-slate-300 text-[10px]">·</span>
+                            <span className="text-[10px] text-slate-400 italic">
+                              {timeAgo(item.createdAt)}
+                            </span>
+                          </div>
+                        )}
                       </motion.div>
-                      {/* Date de création */}
-                      {item.createdAt && (
-                        <div className="flex items-center gap-1.5 px-3 pb-1.5">
-                          <div className="w-[40px] shrink-0" />
-                          <span className="text-[10px] text-slate-400">
-                            Créée le {formatDateFR(item.createdAt)}
-                          </span>
-                          <span className="text-slate-300 text-[10px]">·</span>
-                          <span className="text-[10px] text-slate-400 italic">
-                            {timeAgo(item.createdAt)}
-                          </span>
-                        </div>
-                      )}
                     </Reorder.Item>
                   );
                 })

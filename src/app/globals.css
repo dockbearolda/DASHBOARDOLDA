@@ -196,11 +196,18 @@
     color: hsl(var(--foreground));
     font-family: var(--font-sans);
     font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    /* auto = ClearType sur Windows (plus épais/lisible), antialiasing naturel sur Mac */
+    -webkit-font-smoothing: auto;
     text-rendering: optimizeLegibility;
     letter-spacing: -0.01em;
     line-height: 1.5;
+    font-weight: 500; /* +1 cran de graisse — lisible sur vieux PC Windows */
+  }
+
+  /* Placeholders visibles sur toutes les plateformes */
+  ::placeholder {
+    color: #64748b; /* slate-500 — contraste suffisant sur écran 1080p Windows */
+    opacity: 1;     /* Firefox applique opacity:0.54 par défaut — on neutralise */
   }
 
   input, button, textarea, select {

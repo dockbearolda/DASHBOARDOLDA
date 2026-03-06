@@ -18,12 +18,22 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { clientName, dimensions, design, color, quantity, note } = body;
+    const { clientName, dimensions, design, color, quantity, note, insertAfterPosition } = body;
 
-    const lastItem = await prisma.pRTRequest.findFirst({
-      orderBy: { position: "desc" },
-    });
-    const position = (lastItem?.position ?? -1) + 1;
+    let position: number;
+    if (insertAfterPosition !== undefined) {
+      // Décaler tous les items après insertAfterPosition de +1
+      await prisma.pRTRequest.updateMany({
+        where: { position: { gt: insertAfterPosition } },
+        data: { position: { increment: 1 } },
+      });
+      position = insertAfterPosition + 1;
+    } else {
+      const lastItem = await prisma.pRTRequest.findFirst({
+        orderBy: { position: "desc" },
+      });
+      position = (lastItem?.position ?? -1) + 1;
+    }
 
     const item = await prisma.pRTRequest.create({
       data: {

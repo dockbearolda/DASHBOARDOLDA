@@ -278,7 +278,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
               setQuickDraft("");
             }}
             placeholder="Nom du client…"
-            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-500 bg-transparent outline-none"
           />
           <button
             onMouseDown={(e) => e.preventDefault()}
@@ -430,7 +430,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                   value={row.client}
                   onChange={e => updateText(row.id, "client", e.target.value)}
                   placeholder="Client…"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-300 w-full truncate")}
+                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-500 w-full truncate")}
                 />
 
                 {/* Fournisseur */}
@@ -471,7 +471,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                   value={row.designation}
                   onChange={e => updateText(row.id, "designation", e.target.value)}
                   placeholder="Désignation…"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-300 w-full truncate")}
+                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-500 w-full truncate")}
                 />
 
                 {/* Référence */}
@@ -479,7 +479,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                   value={row.reference}
                   onChange={e => updateText(row.id, "reference", e.target.value)}
                   placeholder="Réf…"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-300 w-full truncate")}
+                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-500 w-full truncate")}
                 />
 
                 {/* Couleur */}
@@ -487,7 +487,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                   value={row.couleur}
                   onChange={e => updateText(row.id, "couleur", e.target.value)}
                   placeholder="Couleur…"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-300 w-full truncate")}
+                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-500 w-full truncate")}
                 />
 
                 {/* Taille */}
@@ -495,7 +495,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                   value={row.taille}
                   onChange={e => updateText(row.id, "taille", e.target.value)}
                   placeholder="S/M…"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-300 w-full")}
+                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none placeholder:text-slate-500 w-full")}
                 />
 
                 {/* Quantité */}
@@ -509,7 +509,7 @@ export function AchatTextileTable({ activeUser, refreshTrigger }: AchatTextileTa
                     updateField(row.id, "quantite", val);
                   }}
                   placeholder="Qté"
-                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none text-center w-full placeholder:text-slate-300")}
+                  className={cn(CELL, "text-[13px] text-slate-900 bg-transparent outline-none text-center w-full placeholder:text-slate-500")}
                 />
 
                 {/* Livraison */}

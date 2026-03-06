@@ -177,17 +177,30 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({
-            clientName: item.clientName,
-            dimensions: item.dimensions,
-            design:     item.design,
-            color:      item.color,
-            quantity:   item.quantity,
-            note:       item.note,
+            clientName:          item.clientName,
+            dimensions:          item.dimensions,
+            design:              item.design,
+            color:               item.color,
+            quantity:            item.quantity,
+            note:                item.note,
+            insertAfterPosition: item.position,
           }),
         });
         if (!res.ok) throw new Error("API error");
         const data = await res.json();
-        if (data.item) onItemsChange?.((prev) => [data.item, ...prev]);
+        if (data.item) {
+          onItemsChange?.((prev) => {
+            // Décaler les positions des items après l'original
+            const shifted = prev.map((i) =>
+              i.position > item.position ? { ...i, position: i.position + 1 } : i,
+            );
+            // Insérer juste après l'original
+            const idx = shifted.findIndex((i) => i.id === item.id);
+            const next = [...shifted];
+            next.splice(idx === -1 ? 0 : idx + 1, 0, data.item);
+            return next;
+          });
+        }
       } catch (err) {
         console.error("Failed to duplicate PRT:", err);
       }
@@ -235,7 +248,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
               setQuickDraft("");
             }}
             placeholder="Nom du client…"
-            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-500 bg-transparent outline-none"
           />
           <button
             onMouseDown={(e) => e.preventDefault()}
@@ -289,13 +302,13 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
           className="w-4 h-4 rounded cursor-pointer"
         />
       </div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Client</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Dimensions</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Design</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Couleur</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Note</div>
-      <div className="text-right text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Qté</div>
-      <div className="text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider" />
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Client</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Dimensions</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Design</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Couleur</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Note</div>
+      <div className="text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Qté</div>
+      <div className="text-center text-[10px] font-semibold text-slate-600 uppercase tracking-wider" />
     </div>
   );
 

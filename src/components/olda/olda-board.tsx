@@ -625,7 +625,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
         <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <div className="max-w-5xl">
+          <div className="max-w-5xl mx-auto">
             <PRTManager
               items={allPrtItems}
               onItemsChange={setAllPrtItems}

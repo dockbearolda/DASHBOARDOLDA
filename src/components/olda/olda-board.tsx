@@ -271,7 +271,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
   const [sseConnected, setSseConnected] = useState(false);
   const [notes, setNotes]               = useState<Record<string, NoteData>>({});
   const [notesReady, setNotesReady]     = useState(false);
-  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat_textile'>('flux');
+  const [viewTab, setViewTab] = useState<'flux' | 'planning' | 'clients_pro' | 'demande_prt' | 'production_dtf' | 'workflow' | 'achat' | 'achat_textile'>('flux');
   // Badge de notification sur l'onglet Flux
   const [fluxHasNotif, setFluxHasNotif] = useState(false);
   // Badge de notification sur l'onglet Demande de DTF (uniquement pour loic et charlie)
@@ -581,7 +581,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         {/* Tabs — centrés */}
         <div className="flex items-center gap-3">
           <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 dark:bg-muted/80 overflow-x-auto">
-            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat_textile'] as const).map((v) => (
+            {(['flux', 'planning', 'clients_pro', 'demande_prt', 'production_dtf', 'workflow', 'achat', 'achat_textile'] as const).map((v) => (
               <button
                 key={v}
                 onClick={() => handleTabChange(v)}
@@ -594,6 +594,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
                 )}
               >
                 {v === 'flux' ? 'Tâches'
+                  : v === 'achat' ? 'Achat'
                   : v === 'planning' ? 'Planning'
                   : v === 'clients_pro' ? 'Clients Pro'
                   : v === 'demande_prt' ? 'Demande de DTF'
@@ -620,11 +621,10 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       {/* ── Contenu principal ───────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
 
-        {/* ══ VUE FLUX — 4 cartes collaborateurs + cartes achat ══════════════ */}
+        {/* ══ VUE FLUX — cartes collaborateurs ═══════════════════════════════ */}
         <div className={cn(viewTab !== 'flux' && 'hidden')}>
-          <div className="max-w-5xl mx-auto space-y-6">
+          <div className="max-w-5xl mx-auto">
             <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
-            <AchatCardsGrid />
           </div>
         </div>
 
@@ -676,6 +676,13 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
               clients={clientItems}
               onClientsChange={setClientItems}
             />
+          </div>
+        </div>
+
+        {/* ══ VUE ACHAT — 3 cartes SXM / Europe / USA ════════════════════════ */}
+        <div className={cn(viewTab !== 'achat' && 'hidden')}>
+          <div className="max-w-4xl mx-auto">
+            <AchatCardsGrid />
           </div>
         </div>
 

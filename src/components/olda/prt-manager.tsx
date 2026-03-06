@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, Reorder, AnimatePresence } from "framer-motion";
-import { Trash2, Plus, Check, FolderOpen, X, Archive, ArchiveRestore } from "lucide-react";
+import { Trash2, Plus, Check, FolderOpen, X, Archive, ArchiveRestore, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
 
@@ -43,7 +43,7 @@ const COULEURS = [
 ] as const;
 
 // Grid : [checkbox] [client] [dimensions] [design] [couleur] [note] [qté] [actions]
-const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_1fr_80px_80px]";
+const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_1fr_1fr_80px_96px]";
 const CELL_CLASS = "px-3 py-3 truncate";
 
 export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange }: PRTManagerProps) {
@@ -169,6 +169,31 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
       setTimeout(() => setIsAddingNew(false), 300);
     }
   }, [onItemsChange, onNewRequest]);
+
+  const handleDuplicate = useCallback(
+    async (item: PRTItem) => {
+      try {
+        const res = await fetch("/api/prt-requests", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            clientName: item.clientName,
+            dimensions: item.dimensions,
+            design:     item.design,
+            color:      item.color,
+            quantity:   item.quantity,
+            note:       item.note,
+          }),
+        });
+        if (!res.ok) throw new Error("API error");
+        const data = await res.json();
+        if (data.item) onItemsChange?.((prev) => [data.item, ...prev]);
+      } catch (err) {
+        console.error("Failed to duplicate PRT:", err);
+      }
+    },
+    [onItemsChange],
+  );
 
   // ── Toolbar ───────────────────────────────────────────────────────────────────
 
@@ -534,8 +559,17 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           )}
                         />
 
-                        {/* Actions (80px) — Done + Delete */}
+                        {/* Actions (96px) — Duplicate + Done + Delete */}
                         <div className="flex items-center justify-end gap-0.5 py-3 pr-2">
+                          <motion.button
+                            onClick={() => handleDuplicate(item)}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Dupliquer"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </motion.button>
                           <motion.button
                             onClick={() => handleToggleDone(item.id, item.done)}
                             whileHover={{ scale: 1.1 }}

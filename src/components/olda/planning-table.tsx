@@ -1095,10 +1095,10 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
     <>
     <style>{`
       @keyframes stale-pulse {
-        0%, 100% { box-shadow: inset 0 0 0 2px transparent; }
-        50% { box-shadow: inset 0 0 0 2px rgba(251,191,36,0.7); }
+        0%, 100% { box-shadow: inset 0 0 0 2000px rgba(0,0,0,0); }
+        50%       { box-shadow: inset 0 0 0 2000px rgba(251,191,36,0.18); }
       }
-      .row-stale { animation: stale-pulse 2s ease-in-out infinite; }
+      .row-stale { animation: stale-pulse 1.8s ease-in-out infinite; }
     `}</style>
     <div
       className="flex flex-col rounded-2xl bg-white overflow-hidden h-full"

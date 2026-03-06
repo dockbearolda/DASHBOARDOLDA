@@ -182,7 +182,7 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
               setQuickDraft("");
             }}
             placeholder="Nom de la production…"
-            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-500 bg-transparent outline-none"
           />
           <button
             onMouseDown={(e) => e.preventDefault()}
@@ -290,7 +290,7 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
                     value={row.name}
                     onChange={(e) => updateTextField(row.id, "name", e.target.value)}
                     placeholder="Ex: Commande #123"
-                    className="text-[13px] text-slate-900 font-medium bg-transparent outline-none placeholder:text-slate-300"
+                    className="text-[13px] text-slate-900 font-medium bg-transparent outline-none placeholder:text-slate-500"
                   />
                   <div className="flex items-center gap-2">
                     <select
@@ -319,7 +319,7 @@ export function DTFProductionTable({ activeUser: activeUserProp }: DTFProduction
                       value={row.problem ?? ""}
                       onChange={(e) => updateTextField(row.id, "problem", e.target.value)}
                       placeholder="Problème rencontré…"
-                      className="w-full h-7 rounded-lg px-2.5 text-[12px] bg-red-50 border border-red-100 text-slate-700 outline-none focus:border-red-300 focus:bg-white transition-colors placeholder:text-slate-300"
+                      className="w-full h-7 rounded-lg px-2.5 text-[12px] bg-red-50 border border-red-100 text-slate-700 outline-none focus:border-red-300 focus:bg-white transition-colors placeholder:text-slate-500"
                     />
                   </div>
                 )}

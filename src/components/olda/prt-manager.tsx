@@ -248,7 +248,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
               setQuickDraft("");
             }}
             placeholder="Nom du client…"
-            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+            className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-500 bg-transparent outline-none"
           />
           <button
             onMouseDown={(e) => e.preventDefault()}
@@ -302,13 +302,13 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
           className="w-4 h-4 rounded cursor-pointer"
         />
       </div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Client</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Dimensions</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Design</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Couleur</div>
-      <div className="text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Note</div>
-      <div className="text-right text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-3">Qté</div>
-      <div className="text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider" />
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Client</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Dimensions</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Design</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Couleur</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Note</div>
+      <div className="text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Qté</div>
+      <div className="text-center text-[10px] font-semibold text-slate-600 uppercase tracking-wider" />
     </div>
   );
 

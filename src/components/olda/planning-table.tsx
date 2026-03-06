@@ -273,7 +273,7 @@ function SearchBar({ value, onChange, maxWidth, className }: { value: string; on
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Rechercher par client, famille, note…"
-        className="flex-1 text-[13px] text-slate-800 bg-transparent focus:outline-none placeholder:text-slate-300"
+        className="flex-1 text-[13px] text-slate-800 bg-transparent focus:outline-none placeholder:text-slate-500"
       />
       {value && (
         <button
@@ -1140,7 +1140,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 setQuickDraft("");
               }}
               placeholder="Nom du client…"
-              className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-300 bg-transparent outline-none"
+              className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-500 bg-transparent outline-none"
             />
             <button
               onMouseDown={(e) => e.preventDefault()}
@@ -1632,7 +1632,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                             "w-full px-2 py-1 text-[12px] italic bg-transparent rounded-lg resize-none overflow-hidden leading-snug",
                             "border border-transparent hover:border-slate-200",
                             "focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100/70 focus:outline-none",
-                            "transition-[border-color,background-color,box-shadow] duration-100 placeholder:text-slate-300",
+                            "transition-[border-color,background-color,box-shadow] duration-100 placeholder:text-slate-500",
                             item.note ? "text-slate-500" : "text-slate-300",
                           )}
                           style={{ fieldSizing: "content", minHeight: "2rem" } as React.CSSProperties}
@@ -1874,7 +1874,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
               className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-5 w-full max-w-xs"
             >
               <div className="text-center">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">QR Code de suivi</p>
+                <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">QR Code de suivi</p>
                 <p className="text-[15px] font-semibold text-slate-900 leading-tight">
                   {qrItem.clientName || "Client"}
                 </p>
@@ -1933,7 +1933,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
                   {/* ── Envoi WhatsApp depuis la modal QR ── */}
                   <div className="w-full border-t border-slate-100 pt-4 flex flex-col gap-2">
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">
+                    <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider text-center">
                       Envoyer le lien
                     </p>
                     <input
@@ -2022,7 +2022,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
               className="bg-white rounded-2xl shadow-2xl p-6 flex flex-col gap-5 w-full max-w-sm"
             >
               <div>
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Envoyer via WhatsApp</p>
+                <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1">Envoyer via WhatsApp</p>
                 <p className="text-[15px] font-semibold text-slate-900">
                   {waItem.clientName || "Client"}
                 </p>

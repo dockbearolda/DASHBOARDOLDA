@@ -272,8 +272,7 @@ function SearchBar({ value, onChange, maxWidth, className }: { value: string; on
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Rechercher par client, famille, note…"
-        className="flex-1 text-[13px] text-slate-800 bg-transparent focus:outline-none placeholder:text-slate-500"
+        className="flex-1 text-[13px] text-slate-800 bg-transparent focus:outline-none"
       />
       {value && (
         <button
@@ -344,7 +343,6 @@ function NoteCell({
           "w-full px-2 py-1 text-[12px] italic text-slate-600 bg-white rounded-xl",
           "border border-blue-300 ring-2 ring-blue-100/70 shadow-lg focus:outline-none resize-none",
         )}
-        placeholder="Précisions…"
       />
     );
   }
@@ -360,7 +358,7 @@ function NoteCell({
         note ? "text-slate-500 italic" : EMPTY_CLS,
       )}
     >
-      {note || "Précisions…"}
+      {note}
     </div>
   );
 }
@@ -526,7 +524,6 @@ function HybridDateInput({
         onChange={handleTextChange}
         onFocus={() => setFocus(true)}
         onBlur={handleTextBlur}
-        placeholder="—"
         maxLength={8}
         className={cn(
           "w-[82px] shrink-0 h-8 px-2 text-[12px] rounded-lg border bg-transparent",
@@ -688,7 +685,6 @@ function ClientNameCell({
         onBlur={handleBlur}
         onKeyDown={handleKeyDownWrapper}
         className={cn(CELL_INPUT, "font-medium")}
-        placeholder="Nom Prénom"
       />
       {showDrop && (
         <div
@@ -1139,8 +1135,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 setIsQuickAdding(false);
                 setQuickDraft("");
               }}
-              placeholder="Nom du client…"
-              className="flex-1 text-[13px] text-slate-700 placeholder:text-slate-500 bg-transparent outline-none"
+              className="flex-1 text-[13px] text-slate-700 bg-transparent outline-none"
             />
             <button
               onMouseDown={(e) => e.preventDefault()}
@@ -1555,7 +1550,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                             }}
                             onKeyDown={(e) => handleKeyDown(e, item.id, "clientPhone")}
                             className={cn(CELL_INPUT, "font-mono")}
-                            placeholder="+33…"
                           />
                         ) : (
                           <div
@@ -1566,7 +1560,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                               item.clientPhone ? "text-slate-700" : EMPTY_CLS,
                             )}
                           >
-                            {item.clientPhone || "+33…"}
+                            {item.clientPhone}
                           </div>
                         )}
                       </div>
@@ -1596,7 +1590,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                               "[&::-webkit-outer-spin-button]:appearance-none",
                               "[&::-webkit-inner-spin-button]:appearance-none",
                             )}
-                            placeholder="1"
                           />
                         ) : (
                           <div
@@ -1626,13 +1619,12 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                             else if (e.key === "Escape") { updateItem(item.id, "note", preEdit.current); setEditing(null); }
                             // Enter intentionally NOT prevented → insère un saut de ligne
                           }}
-                          placeholder="Note…"
                           rows={Math.max(1, (item.note || "").split("\n").length)}
                           className={cn(
                             "w-full px-2 py-1 text-[12px] italic bg-transparent rounded-lg resize-none overflow-hidden leading-snug",
                             "border border-transparent hover:border-slate-200",
                             "focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100/70 focus:outline-none",
-                            "transition-[border-color,background-color,box-shadow] duration-100 placeholder:text-slate-500",
+                            "transition-[border-color,background-color,box-shadow] duration-100",
                             item.note ? "text-slate-500" : "text-slate-300",
                           )}
                           style={{ fieldSizing: "content", minHeight: "2rem" } as React.CSSProperties}
@@ -1940,7 +1932,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                       type="tel"
                       value={qrPhone}
                       onChange={(e) => setQrPhone(e.target.value)}
-                      placeholder="+33612345678"
                       className={cn(
                         "w-full h-9 px-3 text-[13px] rounded-xl font-mono",
                         "border border-slate-200 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100/70",
@@ -2037,7 +2028,6 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                   type="tel"
                   value={waPhone}
                   onChange={(e) => setWaPhone(e.target.value)}
-                  placeholder="+33612345678"
                   className={cn(
                     "w-full h-10 px-3 text-[14px] rounded-xl",
                     "border border-slate-200 focus:border-blue-300 focus:ring-2 focus:ring-blue-100",

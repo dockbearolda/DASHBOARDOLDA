@@ -352,7 +352,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
         bgClassName={showArchive ? "bg-amber-50" : "bg-white"}
         minWidth={1150}
         className={className}
-        bodyClassName="overflow-y-auto flex-1 min-h-0"
+        bodyClassName="overflow-auto flex-1 min-h-0"
       >
         <div className="divide-y divide-slate-50">
           <div className="flex flex-col">

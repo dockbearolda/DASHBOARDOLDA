@@ -120,10 +120,12 @@ model PRTRequest {
   clientName    String
   dimensions    String   // e.g. "30x40cm"
   design        String   // image URL or design name
+  taille        String   @default("")  // e.g. "S", "M", "L", "XL" or "300mm"
   color         String   // e.g. "Blanc" or hex code
   quantity      Int      @default(1)
   done          Boolean  @default(false)
   position      Int      @default(0)
+  note          String   @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -131,31 +133,121 @@ model PRTRequest {
   @@index([done])
 }
 
+// ── Production DTF ────────────────────────────────────────────────────────────
+// Anciennement stocké dans localStorage — migré en base pour persistance et sync.
+model DtfRow {
+  id             String   @id @default(cuid())
+  user           String   // "loic" | "charlie" | "melina" | "amandine"
+  name           String   @default("")
+  status         String   @default("en_cours") // a_produire | en_cours | termine | erreur
+  problem        String?  // Renseigné si status === "erreur"
+  quantity       Int      @default(1)           // Nombre de pièces à produire
+  completedItems Json     @default("[]")        // boolean[] — suivi pièce par pièce
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("dtf_rows")
+  @@index([user])
+}
+
 model UserProfile {
-  id              String   @id @default(cuid())
-  userId          String   @unique // e.g. "loic", "charlie", "melina", "amandine"
-  profilePhotoLink String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(cuid())
+  userId           String   @unique // "loic" | "charlie" | "melina" | "amandine"
+  profilePhotoLink String?           // URL https://… ou "emoji:🦁"
+  mood             String   @default("")
+  cardColor        String   @default("") // preset: "blue" | "purple" | "teal" | etc.
+  passwordHash     String?           // SHA-256 du mot de passe perso (null = mot de passe par défaut)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@map("user_profiles")
 }
 
+// ── Onglet Team — Notes & humeur par collaborateur ────────────────────────────
+model TeamNote {
+  id        String   @id @default(cuid())
+  person    String   @unique // "loic" | "melina" | "amandine" | "renaud"
+  note      String   @default("")
+  mood      String   @default("")
+  updatedBy String   @default("")
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("team_notes")
+}
+
+model Client {
+  id            String           @id @default(cuid())
+  nom           String           // Société
+  codePostal    String           @default("")
+  ville         String           @default("")
+  telephone     String           @default("") // kept for backward compat
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  planningItems PlanningItem[]
+  contacts      ClientContact[]
+
+  @@map("clients")
+}
+
+model ClientContact {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  nom       String   @default("")
+  fonction  String   @default("")
+  telephone String   @default("")
+  email     String   @default("")
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("client_contacts")
+  @@index([clientId])
+}
+
+// ── Achat Textile ─────────────────────────────────────────────────────────────
+model AchatTextile {
+  id          String   @id @default(cuid())
+  client      String   @default("")
+  fournisseur String   @default("")
+  marque      String   @default("-")   // "-" | "Native" | "Kariban" | "Pro Act"
+  genre       String   @default("")    // "H" | "F" | "E" | "B" | "P" | "L"
+  designation String   @default("")
+  reference   String   @default("")
+  couleur     String   @default("")
+  taille      String   @default("")
+  quantite    Int      @default(1)
+  livraison   String   @default("")    // "chronopost" | "maritime" | "sas_us"
+  sessionUser String   @default("")
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("achat_textile")
+}
+
 model PlanningItem {
-  id          String           @id @default(cuid())
-  priority    PlanningPriority @default(MOYENNE)
-  clientName  String           @default("")
-  quantity    Float            @default(1)
-  designation String           @default("")
-  note        String           @default("")
-  unitPrice   Float            @default(0)
-  deadline    DateTime?
-  status      PlanningStatus   @default(A_DEVISER)
-  responsible String           @default("")
-  color       String           @default("")
-  position    Int              @default(0)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  priority       PlanningPriority @default(MOYENNE)
+  clientName     String           @default("")
+  clientId       String?          @map("client_id")
+  client         Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientPhone    String?          // Numéro WhatsApp (format international, ex: +33612345678)
+  quantity       Float            @default(1)
+  designation    String           @default("")
+  note           String           @default("")
+  unitPrice      Float            @default(0)
+  deadline       DateTime?
+  status         PlanningStatus   @default(A_DEVISER)
+  responsible    String           @default("")
+  color          String           @default("")
+  position       Int              @default(0)
+  archived       Boolean          @default(false)
+  trackingId     String?          @unique @default(uuid())
+  whatsappSentAt DateTime?        // Horodatage d'envoi WhatsApp (anti-doublon)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@map("planning_items")
 }

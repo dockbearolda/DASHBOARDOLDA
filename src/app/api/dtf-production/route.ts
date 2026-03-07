@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+
+const VALID_USERS = ["loic", "charlie", "melina", "amandine"];
+
+// GET /api/dtf-production         — retourne toutes les lignes
+// GET /api/dtf-production?user=x  — filtre par utilisateur
+export async function GET(req: NextRequest) {
+  const user = req.nextUrl.searchParams.get("user");
+  const where = user && VALID_USERS.includes(user) ? { user } : {};
+  try {
+    const rows = await prisma.dtfRow.findMany({
+      where,
+      orderBy: [{ user: "asc" }, { position: "asc" }],
+    });
+    return NextResponse.json({ rows });
+  } catch (err) {
+    console.error("GET /api/dtf-production:", err);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
+}
+
+// POST /api/dtf-production — créer une ligne
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { user = "", name = "", status = "en_cours" } = body;
+
+    const last = await prisma.dtfRow.findFirst({
+      orderBy: { position: "desc" },
+    });
+    const position = (last?.position ?? -1) + 1;
+
+    const row = await prisma.dtfRow.create({
+      data: { user, name, status, position },
+    });
+    return NextResponse.json({ row }, { status: 201 });
+  } catch (err) {
+    console.error("POST /api/dtf-production:", err);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
+}
+
+// DELETE /api/dtf-production?status=termine — purger les terminés
+export async function DELETE(req: NextRequest) {
+  const user   = req.nextUrl.searchParams.get("user");
+  const status = req.nextUrl.searchParams.get("status");
+  try {
+    const where: Record<string, string> = {};
+    if (status) where.status = status;
+    if (user && VALID_USERS.includes(user)) where.user = user;
+    await prisma.dtfRow.deleteMany({ where });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /api/dtf-production:", err);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
+}

@@ -314,11 +314,11 @@ export function OrderCard({ order, isNew }: OrderCardProps) {
                 </div>
               )}
 
-              {/* Note (premier article) */}
+              {/* Information importante (premier article) */}
               {firstItem?.noteClient && (
-                <div className="flex items-start gap-1.5">
-                  <span className="text-xs mt-px select-none">📝</span>
-                  <p className="text-xs italic text-gray-500 leading-snug break-words min-w-0">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold text-gray-900 uppercase tracking-wider">Information importante</span>
+                  <p className="text-xs italic font-semibold text-red-600 leading-snug break-words min-w-0">
                     {firstItem.noteClient}
                   </p>
                 </div>

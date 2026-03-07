@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { broadcast } from "@/lib/socket-server";
 
-// GET /api/planning — return all planning items
-export async function GET() {
+// GET /api/planning — return planning items (?archived=true for archive view)
+export async function GET(req: NextRequest) {
   try {
+    const archived = req.nextUrl.searchParams.get("archived") === "true";
     const items = await prisma.planningItem.findMany({
+      where: { archived },
       orderBy: { position: "asc" },
     });
     return NextResponse.json({ items });
@@ -19,8 +22,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
+      id,
       priority,
       clientName,
+      clientPhone,
       quantity,
       designation,
       note,
@@ -29,17 +34,24 @@ export async function POST(req: NextRequest) {
       status,
       responsible,
       color,
+      position: bodyPosition,
     } = body;
 
-    const lastItem = await prisma.planningItem.findFirst({
-      orderBy: { position: "desc" },
-    });
-    const position = (lastItem?.position ?? -1) + 1;
+    // Position fournie par le client (optimistic UI), sinon calcul server-side
+    let position = bodyPosition;
+    if (position === undefined || position === null) {
+      const firstItem = await prisma.planningItem.findFirst({
+        orderBy: { position: "asc" },
+      });
+      position = (firstItem?.position ?? 1) - 1;
+    }
 
     const item = await prisma.planningItem.create({
       data: {
+        ...(id ? { id } : {}),
         priority: priority || "MOYENNE",
         clientName: clientName || "",
+        clientPhone: clientPhone || null,
         quantity: quantity || 1,
         designation: designation || "",
         note: note || "",
@@ -49,9 +61,11 @@ export async function POST(req: NextRequest) {
         responsible: responsible || "",
         color: color || "",
         position,
+        // trackingId auto-généré par Prisma (@default(uuid()))
       },
     });
 
+    broadcast("planning:created", item);
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
     console.error("POST /api/planning error:", error);

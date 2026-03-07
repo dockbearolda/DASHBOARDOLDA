@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * Migration handler that resolves Prisma P3005 baseline issues.
+ * Migration handler that resolves Prisma P3005 and P3009 issues.
  *
  * P3005 occurs when the database schema is not empty but the _prisma_migrations
  * table does not exist (schema was created via db push, not migrate).
+ *
+ * P3009 occurs when a previous migration run left a failed migration record in
+ * the _prisma_migrations table, blocking all subsequent deployments.
  *
  * Strategy:
  * 1. Try prisma migrate deploy normally
@@ -11,6 +14,7 @@
  * 3. Retry prisma migrate deploy (which will now apply the refactor migration)
  * 4. If deploy fails because refactor columns already exist: mark refactor as applied too
  * 5. Final deploy (no-op if everything is now aligned)
+ * 6. If P3009: extract failed migration name(s), resolve each as rolled-back, then re-deploy
  */
 
 const { spawnSync } = require('child_process');
@@ -138,6 +142,49 @@ async function main() {
   if (attempt1.ok) {
     console.log('\n✅ Migration complete\n');
     process.exit(0);
+  }
+
+  // ─── P3009 recovery: resolve failed migrations ────────────────────────────
+  const isP3009 =
+    attempt1.output.includes('P3009') ||
+    attempt1.output.includes('migrate found failed migrations');
+
+  if (isP3009) {
+    // Extract all failed migration names from the error output
+    const failedMigrations = [];
+    const re = /The `([^`]+)` migration\b[^`]*failed/g;
+    let m;
+    while ((m = re.exec(attempt1.output)) !== null) {
+      failedMigrations.push(m[1]);
+    }
+
+    if (failedMigrations.length === 0) {
+      console.error('\n❌ P3009 detected but could not extract failed migration name(s)\n');
+      process.exit(1);
+    }
+
+    console.log(`\n⚠️  P3009 detected — resolving failed migration(s): ${failedMigrations.join(', ')}\n`);
+
+    for (const migrationName of failedMigrations) {
+      const resolveResult = run('npx', [
+        'prisma', 'migrate', 'resolve', '--rolled-back', migrationName,
+      ]);
+      if (!resolveResult.ok) {
+        console.error(`\n❌ Failed to resolve migration: ${migrationName}\n`);
+        process.exit(1);
+      }
+      console.log(`  ✓ Resolved as rolled-back: ${migrationName}`);
+    }
+
+    console.log('\n  Retrying migrate deploy after P3009 resolution...\n');
+    const retryResult = run('npx', ['prisma', 'migrate', 'deploy']);
+    if (retryResult.ok) {
+      console.log('\n✅ Migration complete after P3009 resolution\n');
+      process.exit(0);
+    }
+
+    console.error('\n❌ Migration failed after P3009 resolution\n');
+    process.exit(1);
   }
 
   const isP3005 =

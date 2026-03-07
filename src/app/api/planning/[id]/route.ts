@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { broadcast } from "@/lib/socket-server";
 
 // PATCH /api/planning/[id] — update a planning item
 export async function PATCH(
@@ -12,6 +13,8 @@ export async function PATCH(
     const {
       priority,
       clientName,
+      clientId,
+      clientPhone,
       quantity,
       designation,
       note,
@@ -21,11 +24,16 @@ export async function PATCH(
       responsible,
       color,
       position,
+      archived,
+      whatsappSentAt,
+      trackingId,
     } = body;
 
     const updateData: Record<string, unknown> = {};
     if (priority !== undefined) updateData.priority = priority;
     if (clientName !== undefined) updateData.clientName = clientName;
+    if (clientId !== undefined) updateData.clientId = clientId;
+    if (clientPhone !== undefined) updateData.clientPhone = clientPhone || null;
     if (quantity !== undefined) updateData.quantity = quantity;
     if (designation !== undefined) updateData.designation = designation;
     if (note !== undefined) updateData.note = note;
@@ -35,6 +43,9 @@ export async function PATCH(
     if (responsible !== undefined) updateData.responsible = responsible;
     if (color !== undefined) updateData.color = color;
     if (position !== undefined) updateData.position = position;
+    if (archived !== undefined) updateData.archived = archived;
+    if (whatsappSentAt !== undefined) updateData.whatsappSentAt = whatsappSentAt ? new Date(whatsappSentAt) : null;
+    if (trackingId !== undefined) updateData.trackingId = trackingId || null;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });
@@ -45,6 +56,7 @@ export async function PATCH(
       data: updateData,
     });
 
+    broadcast("planning:updated", item);
     return NextResponse.json({ item });
   } catch (error) {
     console.error(`PATCH /api/planning/[id] error:`, error);
@@ -64,6 +76,7 @@ export async function DELETE(
       where: { id },
     });
 
+    broadcast("planning:deleted", { id });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error(`DELETE /api/planning/[id] error:`, error);

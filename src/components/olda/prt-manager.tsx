@@ -34,6 +34,7 @@ interface PRTManagerProps {
   onItemsChange?: (value: PRTItem[] | ((prev: PRTItem[]) => PRTItem[])) => void;
   onNewRequest?: () => void;
   onEditingChange?: (isEditing: boolean) => void;
+  className?: string;
 }
 
 const COULEURS = [
@@ -65,7 +66,7 @@ function timeAgo(dateStr: string): string {
   return `il y a ${Math.floor(diffSec / 86400 / 365)} an`;
 }
 
-export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange }: PRTManagerProps) {
+export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange, className }: PRTManagerProps) {
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
@@ -350,6 +351,8 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
         headers={headers}
         bgClassName={showArchive ? "bg-amber-50" : "bg-white"}
         minWidth={1150}
+        className={className}
+        bodyClassName="overflow-y-auto flex-1 min-h-0"
       >
         <div className="divide-y divide-slate-50">
           <div className="flex flex-col">

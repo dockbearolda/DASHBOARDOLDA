@@ -1600,7 +1600,7 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                               "hover:bg-black/[0.03] transition-colors duration-100 select-none",
                             )}
                           >
-                            {item.quantity}
+                            {item.quantity > 1 ? item.quantity : ""}
                           </div>
                         )}
                       </div>

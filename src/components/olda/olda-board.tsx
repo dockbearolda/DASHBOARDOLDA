@@ -628,7 +628,10 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
 
         {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
-        <div className={cn(viewTab !== 'demande_prt' && 'hidden', 'flex-1 min-h-0 flex flex-col')}>
+        <div
+          className="flex-1 min-h-0 flex flex-col"
+          style={viewTab !== 'demande_prt' ? { display: 'none' } : undefined}
+        >
           <PRTManager
             items={allPrtItems}
             onItemsChange={setAllPrtItems}

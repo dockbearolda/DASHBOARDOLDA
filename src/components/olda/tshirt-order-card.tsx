@@ -195,17 +195,178 @@ function PrintModal({ order, articles, images, addImage, origin, onClose }: {
       onClick={onClose}
     >
       <style>{`
+        @page {
+          size: A4 portrait;
+          margin: 14mm 16mm;
+        }
         @media print {
+          *, *::before, *::after {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-sizing: border-box !important;
+          }
           body * { visibility: hidden !important; }
           .olda-print-sheet, .olda-print-sheet * { visibility: visible !important; }
+          .olda-print-toolbar { display: none !important; }
+          .olda-print-upload  { display: none !important; }
+
           .olda-print-sheet {
-            position: fixed !important; inset: 0 !important;
-            padding: 1.5cm 2cm !important; background: white !important;
-            font-family: ${SF.replace(/'/g, '"')} !important; display: block !important;
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            right: 0 !important; bottom: 0 !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: #ffffff !important;
+            font-family: 'Segoe UI', 'Helvetica Neue', Arial, Helvetica, sans-serif !important;
+            font-size: 10pt !important;
+            line-height: 1.45 !important;
+            color: #1d1d1f !important;
+            overflow: hidden !important;
           }
-          .olda-print-visuals { display: flex !important; gap: 2cm !important; justify-content: center !important; margin: 0.8cm 0 !important; }
-          .olda-print-visuals img, .olda-print-visuals .olda-print-dtf { width: 44% !important; max-height: 10cm !important; object-fit: contain !important; border-radius: 8px !important; border: 1px solid #E5E5E5 !important; }
-          .olda-print-dtf { display: flex !important; align-items: center !important; justify-content: center !important; background: #f8f8f8 !important; font-size: 18pt !important; font-weight: 700 !important; }
+
+          /* ── Header : QR + Identité + Prix ── */
+          .olda-print-head {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: flex-start !important;
+            gap: 14pt !important;
+            width: 100% !important;
+            margin-bottom: 0 !important;
+          }
+          .olda-print-head-qr   { flex-shrink: 0 !important; }
+          .olda-print-head-info { flex: 1 1 auto !important; min-width: 0 !important; }
+          .olda-print-head-price {
+            flex-shrink: 0 !important;
+            text-align: right !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-end !important;
+            gap: 4pt !important;
+          }
+
+          /* ── Séparateur ── */
+          .olda-print-sep {
+            display: block !important;
+            width: 100% !important;
+            height: 0 !important;
+            border: none !important;
+            border-top: 0.5pt solid #E5E5E5 !important;
+            margin: 9pt 0 !important;
+          }
+
+          /* ── Séparateur article (multi-articles) ── */
+          .olda-print-article-sep {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8pt !important;
+            margin: 8pt 0 6pt !important;
+          }
+          .olda-print-article-sep-line {
+            flex: 1 1 auto !important;
+            height: 0 !important;
+            border: none !important;
+            border-top: 0.5pt solid #E5E5E5 !important;
+          }
+          .olda-print-article-sep-label {
+            flex-shrink: 0 !important;
+            font-size: 7.5pt !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em !important;
+            text-transform: uppercase !important;
+            color: #aeaeb2 !important;
+          }
+
+          /* ── Chips infos produit ── */
+          .olda-print-chips {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 5pt !important;
+            margin-bottom: 6pt !important;
+          }
+          .olda-print-chips span {
+            font-size: 9pt !important;
+            font-weight: 500 !important;
+            color: #3a3a3c !important;
+          }
+
+          /* ── Visuels DTF ── */
+          .olda-print-visuals {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 14pt !important;
+            width: 100% !important;
+            margin: 6pt 0 !important;
+            page-break-inside: avoid !important;
+          }
+          .olda-print-visual-col {
+            flex: 1 1 0% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 3pt !important;
+            min-width: 0 !important;
+          }
+          .olda-print-visual-label {
+            font-size: 7.5pt !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em !important;
+            text-transform: uppercase !important;
+            color: #aeaeb2 !important;
+          }
+          .olda-print-visuals img {
+            display: block !important;
+            width: 100% !important;
+            max-height: 115pt !important;
+            height: auto !important;
+            object-fit: contain !important;
+            border-radius: 5pt !important;
+            border: 0.5pt solid #E5E5E5 !important;
+            background: #ffffff !important;
+          }
+          .olda-print-dtf {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            min-height: 72pt !important;
+            padding: 8pt !important;
+            background: #f8f8f8 !important;
+            border: 0.5pt solid #E5E5E5 !important;
+            border-radius: 5pt !important;
+            font-family: 'Courier New', Courier, monospace !important;
+            font-size: 12pt !important;
+            font-weight: 700 !important;
+            color: #3a3a3c !important;
+            text-align: center !important;
+            word-break: break-all !important;
+          }
+
+          /* ── Méta article (collection, ref, note) ── */
+          .olda-print-meta { margin-top: 4pt !important; }
+          .olda-print-meta p { margin: 0 0 2pt !important; }
+
+          /* ── Bloc PRT ── */
+          .olda-print-prt {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 4pt !important;
+            margin-top: 5pt !important;
+            padding: 5pt 7pt !important;
+            background: #f8f8f8 !important;
+            border: 0.5pt solid #E5E5E5 !important;
+            border-radius: 4pt !important;
+          }
+          .olda-print-prt span {
+            font-family: 'Courier New', Courier, monospace !important;
+            font-size: 8.5pt !important;
+            font-weight: 700 !important;
+            color: #3a3a3c !important;
+          }
+
+          /* ── Badges paiement ── */
+          .olda-print-badge-paid   { color: #34C759 !important; font-weight: 600 !important; font-size: 9pt !important; }
+          .olda-print-badge-unpaid { color: #FF3B30 !important; font-weight: 600 !important; font-size: 9pt !important; }
         }
       `}</style>
 
@@ -214,8 +375,8 @@ function PrintModal({ order, articles, images, addImage, origin, onClose }: {
         style={{ fontFamily: SF }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Toolbar */}
-        <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-5 pt-4 pb-3.5 border-b border-[#E5E5E5]">
+        {/* Toolbar — masqué à l'impression */}
+        <div className="olda-print-toolbar sticky top-0 z-10 bg-white flex items-center justify-between px-5 pt-4 pb-3.5 border-b border-[#E5E5E5]">
           <div>
             <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>
               Bon de Commande · {formattedDate}
@@ -239,127 +400,154 @@ function PrintModal({ order, articles, images, addImage, origin, onClose }: {
 
         {/* ══ Fiche imprimable ═══════════════════════════════════════════════════ */}
         <div className="olda-print-sheet">
-          {/* Identité + QR */}
-          <div className="px-5 pt-5 flex items-start gap-4">
-            {origin && (
-              <div className="shrink-0 rounded-xl border border-[#E5E5E5] p-1.5 bg-white">
-                <QRCodeSVG value={qrValue} size={88} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+          <div className="px-5 pt-5">
+
+            {/* ── Header : QR + Identité + Prix ────────────────────────────── */}
+            <div className="olda-print-head flex items-start gap-4">
+              {/* QR */}
+              {origin && (
+                <div className="olda-print-head-qr shrink-0 rounded-xl border border-[#E5E5E5] p-1.5 bg-white">
+                  <QRCodeSVG value={qrValue} size={88} bgColor="#ffffff" fgColor="#1d1d1f" level="M" />
+                </div>
+              )}
+
+              {/* Identité */}
+              <div className="olda-print-head-info flex-1 min-w-0 space-y-0.5">
+                {order.customerName && (
+                  <p style={{ fontSize: 17, fontWeight: 700, color: "#1d1d1f", textTransform: "uppercase", letterSpacing: "0.02em", margin: 0 }}>
+                    {order.customerName}
+                  </p>
+                )}
+                {order.customerFirstName && (
+                  <p style={{ fontSize: 13, color: "#3a3a3c", margin: 0 }}>{order.customerFirstName}</p>
+                )}
+                {order.customerPhone && (
+                  <p style={{ fontSize: 12, color: "#8e8e93", margin: 0 }}>{order.customerPhone}</p>
+                )}
+                {deadlineTxt && (
+                  <p style={{ fontSize: 11, fontWeight: 500, color: deadlineTxt.includes("Retard") ? "#FF3B30" : "#636366", margin: 0 }}>
+                    {deadlineTxt}
+                  </p>
+                )}
               </div>
-            )}
-            <div className="flex-1 min-w-0 space-y-1">
-              {order.customerName && (
-                <p style={{ fontSize: 18, fontWeight: 700, color: "#1d1d1f", textTransform: "uppercase", letterSpacing: "0.02em" }}>
-                  {order.customerName}
-                </p>
-              )}
-              {order.customerFirstName && (
-                <p style={{ fontSize: 14, color: "#3a3a3c" }}>{order.customerFirstName}</p>
-              )}
-              {order.customerPhone && (
-                <p style={{ fontSize: 13, color: "#8e8e93" }}>{order.customerPhone}</p>
-              )}
-              {deadlineTxt && (
-                <p style={{ fontSize: 12, fontWeight: 500, color: deadlineTxt.includes("Retard") ? "#FF3B30" : "#636366" }}>
-                  {deadlineTxt}
-                </p>
-              )}
-            </div>
-            <div className="shrink-0 flex flex-col items-end gap-1.5">
-              <PaymentBadge status={order.paymentStatus} />
-              {order.total > 0 && (
-                <p style={{ fontSize: 22, fontWeight: 700, color: "#1d1d1f" }} className="tabular-nums">
-                  {fmtPrice(order.total, currency)}
-                </p>
-              )}
-            </div>
-          </div>
 
-          <div className="mx-5 mt-4 h-px bg-[#E5E5E5]" />
+              {/* Prix + Paiement */}
+              <div className="olda-print-head-price shrink-0 flex flex-col items-end gap-1.5">
+                <span className={order.paymentStatus === "PAID" ? "olda-print-badge-paid" : "olda-print-badge-unpaid"}>
+                  <PaymentBadge status={order.paymentStatus} />
+                </span>
+                {order.total > 0 && (
+                  <p style={{ fontSize: 21, fontWeight: 700, color: "#1d1d1f", margin: 0, lineHeight: 1 }} className="tabular-nums">
+                    {fmtPrice(order.total, currency)}
+                  </p>
+                )}
+              </div>
+            </div>
 
-          {/* Articles */}
-          {articles.length > 0 ? (
-            <div className="flex flex-col gap-4">
-              {articles.map((article, i) => {
-                const av  = article.fiche?.visuelAvant  ?? null;
-                const arr = article.fiche?.visuelArriere ?? null;
-                return (
-                  <div key={i}>
-                    {articles.length > 1 && (
-                      <div className="mx-5 flex items-center gap-3 mt-2">
-                        <div className="flex-1 h-px bg-[#E5E5E5]" />
-                        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>
-                          Article {i + 1} · {article.reference || article.fiche?.typeProduit || ""}
-                        </p>
-                        <div className="flex-1 h-px bg-[#E5E5E5]" />
-                      </div>
-                    )}
-                    {(article.fiche?.typeProduit || article.fiche?.couleur || article.fiche?.tailleDTFAr || article.taille) && (
-                      <div className="px-5 pt-3 flex items-center gap-3 flex-wrap">
-                        {[article.fiche?.typeProduit, article.fiche?.couleur, article.fiche?.tailleDTFAr, article.taille]
-                          .filter(Boolean)
-                          .map((val, j) => (
-                            <span key={j} style={{ fontSize: 13, color: "#3a3a3c", fontWeight: 500 }}>{val}</span>
-                          ))}
-                      </div>
-                    )}
-                    {(av || arr) ? (
-                      <div className="olda-print-visuals px-5 pt-3 flex gap-4">
-                        {([{ src: av, label: "Avant" }, { src: arr, label: "Arrière" }] as { src: string | null; label: string }[])
-                          .filter(v => v.src)
-                          .map(({ src, label }) => (
-                            <div key={label} className="flex-1 flex flex-col items-center gap-2">
-                              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#aeaeb2" }}>{label}</p>
-                              {isDtfCode(src!) ? (
-                                <div className="olda-print-dtf w-full flex items-center justify-center rounded-2xl border border-[#E5E5E5] bg-gray-50 font-mono text-center px-4" style={{ minHeight: 140, fontSize: 17, fontWeight: 700, color: "#3a3a3c" }}>
-                                  {src}
-                                </div>
-                              ) : (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={src!} alt={label} className="w-full object-contain rounded-2xl border border-[#E5E5E5] bg-white" style={{ maxHeight: 200 }} />
-                              )}
-                            </div>
-                          ))}
-                      </div>
-                    ) : i === 0 && articles.length === 1 ? (
-                      <label className="mx-5 mt-4 flex flex-col items-center justify-center gap-2 h-32 rounded-2xl border border-dashed border-[#E5E5E5] cursor-pointer hover:bg-gray-50 transition-colors">
-                        <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
-                        <Upload className="h-5 w-5 text-gray-400" />
-                        <span style={{ fontSize: 13, color: "#8e8e93" }}>Ajouter Avant + Arrière</span>
-                      </label>
-                    ) : null}
-                    <div className="px-5 pt-2 flex flex-col gap-1">
-                      {article.collection && <p style={{ fontSize: 12, color: "#636366" }}>{article.collection}</p>}
-                      {article.reference && articles.length === 1 && (
-                        <p style={{ fontSize: 11, color: "#aeaeb2", fontFamily: "monospace" }}>{article.reference}</p>
+            {/* Séparateur principal */}
+            <hr className="olda-print-sep mx-0 mt-4 mb-0 h-px border-none bg-[#E5E5E5]" />
+
+            {/* ── Articles ─────────────────────────────────────────────────── */}
+            {articles.length > 0 ? (
+              <div className="flex flex-col gap-3 mt-3">
+                {articles.map((article, i) => {
+                  const av  = article.fiche?.visuelAvant  ?? null;
+                  const arr = article.fiche?.visuelArriere ?? null;
+                  return (
+                    <div key={i} style={{ pageBreakInside: "avoid" }}>
+
+                      {/* Séparateur inter-articles */}
+                      {articles.length > 1 && (
+                        <div className="olda-print-article-sep flex items-center gap-3 mb-2">
+                          <div className="olda-print-article-sep-line flex-1 h-px bg-[#E5E5E5]" />
+                          <p className="olda-print-article-sep-label" style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#aeaeb2" }}>
+                            Article {i + 1}{article.reference ? ` · ${article.reference}` : ""}
+                            {article.fiche?.typeProduit ? ` · ${article.fiche.typeProduit}` : ""}
+                          </p>
+                          <div className="olda-print-article-sep-line flex-1 h-px bg-[#E5E5E5]" />
+                        </div>
                       )}
-                      {article.note && <p style={{ fontSize: 12, color: "#636366", fontStyle: "italic" }}>{article.note}</p>}
-                      {article.prt && Object.values(article.prt).some(v => v) && (
-                        <div className="mt-1 rounded-xl bg-gray-50 border border-[#E5E5E5] px-3 py-2 flex items-center gap-3 flex-wrap">
-                          {[article.prt.refPrt, article.prt.taillePrt, article.prt.quantite && `×${article.prt.quantite}`]
+
+                      {/* Chips infos produit */}
+                      {(article.fiche?.typeProduit || article.fiche?.couleur || article.fiche?.tailleDTFAr || article.taille) && (
+                        <div className="olda-print-chips flex items-center gap-2 flex-wrap mb-2">
+                          {[article.fiche?.typeProduit, article.fiche?.couleur, article.fiche?.tailleDTFAr, article.taille]
                             .filter(Boolean)
-                            .map((v, j) => (
-                              <span key={j} style={{ fontSize: 12, color: "#3a3a3c", fontWeight: 600, fontFamily: "monospace" }}>{v}</span>
+                            .map((val, j) => (
+                              <span key={j} style={{ fontSize: 12, color: "#3a3a3c", fontWeight: 500 }}>{val}</span>
                             ))}
                         </div>
                       )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <label className="mx-5 mt-4 flex flex-col items-center justify-center gap-2 h-32 rounded-2xl border border-dashed border-[#E5E5E5] cursor-pointer hover:bg-gray-50 transition-colors">
-              <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
-              <Upload className="h-5 w-5 text-gray-400" />
-              <span style={{ fontSize: 13, color: "#8e8e93" }}>Ajouter Avant + Arrière</span>
-            </label>
-          )}
 
-          {order.notes?.trim() && !articles.some(a => a.note) && (
-            <div className="px-5 pt-1 pb-1">
-              <p style={{ fontSize: 12, color: "#636366", fontStyle: "italic" }}>{order.notes}</p>
-            </div>
-          )}
+                      {/* Visuels */}
+                      {(av || arr) ? (
+                        <div className="olda-print-visuals flex gap-4">
+                          {([{ src: av, label: "Avant" }, { src: arr, label: "Arrière" }] as { src: string | null; label: string }[])
+                            .filter(v => v.src)
+                            .map(({ src, label }) => (
+                              <div key={label} className="olda-print-visual-col flex-1 flex flex-col items-center gap-2">
+                                <p className="olda-print-visual-label" style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#aeaeb2" }}>
+                                  {label}
+                                </p>
+                                {isDtfCode(src!) ? (
+                                  <div className="olda-print-dtf w-full flex items-center justify-center rounded-2xl border border-[#E5E5E5] bg-gray-50 font-mono text-center px-4" style={{ minHeight: 120, fontSize: 16, fontWeight: 700, color: "#3a3a3c" }}>
+                                    {src}
+                                  </div>
+                                ) : (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={src!} alt={label} className="w-full object-contain rounded-2xl border border-[#E5E5E5] bg-white" style={{ maxHeight: 180 }} />
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      ) : i === 0 && articles.length === 1 ? (
+                        <label className="olda-print-upload mx-0 mt-2 flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border border-dashed border-[#E5E5E5] cursor-pointer hover:bg-gray-50 transition-colors">
+                          <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
+                          <Upload className="h-5 w-5 text-gray-400" />
+                          <span style={{ fontSize: 13, color: "#8e8e93" }}>Ajouter Avant + Arrière</span>
+                        </label>
+                      ) : null}
+
+                      {/* Méta : collection, référence, note, PRT */}
+                      <div className="olda-print-meta flex flex-col gap-0.5 mt-1">
+                        {article.collection && (
+                          <p style={{ fontSize: 11, color: "#636366", margin: 0 }}>{article.collection}</p>
+                        )}
+                        {article.reference && articles.length === 1 && (
+                          <p style={{ fontSize: 10, color: "#aeaeb2", fontFamily: "monospace", margin: 0 }}>{article.reference}</p>
+                        )}
+                        {article.note && (
+                          <p style={{ fontSize: 11, color: "#636366", fontStyle: "italic", margin: 0 }}>{article.note}</p>
+                        )}
+                        {article.prt && Object.values(article.prt).some(v => v) && (
+                          <div className="olda-print-prt mt-1 rounded-xl bg-gray-50 border border-[#E5E5E5] px-3 py-1.5 flex items-center gap-3 flex-wrap">
+                            {[article.prt.refPrt, article.prt.taillePrt, article.prt.quantite && `×${article.prt.quantite}`]
+                              .filter(Boolean)
+                              .map((v, j) => (
+                                <span key={j} style={{ fontSize: 11, color: "#3a3a3c", fontWeight: 600, fontFamily: "monospace" }}>{v}</span>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <label className="olda-print-upload mx-0 mt-4 flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border border-dashed border-[#E5E5E5] cursor-pointer hover:bg-gray-50 transition-colors">
+                <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={handleFileChange} />
+                <Upload className="h-5 w-5 text-gray-400" />
+                <span style={{ fontSize: 13, color: "#8e8e93" }}>Ajouter Avant + Arrière</span>
+              </label>
+            )}
+
+            {order.notes?.trim() && !articles.some(a => a.note) && (
+              <p style={{ fontSize: 11, color: "#636366", fontStyle: "italic", marginTop: 6, marginBottom: 0 }}>
+                {order.notes}
+              </p>
+            )}
+
+          </div>
         </div>
       </div>
     </div>

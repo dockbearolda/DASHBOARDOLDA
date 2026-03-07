@@ -604,7 +604,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           }}
                           className={cn(
                             CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white text-slate-700 text-[13px] text-right",
+                            "w-full bg-transparent border-none focus:outline-none focus:bg-white text-slate-700 text-[13px] text-right",
                           )}
                         />
 

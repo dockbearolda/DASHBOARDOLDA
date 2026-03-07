@@ -627,16 +627,9 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
-        {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
-        <div className={cn(viewTab !== 'demande_prt' && 'hidden')}>
-          <div className="max-w-5xl mx-auto">
-            <PRTManager
-              items={allPrtItems}
-              onItemsChange={setAllPrtItems}
-              onNewRequest={handleNewPrtRequest}
-              onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
-            />
-          </div>
+        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
+        <div className={cn(viewTab !== 'demande_prt' && 'hidden', 'overflow-x-hidden')}>
+          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}

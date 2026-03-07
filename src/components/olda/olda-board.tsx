@@ -620,16 +620,24 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
       </div>
 
       {/* ── Contenu principal ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-0">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col px-4 sm:px-6 py-5">
 
         {/* ══ VUE FLUX — cartes collaborateurs ═══════════════════════════════ */}
-        <div className={cn(viewTab !== 'flux' && 'hidden', '-mx-4 sm:-mx-6')}>
+        <div className={cn(viewTab !== 'flux' && 'hidden', 'flex-1 min-h-0 overflow-y-auto -mx-4 sm:-mx-6 -my-5 py-5 px-4 sm:px-6')}>
           <RemindersGrid key={String(notesReady)} notesMap={notesMap} activeUser="" onNoteChanged={handleNoteChangedForNotif} />
         </div>
 
-        {/* ══ VUE DEMANDE DE PRT — Tableau indépendant ════════════════════════ */}
-        <div className={cn(viewTab !== 'demande_prt' && 'hidden', 'overflow-x-hidden')}>
-          <PRTManager items={allPrtItems} onItemsChange={setAllPrtItems} />
+        {/* ══ VUE DEMANDE DE DTF — Tableau indépendant ════════════════════════ */}
+        <div className={cn(viewTab !== 'demande_prt' && 'hidden', 'flex-1 min-h-0 flex flex-col')}>
+          <div className="max-w-5xl mx-auto w-full flex-1 min-h-0 flex flex-col">
+            <PRTManager
+              items={allPrtItems}
+              onItemsChange={setAllPrtItems}
+              onNewRequest={handleNewPrtRequest}
+              onEditingChange={(isEditing) => { prtEditingRef.current = isEditing; }}
+              className="flex-1 min-h-0"
+            />
+          </div>
         </div>
 
         {/* ══ VUE PRODUCTION DTF ═════════════════════════════════════════════ */}
@@ -640,7 +648,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
 
         {/* ══ VUE WORKFLOW — 4 listes de flux ══════════════════════════════════ */}
-        <div className={cn(viewTab !== 'workflow' && 'hidden')}>
+        <div className={cn(viewTab !== 'workflow' && 'hidden', 'flex-1 min-h-0 overflow-y-auto')}>
           <div className="max-w-6xl mx-auto">
             <WorkflowListsGrid
               items={workflowItems}
@@ -672,7 +680,7 @@ export function OldaBoard({ orders: initialOrders }: { orders: Order[] }) {
         </div>
 
         {/* ══ VUE ACHAT — 3 cartes SXM / Europe / USA ════════════════════════ */}
-        <div className={cn(viewTab !== 'achat' && 'hidden')}>
+        <div className={cn(viewTab !== 'achat' && 'hidden', 'flex-1 min-h-0 overflow-y-auto')}>
           <div className="max-w-4xl mx-auto">
             <AchatCardsGrid />
           </div>

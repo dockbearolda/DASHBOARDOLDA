@@ -34,6 +34,7 @@ interface PRTManagerProps {
   onItemsChange?: (value: PRTItem[] | ((prev: PRTItem[]) => PRTItem[])) => void;
   onNewRequest?: () => void;
   onEditingChange?: (isEditing: boolean) => void;
+  className?: string;
 }
 
 const COULEURS = [
@@ -65,7 +66,7 @@ function timeAgo(dateStr: string): string {
   return `il y a ${Math.floor(diffSec / 86400 / 365)} an`;
 }
 
-export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange }: PRTManagerProps) {
+export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange, className }: PRTManagerProps) {
   const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [isDeletingIds, setIsDeletingIds] = useState<Set<string>>(new Set());
   const [isAddingNew,  setIsAddingNew]  = useState(false);
@@ -198,15 +199,48 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
     }
   }, [onItemsChange, onNewRequest]);
 
-  return (
-    <div
-      className="flex flex-col gap-3 rounded-[18px] bg-white border border-gray-100 shadow-sm p-4 overflow-x-hidden w-full"
-      style={{
-        fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
-        WebkitFontSmoothing: "antialiased",
-        MozOsxFontSmoothing: "grayscale",
-      }}
-    >
+  const handleDuplicate = useCallback(
+    async (item: PRTItem) => {
+      try {
+        const res = await fetch("/api/prt-requests", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            clientName:          item.clientName,
+            dimensions:          item.dimensions,
+            design:              item.design,
+            color:               item.color,
+            quantity:            item.quantity,
+            note:                item.note,
+            insertAfterPosition: item.position,
+          }),
+        });
+        if (!res.ok) throw new Error("API error");
+        const data = await res.json();
+        if (data.item) {
+          onItemsChange?.((prev) => {
+            // Décaler les positions des items après l'original
+            const shifted = prev.map((i) =>
+              i.position > item.position ? { ...i, position: i.position + 1 } : i,
+            );
+            // Insérer juste après l'original
+            const idx = shifted.findIndex((i) => i.id === item.id);
+            const next = [...shifted];
+            next.splice(idx === -1 ? 0 : idx + 1, 0, data.item);
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("Failed to duplicate PRT:", err);
+      }
+    },
+    [onItemsChange],
+  );
+
+  // ── Toolbar ───────────────────────────────────────────────────────────────────
+
+  const toolbar = (
+    <div className="flex items-center gap-3 px-4 py-3">
       {/* Input fichier caché — partagé entre toutes les lignes */}
       <input
         ref={fileInputRef}
@@ -294,195 +328,56 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
               setSelectedIds(new Set());
             }
           }}
-          className="flex flex-col"
-        >
-          <AnimatePresence mode="popLayout">
-            {sortedItems.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="py-8 text-center text-gray-400 text-sm"
-              >
-                Aucune demande PRT
-              </motion.div>
-            ) : (
-              sortedItems.map((item) => {
-                if (!item?.id) return null;
-                return (
-                <Reorder.Item key={item.id} value={item} as="div">
-                  <motion.div
-                    layout
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: 100 }}
-                    className={cn(
-                      "grid gap-0 border-b border-gray-100 transition-all group hover:bg-gray-50",
-                      GRID_COLS,
-                      item?.done && "opacity-50"
-                    )}
-                  >
-                    {/* Checkbox (40px) */}
-                    <div className="flex items-center justify-center py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(item.id)}
-                        onChange={(e) => {
-                          const newSelected = new Set(selectedIds);
-                          if (e.target.checked) {
-                            newSelected.add(item.id);
-                          } else {
-                            newSelected.delete(item.id);
-                          }
-                          setSelectedIds(newSelected);
-                        }}
-                        className="w-4 h-4 rounded cursor-pointer"
-                      />
-                    </div>
+          className="w-4 h-4 rounded cursor-pointer"
+        />
+      </div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Client</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Dimensions</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Design</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Taille</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Couleur</div>
+      <div className="text-left text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Note</div>
+      <div className="text-right text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-3">Qté</div>
+      <div className="text-center text-[10px] font-semibold text-slate-600 uppercase tracking-wider" />
+    </div>
+  );
 
-                    {/* Client (1fr) */}
-                    <input
-                      type="text"
-                      value={item.clientName}
-                      onChange={(e) => {
-                        const updated = items.map((i) =>
-                          i.id === item.id ? { ...i, clientName: e.target.value } : i
-                        );
-                        onItemsChange?.(updated);
-                      }}
-                      onBlur={async () => {
-                        try {
-                          await fetch(`/api/prt-requests/${item.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ clientName: item.clientName }),
-                          });
-                        } catch (err) {
-                          console.error("Failed to update:", err);
-                        }
-                      }}
-                      className={cn(
-                        CELL_CLASS,
-                        "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 font-medium text-sm"
-                      )}
-                      placeholder="Nom client"
-                    />
+  // ── Render ────────────────────────────────────────────────────────────────────
 
-                    {/* Dimensions (1fr) */}
-                    <input
-                      type="text"
-                      value={item.dimensions}
-                      onChange={(e) => {
-                        const updated = items.map((i) =>
-                          i.id === item.id ? { ...i, dimensions: e.target.value } : i
-                        );
-                        onItemsChange?.(updated);
-                      }}
-                      onBlur={async () => {
-                        try {
-                          await fetch(`/api/prt-requests/${item.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ dimensions: item.dimensions }),
-                          });
-                        } catch (err) {
-                          console.error("Failed to update:", err);
-                        }
-                      }}
-                      className={cn(
-                        CELL_CLASS,
-                        "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
-                      )}
-                      placeholder="30x40cm"
-                    />
-
-                    {/* Design (1fr) — saisie manuelle OU fichier Windows */}
-                    <div className={cn(CELL_CLASS, "flex items-center gap-1 min-w-0")}>
-                      <input
-                        type="text"
-                        value={item.design}
-                        onChange={(e) => {
-                          const updated = items.map((i) =>
-                            i.id === item.id ? { ...i, design: e.target.value } : i
-                          );
-                          onItemsChange?.(updated);
-                        }}
-                        onBlur={async () => {
-                          try {
-                            await fetch(`/api/prt-requests/${item.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ design: item.design }),
-                            });
-                          } catch (err) {
-                            console.error("Failed to update:", err);
-                          }
-                        }}
-                        className="flex-1 min-w-0 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm truncate"
-                        placeholder="Design"
-                        title={item.design}
-                      />
-                      <button
-                        onClick={() => handleFilePick(item.id)}
-                        className="shrink-0 p-1 rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                        title="Choisir un fichier depuis Windows"
-                        type="button"
-                      >
-                        <FolderOpen className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Color (1fr) */}
-                    <input
-                      type="text"
-                      value={item.color}
-                      onChange={(e) => {
-                        const updated = items.map((i) =>
-                          i.id === item.id ? { ...i, color: e.target.value } : i
-                        );
-                        onItemsChange?.(updated);
-                      }}
-                      onBlur={async () => {
-                        try {
-                          await fetch(`/api/prt-requests/${item.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ color: item.color }),
-                          });
-                        } catch (err) {
-                          console.error("Failed to update:", err);
-                        }
-                      }}
-                      className={cn(
-                        CELL_CLASS,
-                        "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-gray-200 text-gray-900 text-sm"
-                      )}
-                      placeholder="Blanc"
-                    />
-
-                    {/* Quantity (80px) - right aligned */}
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.quantity}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => {
-                        const updated = items.map((i) =>
-                          i.id === item.id ? { ...i, quantity: parseInt(e.target.value) || 1 } : i
-                        );
-                        onItemsChange?.(updated);
-                      }}
-                      onBlur={async () => {
-                        try {
-                          await fetch(`/api/prt-requests/${item.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ quantity: item.quantity }),
-                          });
-                        } catch (err) {
-                          console.error("Failed to update:", err);
-                        }
-                      }}
+  return (
+    <>
+      <OrderTable
+        toolbar={toolbar}
+        headers={headers}
+        bgClassName={showArchive ? "bg-amber-50" : "bg-white"}
+        minWidth={1150}
+        className={className}
+        bodyClassName="overflow-y-auto flex-1 min-h-0"
+      >
+        <div className="divide-y divide-slate-50">
+          <div className="flex flex-col">
+            <AnimatePresence mode="popLayout" initial={false}>
+              {sortedItems.length === 0 ? (
+                <motion.div
+                  key="empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="py-12 text-center text-[13px] text-slate-300"
+                >
+                  {showArchive ? "Archive vide" : "Aucune demande PRT"}
+                </motion.div>
+              ) : (
+                sortedItems.map((item) => {
+                  if (!item?.id) return null;
+                  return (
+                    <motion.div
+                      key={item.id}
+                      layout="position"
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, height: 0, overflow: "hidden" }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
                       className={cn(
                         "grid gap-0 border-b border-slate-50 transition-colors group hover:bg-slate-50/70",
                         GRID_COLS,

@@ -1291,32 +1291,129 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Chargement…
               </div>
-            ) : archiveItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center select-none">
-                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center">
-                  <Archive className="h-5 w-5 text-slate-300" />
-                </div>
-                <p className="text-[13px] text-slate-400">Aucun élément archivé</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-50">
-                {archiveItems.map((item) => {
-                  const cfg    = SECTEUR_CONFIG[item.color as keyof typeof SECTEUR_CONFIG] as { dotHex?: string; label?: string } | undefined;
-                  const status = STATUS_LABELS[item.status as keyof typeof STATUS_LABELS];
-                  return (
-                    <div key={item.id} className="grid items-center bg-amber-50/30 hover:bg-amber-50/60 transition-colors group" style={GRID_STYLE}>
-                      <div />
-                      <div />
-                      <div className="px-2.5 py-3 text-[11px] text-slate-400">{item.priority}</div>
-                      <div className="px-2.5 py-3 text-[13px] font-medium text-slate-600 truncate">{item.clientName || <span className="text-slate-300 italic">—</span>}</div>
-                      <div className="px-2.5 py-3 text-[12px] text-slate-400 font-mono truncate">{item.clientPhone || "—"}</div>
-                      <div className="px-2.5 py-3">
-                        {cfg ? (
-                          <span className="flex items-center gap-1.5 text-[12px]">
-                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: cfg.dotHex }} />
-                            <span className="text-slate-500">{item.color}</span>
-                          </span>
-                        ) : <span className="text-slate-300">—</span>}
+            ))}
+          </div>
+
+          {/* ── Draft row ─────────────────────────────────────────────────────── */}
+          <AnimatePresence>
+            {draft && (
+              <motion.div
+                key="draft"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+              >
+                <div className={cn("grid h-[44px] border-b-2 border-blue-200/60 bg-blue-50/25", GRID)}>
+
+                  {/* Priorité */}
+                  <div className={CELL_WRAP}>
+                    <button
+                      onClick={() => changeDraft("priority", nextPriority(draft.priority))}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all",
+                        PRIORITY_STYLE[draft.priority]
+                      )}
+                    >
+                      {PRIORITY_LABEL[draft.priority]}
+                    </button>
+                  </div>
+
+                  {/* Client */}
+                  <div className={CELL_WRAP}>
+                    <input
+                      type="text"
+                      value={draft.clientName}
+                      onChange={(e) => changeDraft("clientName", e.target.value.toUpperCase())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setDraft(null);
+                        if (e.key === "Enter") saveDraft();
+                      }}
+                      className={cn(DRAFT_INPUT, "font-medium uppercase tracking-wide")}
+                      placeholder="NOM CLIENT"
+                      autoFocus
+                    />
+                  </div>
+
+                  {/* Désignation — avant Qté */}
+                  <div className={CELL_WRAP}>
+                    <input
+                      type="text"
+                      value={draft.designation}
+                      onChange={(e) => changeDraft("designation", e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDraft(); }}
+                      className={DRAFT_INPUT}
+                      placeholder="Description du travail…"
+                    />
+                  </div>
+
+                  {/* Qté */}
+                  <div className={CELL_WRAP}>
+                    <input
+                      type="number"
+                      list="draft-qty-list"
+                      value={draft.quantity}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => changeDraft("quantity", parseFloat(e.target.value) || 1)}
+                      className={cn(DRAFT_INPUT, "text-center")}
+                      placeholder="1"
+                      min="1"
+                    />
+                    <datalist id="draft-qty-list">
+                      {QTY_PRESETS.map((v) => <option key={v} value={v} />)}
+                    </datalist>
+                  </div>
+
+                  {/* Note */}
+                  <div className={CELL_WRAP}>
+                    <input
+                      type="text"
+                      value={draft.note}
+                      onChange={(e) => changeDraft("note", e.target.value)}
+                      className={cn(DRAFT_INPUT, "italic placeholder:not-italic")}
+                      placeholder="Précisions…"
+                    />
+                  </div>
+
+                  {/* Prix unitaire */}
+                  <div className={CELL_WRAP}>
+                    <input
+                      type="number"
+                      value={draft.unitPrice || ""}
+                      onChange={(e) => changeDraft("unitPrice", parseFloat(e.target.value) || 0)}
+                      className={cn(DRAFT_INPUT, "text-right")}
+                      placeholder="0"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+
+                  {/* Total live */}
+                  <div className="h-full flex items-center justify-end px-3 text-[13px] font-semibold tabular-nums text-slate-700 whitespace-nowrap">
+                    {draft.quantity * draft.unitPrice > 0
+                      ? `${(draft.quantity * draft.unitPrice).toFixed(2)} €`
+                      : "—"}
+                  </div>
+
+                  {/* Échéance */}
+                  <div className={CELL_WRAP}>
+                    <input
+                      type="date"
+                      value={draft.deadline}
+                      onChange={(e) => changeDraft("deadline", e.target.value)}
+                      className={cn(DRAFT_INPUT, "text-[13px] tabular-nums")}
+                    />
+                  </div>
+
+                  {/* État */}
+                  <div className={CELL_WRAP}>
+                    <div className="relative w-full">
+                      <div className={cn(
+                        "flex items-center h-8 gap-1 px-2.5 rounded-lg border",
+                        "border-blue-200/50 bg-white text-[13px] text-slate-700 shadow-sm"
+                      )}>
+                        <span className="truncate flex-1">{STATUS_LABELS[draft.status]}</span>
+                        <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
                       </div>
                       <div className="px-2.5 py-3 text-[12px] text-slate-500 text-center">{item.quantity}</div>
                       <div className="px-2.5 py-3 text-[12px] text-slate-400 italic truncate">{item.note || "—"}</div>
@@ -1512,27 +1609,33 @@ export function PlanningTable({ items, onItemsChange, onEditingChange, onCreateA
 
                       {/* 3 · Client */}
                       <div className={CELL_WRAP}>
-                        <ClientNameCell
-                          value={item.clientName}
-                          clientId={item.clientId ?? null}
-                          isEditing={isEditingCell(item.id, "clientName")}
-                          onStartEdit={() => startEdit(item.id, "clientName", item.clientName)}
-                          onChange={(v) => updateItem(item.id, "clientName", v)}
-                          onBlurSave={(v) => handleBlurSave(item.id, "clientName", toTitleCase(v))}
-                          onKeyDown={(e) => handleKeyDown(e, item.id, "clientName")}
-                          onSelectClient={(client) => {
-                            // Save both clientName and clientId atomically
-                            onItemsChange?.(
-                              items.map((it) =>
-                                it.id === item.id
-                                  ? { ...it, clientName: client.nom, clientId: client.id }
-                                  : it
-                              )
-                            );
-                            persist(item.id, { clientName: client.nom, clientId: client.id });
-                            setEditing(null);
-                          }}
-                        />
+                        {isEditingCell(item.id, "quantity") ? (
+                          <>
+                            <input
+                              type="number"
+                              list={`qty-${item.id}`}
+                              value={item.quantity}
+                              autoFocus
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => updateItem(item.id, "quantity", parseFloat(e.target.value) || 1)}
+                              onBlur={(e) => handleBlurSave(item.id, "quantity", parseFloat(e.target.value) || 1)}
+                              onKeyDown={(e) => handleKeyDown(e, item.id, "quantity")}
+                              className={cn(CELL_INPUT, "text-center")}
+                              placeholder="1"
+                              min="1"
+                            />
+                            <datalist id={`qty-${item.id}`}>
+                              {QTY_PRESETS.map((v) => <option key={v} value={v} />)}
+                            </datalist>
+                          </>
+                        ) : (
+                          <div
+                            onClick={() => startEdit(item.id, "quantity", item.quantity)}
+                            className={cn(CELL_DISPLAY, "justify-center tabular-nums")}
+                          >
+                            {item.quantity}
+                          </div>
+                        )}
                       </div>
 
                       {/* 4 · Tél. — numéro WhatsApp inline éditable */}

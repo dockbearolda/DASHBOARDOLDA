@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { motion, Reorder, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Trash2, Plus, Check, FolderOpen, X, Archive, ArchiveRestore, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OrderTable } from "@/components/ui/table-shell";
@@ -45,7 +45,7 @@ const COULEURS = [
 
 // Grid : [checkbox] [client] [dimensions] [design] [taille] [couleur] [note] [qté] [actions]
 const GRID_COLS  = "grid-cols-[40px_1fr_1fr_1fr_100px_1fr_1fr_80px_96px]";
-const CELL_CLASS = "px-3 py-3 truncate";
+const CELL_CLASS = "px-3 py-2.5";
 
 // ── Helpers date ──────────────────────────────────────────────────────────────
 function formatDateFR(dateStr: string): string {
@@ -352,34 +352,11 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
         minWidth={1150}
       >
         <div className="divide-y divide-slate-50">
-          <Reorder.Group
-            as="div"
-            axis="y"
-            values={sortedItems}
-            onReorder={(newOrder) => {
-              const reorderedItems = newOrder.map((item, idx) => ({
-                ...item,
-                position: idx,
-              }));
-              onItemsChange?.((prev) => {
-                const reorderedIds = new Set(reorderedItems.map((r) => r.id));
-                return [...reorderedItems, ...prev.filter((i) => !reorderedIds.has(i.id))];
-              });
-              Promise.all(
-                reorderedItems.map((item) =>
-                  fetch(`/api/prt-requests/${item.id}`, {
-                    method:  "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body:    JSON.stringify({ position: item.position }),
-                  }),
-                ),
-              ).catch((err) => console.error("Failed to save positions:", err));
-            }}
-            className="flex flex-col"
-          >
-            <AnimatePresence mode="sync">
+          <div className="flex flex-col">
+            <AnimatePresence mode="popLayout" initial={false}>
               {sortedItems.length === 0 ? (
                 <motion.div
+                  key="empty"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -391,19 +368,19 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                 sortedItems.map((item) => {
                   if (!item?.id) return null;
                   return (
-                    <Reorder.Item key={item.id} value={item} as="div">
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, x: 100 }}
-                        transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
-                        style={{ willChange: "transform, opacity" }}
-                        className={cn(
-                          "grid gap-0 border-b border-slate-50 transition-colors group hover:bg-slate-50/70",
-                          GRID_COLS,
-                          showArchive && "opacity-60",
-                        )}
-                      >
+                    <motion.div
+                      key={item.id}
+                      layout="position"
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, height: 0, overflow: "hidden" }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      className={cn(
+                        "grid gap-0 border-b border-slate-50 transition-colors group hover:bg-slate-50/70",
+                        GRID_COLS,
+                        showArchive && "opacity-60",
+                      )}
+                    >
                         {/* Checkbox (40px) */}
                         <div className="flex items-center justify-center py-3">
                           <input
@@ -447,9 +424,8 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           }}
                           className={cn(
                             CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-900 font-semibold text-[13px]",
+                            "w-full bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-900 font-semibold text-[13px]",
                           )}
-                          placeholder="Nom client"
                         />
 
                         {/* Dimensions (1fr) */}
@@ -477,9 +453,8 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           }}
                           className={cn(
                             CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
+                            "w-full bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
                           )}
-                          placeholder="30x40cm"
                         />
 
                         {/* Design (1fr) — saisie manuelle OU fichier */}
@@ -506,8 +481,7 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                                 console.error("Failed to update:", err);
                               }
                             }}
-                            className="flex-1 min-w-0 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px] truncate text-center"
-                            placeholder="Design"
+                            className="flex-1 min-w-0 bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px] truncate"
                             title={item.design}
                           />
                           <button
@@ -545,9 +519,8 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           }}
                           className={cn(
                             CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
+                            "w-full bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-700 text-[13px]",
                           )}
-                          placeholder=""
                         />
 
                         {/* Couleur (1fr) */}
@@ -601,9 +574,8 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                           }}
                           className={cn(
                             CELL_CLASS,
-                            "bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-500 text-[12px] italic",
+                            "w-full bg-transparent border-none focus:outline-none focus:bg-white focus:border-b border-slate-200 text-slate-500 text-[12px] italic",
                           )}
-                          placeholder="Note…"
                         />
 
                         {/* Quantité (80px) */}
@@ -685,13 +657,12 @@ export function PRTManager({ items, onItemsChange, onNewRequest, onEditingChange
                             </span>
                           </div>
                         )}
-                      </motion.div>
-                    </Reorder.Item>
+                    </motion.div>
                   );
                 })
               )}
             </AnimatePresence>
-          </Reorder.Group>
+          </div>
         </div>
       </OrderTable>
 

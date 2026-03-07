@@ -512,6 +512,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                       type="number"
                       list="draft-qty-list"
                       value={draft.quantity}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => changeDraft("quantity", parseFloat(e.target.value) || 1)}
                       className={cn(DRAFT_INPUT, "text-center")}
                       placeholder="1"
@@ -774,6 +775,7 @@ export function PlanningTable({ items, onItemsChange }: PlanningTableProps) {
                               list={`qty-${item.id}`}
                               value={item.quantity}
                               autoFocus
+                              onFocus={(e) => e.target.select()}
                               onChange={(e) => updateItem(item.id, "quantity", parseFloat(e.target.value) || 1)}
                               onBlur={(e) => handleBlurSave(item.id, "quantity", parseFloat(e.target.value) || 1)}
                               onKeyDown={(e) => handleKeyDown(e, item.id, "quantity")}

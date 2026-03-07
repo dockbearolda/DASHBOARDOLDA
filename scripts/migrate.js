@@ -144,6 +144,63 @@ async function main() {
     attempt1.output.includes('P3005') ||
     attempt1.output.includes('schema is not empty');
 
+  // ─── P3009: failed migration in DB — resolve it then retry ───────────────
+  const isP3009 =
+    attempt1.output.includes('P3009') ||
+    attempt1.output.includes('migrate found failed migrations');
+
+  if (isP3009) {
+    console.log('\n⚠️  P3009 detected — resolving failed migrations...\n');
+    // Extract failed migration names from the error output
+    const failedMigrations = [];
+    const lines = attempt1.output.split('\n');
+    for (const line of lines) {
+      const match = line.match(/The `([^`]+)` migration started at .+ failed/);
+      if (match) failedMigrations.push(match[1]);
+    }
+    if (failedMigrations.length === 0) {
+      console.error('\n❌ Could not identify failed migration names from P3009 output\n');
+      process.exit(1);
+    }
+    for (const migName of failedMigrations) {
+      console.log(`  Rolling back failed migration: ${migName}`);
+      const resolveResult = run('npx', ['prisma', 'migrate', 'resolve', '--rolled-back', migName]);
+      if (!resolveResult.ok) {
+        console.error(`\n❌ Failed to resolve migration ${migName}\n`);
+        process.exit(1);
+      }
+    }
+    console.log('\n  Retrying migrate deploy after P3009 resolution...\n');
+    const retryAfterP3009 = run('npx', ['prisma', 'migrate', 'deploy']);
+    if (retryAfterP3009.ok) {
+      console.log('\n✅ Migration complete after P3009 resolution\n');
+      process.exit(0);
+    }
+    // If it still fails (e.g. columns already exist), fall through to P3005 logic
+    const isP3005AfterP3009 =
+      retryAfterP3009.output.includes('P3005') ||
+      retryAfterP3009.output.includes('schema is not empty');
+    if (!isP3005AfterP3009) {
+      console.error('\n❌ Migration failed after P3009 resolution\n');
+      process.exit(1);
+    }
+    // Continue with P3005 baseline recovery below using the retried output
+    console.log('\n⚠️  P3005 detected after P3009 resolution — establishing baseline...\n');
+    try {
+      await registerMigrationsAsApplied([baseline]);
+    } catch (err) {
+      console.error('\n❌ Failed to register baseline migration:', err.message);
+      process.exit(1);
+    }
+    const finalDeploy = run('npx', ['prisma', 'migrate', 'deploy']);
+    if (finalDeploy.ok) {
+      console.log('\n✅ Migration complete\n');
+      process.exit(0);
+    }
+    console.error('\n❌ Migration failed after P3009 + P3005 recovery\n');
+    process.exit(1);
+  }
+
   if (!isP3005) {
     console.error('\n❌ Migration failed (unexpected error, not P3005)\n');
     process.exit(1);

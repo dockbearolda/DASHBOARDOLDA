@@ -164,7 +164,7 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
 
   return (
     <div
-      className="flex flex-col gap-3 rounded-[18px] bg-white border border-gray-100 shadow-sm p-4"
+      className="flex flex-col gap-3 rounded-[18px] bg-white border border-gray-100 shadow-sm p-4 overflow-x-hidden w-full"
       style={{
         fontFamily: "'Inter', 'Inter Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif",
         WebkitFontSmoothing: "antialiased",
@@ -417,6 +417,7 @@ export function PRTManager({ items, onItemsChange }: PRTManagerProps) {
                       type="number"
                       min="1"
                       value={item.quantity}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => {
                         const updated = items.map((i) =>
                           i.id === item.id ? { ...i, quantity: parseInt(e.target.value) || 1 } : i
